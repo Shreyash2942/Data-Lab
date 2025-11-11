@@ -1,0 +1,8 @@
+data_lab:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: /workspace/dbt/data_lab.duckdb
+      schema: main
+      threads: 1

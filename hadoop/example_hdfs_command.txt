@@ -1,0 +1,2 @@
+hdfs dfs -ls /
+hdfs dfs -mkdir -p /data

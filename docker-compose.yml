@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  data-lab:
+    build:
+      context: .
+      dockerfile: dev/base/Dockerfile   # Single container image with all stacks
+    image: data-lab:latest
+    container_name: data-lab
+    env_file:
+      - .env.example
+    working_dir: /workspace
+    volumes:
+      - ./app:/workspace/app
+      - ./python:/workspace/python
+      - ./spark:/workspace/spark
+      - ./airflow:/workspace/airflow
+      - ./dbt:/workspace/dbt
+      - ./terraform:/workspace/terraform
+      - ./scala:/workspace/scala
+      - ./java:/workspace/java
+      - ./hive:/workspace/hive
+      - ./hadoop:/workspace/hadoop
+      - ./kafka:/workspace/kafka
+    ports:
+      - "8080:8080"   # Airflow or other UI
+      - "4040:4040"   # Spark UI
+      - "9092:9092"   # Kafka broker
+    tty: true
+    command: ["sleep", "infinity"]

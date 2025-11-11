@@ -1,0 +1,6 @@
+name: 'data_lab_dbt'
+version: '1.0.0'
+profile: 'data_lab'
+models:
+  data_lab_dbt:
+    +materialized: view
