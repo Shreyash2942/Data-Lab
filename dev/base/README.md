@@ -6,15 +6,23 @@ Includes:
 
 - Ubuntu 22.04
 - Python 3
-- Java 17 (OpenJDK)
+- Java 11 (OpenJDK)
 - Scala
 - Spark 3.5.1 (Hadoop 3)
 - Hadoop 3.3.6
-- Hive 3.1.3
+- Hive 4.0.1
 - Airflow
 - dbt Core + Postgres adapter
 - Terraform (optional)
-- Dual users: `datalab_user` (default), `datalab_root` (admin)
+- Dual users: `datalab` (default), `datalab_root` (admin)
+
+Lakehouse tooling baked in:
+
+- Apache Hudi 0.15.0 Spark 3.5 bundle
+- Apache Iceberg 1.6.1 Spark runtime
+- Delta Lake 3.2.0 (Scala + Python packages)
+
+> All JVM-based components (Spark, Hadoop, Hive, Kafka, Airflow) run on this single Java 11 runtime to avoid cross-version conflicts.
 
 ## Resources
 

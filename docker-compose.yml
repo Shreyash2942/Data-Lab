@@ -7,21 +7,28 @@ services:
       dockerfile: dev/base/Dockerfile   # Single container image with all stacks
     image: data-lab:latest
     container_name: data-lab
+    user: root
+    working_dir: /home/datalab
     env_file:
       - .env.example
-    working_dir: /workspace
     volumes:
-      - ./app:/workspace/app
-      - ./python:/workspace/python
-      - ./spark:/workspace/spark
-      - ./airflow:/workspace/airflow
-      - ./dbt:/workspace/dbt
-      - ./terraform:/workspace/terraform
-      - ./scala:/workspace/scala
-      - ./java:/workspace/java
-      - ./hive:/workspace/hive
-      - ./hadoop:/workspace/hadoop
-      - ./kafka:/workspace/kafka
+      - ./app:/home/datalab/app
+      - ./python:/home/datalab/python
+      - ./spark:/home/datalab/spark
+      - ./airflow:/home/datalab/airflow
+      - ./dbt:/home/datalab/dbt
+      - ./terraform:/home/datalab/terraform
+      - ./scala:/home/datalab/scala
+      - ./java:/home/datalab/java
+      - ./hive:/home/datalab/hive
+      - ./hadoop:/home/datalab/hadoop
+      - ./kafka:/home/datalab/kafka
+      - ./hudi:/home/datalab/hudi
+      - ./iceberg:/home/datalab/iceberg
+      - ./delta:/home/datalab/delta
+      - ./hudi_tables:/home/datalab/hudi_tables
+      - ./iceberg_warehouse:/home/datalab/iceberg_warehouse
+      - ./delta_tables:/home/datalab/delta_tables
     ports:
       - "8080:8080"   # Airflow or other UI
       - "4040:4040"   # Spark UI
