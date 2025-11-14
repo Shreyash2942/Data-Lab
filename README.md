@@ -1,4 +1,4 @@
-# Data Lab — Monolithic (Single Container) with Modular Layout
+# Data Lab -- Monolithic (Single Container) with Modular Layout
 
 This project runs **all data engineering tools inside ONE container**: `data-lab`.
 
@@ -14,19 +14,22 @@ You still get a **modular file/folder layout** for clarity and debugging:
 - Apache Airflow
 - dbt (Core + Postgres adapter)
 - Hadoop (3.3.6)
-- Hive (3.1.3)
+- Hive (4.0.1)
 - Apache Kafka (3.7.1, Scala 2.13)
-- Java 17
+- Java 11
 - Scala
 - Terraform (CLI, optional/demo)
+- Lakehouse formats: Apache Hudi 0.15.0, Apache Iceberg 1.6.1, Delta Lake 3.2.0 (Spark runtimes baked in)
+
+These versions are the most recent stable releases that run cleanly on OpenJDK 11, so the entire stack shares a single, compatible JDK.
 
 ## User Model
 
 Inside the `data-lab` container:
 
-- `datalab_user`  → default non-root user for all dev workloads.
-- `datalab_root` → admin user (for maintenance/installs).
-- `root`         → real system root (only if explicitly used).
+- `datalab` - default non-root user for all dev workloads.
+- `datalab_root` - admin user (for maintenance/installs).
+- `root` - real system root (entered automatically when you `docker compose exec data-lab bash`). Root's home directory is `/home/datalab`, so it shows the same project tree as `datalab`.
 
 ## Quick Start
 
@@ -36,9 +39,12 @@ From repo root:
 docker compose build
 docker compose up -d
 
-# Enter as default user
+# Enter the container (drops you in as root at /)
 docker compose exec data-lab bash
-whoami   # datalab_user
+
+# Switch to the dev user and land in its home (mirrors the repo content)
+su - datalab
+# now you're in /home/datalab with the same folders as ~
 ```
 
 Check tools (inside container):
@@ -62,31 +68,65 @@ docker compose exec -u datalab_root data-lab bash
 whoami   # datalab_root
 ```
 
-## Tech Stack Helper
+## Service Control Helper
 
-Inside the container run:
+You can work either from `~/app` (inside the container) or from the same path when running as root/datalab_root (because `/home/datalab` is shared). Launch the orchestration menu with:
 
 ```bash
-bash /workspace/app/scripts/services_start.sh
+bash ~/app/services_start.sh
 ```
 
-Pick from the menu to:
-- run the Python and PySpark sample jobs
-- start the full data platform stack (Spark master/worker/history + Hadoop HDFS/YARN + Hive metastore/HiveServer2 + Kafka broker/Zookeeper) via option **3** (use `/workspace/app/scripts/services_stop.sh` to stop everything later)
-- launch Airflow (option **4**), run dbt (option **5**), explore Hive CLI (option **6**), trigger the Kafka demo (option **7**), and use Java/Scala/Terraform demos
-- run option **11** to execute all tech stack demos/checks sequentially (Python, Spark, Airflow, dbt, Hadoop, Hive, Kafka, Java, Scala, Terraform)
-- execute dbt, Java/Scala examples, or the Terraform demo
+Current menu layout:
 
-All workloads operate under `/workspace`, so results persist on the host.
+| Option | Action |
+| --- | --- |
+| `1` | Start the Spark master, worker, and history server (logs/state in `~/spark`). |
+| `2` | Start Hadoop HDFS + YARN + MapReduce (logs in `~/hadoop/logs`). |
+| `3` | Start Hive Metastore + HiveServer2 (state in `~/hive`). Automatically starts Hadoop if it isn't already running. |
+| `4` | Start Zookeeper + Kafka broker (data/logs in `~/kafka`). |
+| `5` | Start Airflow webserver & scheduler (metadata/logs in `~/airflow`). |
+| `6` | Start ALL core services (Spark/Hadoop/Hive/Kafka). |
+
+To stop running services, use `bash ~/app/services_stop.sh`. To cycle (stop + start) them, run `bash ~/app/services_restart.sh`.
+
+## Demo Helper
+
+Run sample jobs and validation checks with:
+
+```bash
+bash ~/app/services_demo.sh
+```
+
+| Option | Action |
+| --- | --- |
+| `1` | Run the Python example (`python/example.py`). |
+| `2` | Run the Spark example (`spark/example_pyspark.py`). |
+| `3` | Run `dbt debug && dbt run` inside `~/dbt`. |
+| `4` | Execute the Kafka shell demo (`kafka/demo.sh`). |
+| `5` | Compile/run the Java example. |
+| `6` | Compile/run the Scala example. |
+| `7` | Execute the Terraform demo in `~/terraform`. |
+| `8` | Airflow version check. |
+| `9` | Hadoop version check. |
+| `10` | Hive CLI check (`SHOW DATABASES;`). |
+| `11` | Run all demos/checks sequentially. |
+| `12` | Run the bundled Apache Hudi quickstart (writes/reads `~/hudi_tables`). |
+| `13` | Run the Apache Iceberg quickstart (creates tables in `~/iceberg_warehouse`). |
+| `14` | Run the Delta Lake quickstart (creates tables in `~/delta_tables`). |
+
+### Hive CLI shortcut
+
+Once Hive services start, simply run `hive` (or `beeline`) in any shell. The command is aliased to `/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab`, so you connect to HiveServer2 automatically and can issue `SHOW DATABASES;` right away.
 
 ## dbt profile
 
-The repo now ships with `dbt/profiles.yml`, which targets a local DuckDB database located at `/workspace/dbt/data_lab.duckdb`. You can run `dbt debug` or `dbt run` immediately inside the container without provisioning Postgres. Update the profile if you want to point at an external warehouse.
+The repo now ships with `dbt/profiles.yml`, which targets a local DuckDB database located at `~/dbt/data_lab.duckdb`. You can run `dbt debug` or `dbt run` immediately inside the container without provisioning Postgres. Update the profile if you want to point at an external warehouse.
 
 ## System Requirements
 
 - Docker / Docker Desktop (recent)
 - 4+ GB RAM (8+ GB recommended)
-- 8–15 GB free disk space
+- 8-15 GB free disk space
 
 For details, see `docs/Data-Lab-Documentation.md`.
+
