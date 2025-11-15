@@ -7,6 +7,6 @@
   </property>
   <property>
     <name>hadoop.tmp.dir</name>
-    <value>/home/datalab/hadoop/tmp</value>
+    <value>/home/datalab/runtime/hadoop/tmp</value>
   </property>
 </configuration>

@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 from pyspark.sql import SparkSession
 
-HUDI_BASE_PATH = str(Path.home() / "hudi_tables" / "users")
+RUNTIME_ROOT = Path(os.environ.get("RUNTIME_ROOT", Path.home() / "runtime"))
+HUDI_BASE_PATH = str(RUNTIME_ROOT / "lakehouse" / "hudi_tables" / "users")
 
 spark = (
     SparkSession.builder.appName("data-lab-hudi-demo")

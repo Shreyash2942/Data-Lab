@@ -3,7 +3,7 @@
 <configuration>
   <property>
     <name>javax.jdo.option.ConnectionURL</name>
-    <value>jdbc:derby:;databaseName=/home/datalab/hive/metastore_db;create=true</value>
+    <value>jdbc:derby:;databaseName=/home/datalab/runtime/hive/metastore_db;create=true</value>
   </property>
   <property>
     <name>javax.jdo.option.ConnectionDriverName</name>
@@ -15,7 +15,7 @@
   </property>
   <property>
     <name>hive.metastore.warehouse.dir</name>
-    <value>/home/datalab/hive/warehouse</value>
+    <value>/home/datalab/runtime/hive/warehouse</value>
   </property>
   <property>
     <name>hive.server2.enable.doAs</name>
@@ -23,6 +23,6 @@
   </property>
   <property>
     <name>system:java.io.tmpdir</name>
-    <value>/home/datalab/hive/tmp</value>
+    <value>/home/datalab/runtime/hive/tmp</value>
   </property>
 </configuration>

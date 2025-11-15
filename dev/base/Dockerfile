@@ -128,12 +128,14 @@ RUN echo "${TERRAFORM_ZIP_SHA256}  /tmp/terraform.zip" | sha256sum -c - \
 # Default runtime user
 USER ${LAB_APP_USER}
 WORKDIR /home/${LAB_APP_USER}
+RUN mkdir -p /home/${LAB_APP_USER}/runtime
 
 # Final PATHs for non-login shells (login shells also source profile.d)
 ENV SPARK_HOME=/opt/spark \
     HADOOP_HOME=/opt/hadoop \
     HIVE_HOME=/opt/hive \
     KAFKA_HOME=/opt/kafka \
+    RUNTIME_ROOT=/home/${LAB_APP_USER}/runtime \
     WORKSPACE=/home/${LAB_APP_USER} \
     PATH="$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin"
 
@@ -152,6 +154,13 @@ export HADOOP_HOME=/opt/hadoop
 export HIVE_HOME=/opt/hive
 export KAFKA_HOME=/opt/kafka
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export WORKSPACE="$HOME"
+export RUNTIME_ROOT="${WORKSPACE}/runtime"
+export AIRFLOW_HOME="${RUNTIME_ROOT}/airflow"
+export AIRFLOW__CORE__DAGS_FOLDER="${WORKSPACE}/airflow/dags"
+export DBT_PROFILES_DIR="${WORKSPACE}/dbt"
+export DBT_PACKAGE_INSTALL_PATH="${RUNTIME_ROOT}/dbt/dbt_packages"
+export TF_DATA_DIR="${RUNTIME_ROOT}/terraform/.terraform"
 export PATH="$JAVA_HOME/bin:$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin"
 EOF
 

@@ -1,6 +1,6 @@
 # Kafka Layer
 
-Apache Kafka (3.7.1, Scala 2.13) runs inside the `data-lab` container alongside Zookeeper. Data/logs live under `~/kafka`, so topics and messages persist on the host.
+Apache Kafka (3.7.1, Scala 2.13) runs inside the `data-lab` container alongside Zookeeper. Data/logs live under `~/runtime/kafka`, so topics and messages persist on the host.
 
 ## Quick usage
 

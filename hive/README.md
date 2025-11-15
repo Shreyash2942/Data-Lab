@@ -1,6 +1,6 @@
 # Hive Layer
 
-Hive now ships with a configured embedded Derby metastore and warehouse path (`~/hive/warehouse`). Start the background services from inside the container with:
+Hive now ships with a configured embedded Derby metastore and warehouse path (`~/runtime/hive/warehouse`). Start the background services from inside the container with:
 
 ```bash
 bash ~/app/services_start.sh   # choose option 3 to start Hive (Hadoop auto-starts if needed)

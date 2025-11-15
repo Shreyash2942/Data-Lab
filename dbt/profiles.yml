@@ -3,6 +3,6 @@ data_lab:
   outputs:
     duckdb:
       type: duckdb
-      path: /home/datalab/dbt/data_lab.duckdb
+      path: /home/datalab/runtime/dbt/data_lab.duckdb
       schema: main
       threads: 1

@@ -10,45 +10,10 @@ Thumbs.db
 __pycache__/
 *.pyc
 
-# Airflow runtime artifacts
-airflow/airflow.db
-airflow/airflow.cfg
-airflow/airflow-webserver.pid
-airflow/webserver_config.py
-airflow/logs/
-airflow/dags/__pycache__/
-
-# Spark runtime state
-spark/logs/
-spark/events/
-spark/pids/
-spark/warehouse/
-
-# Hadoop / Hive state
-hadoop/dfs/
-hadoop/logs/
-hadoop/tmp/
-hive/metastore_db/
-hive/warehouse/
-hive/pids/
-hudi_tables/
-iceberg_warehouse/
-delta_tables/
-
-# Kafka runtime data
-kafka/logs/
-kafka/zookeeper-data/
-kafka/pids/
-
-# Terraform
-terraform/.terraform/
-terraform/.terraform.lock.hcl
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
-
-# dbt / DuckDB artifacts
-dbt/data_lab.duckdb
-dbt/dbt_packages/
+# Runtime state (logs, metadata, warehouses)
+runtime/*
+!runtime/README.md
+!runtime/*/.gitkeep
 
 # Misc generated files
 *.log

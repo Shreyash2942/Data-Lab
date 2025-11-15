@@ -8,6 +8,8 @@ fi
 
 HOME_DIR="${HOME:-/home/datalab}"
 WORKSPACE="${WORKSPACE:-${HOME_DIR}}"
+RUNTIME_ROOT="${RUNTIME_ROOT:-${WORKSPACE}/runtime}"
+mkdir -p "${RUNTIME_ROOT}"
 
 : "${SPARK_HOME:=/opt/spark}"
 : "${HADOOP_HOME:=/opt/hadoop}"
@@ -47,8 +49,10 @@ run_scala_example() {
 }
 
 run_terraform_demo() {
+  mkdir -p "${RUNTIME_ROOT}/terraform"
+  export TF_DATA_DIR="${RUNTIME_ROOT}/terraform/.terraform"
   terraform -chdir="${WORKSPACE}/terraform" init
-  terraform -chdir="${WORKSPACE}/terraform" apply -auto-approve
+  terraform -chdir="${WORKSPACE}/terraform" apply -auto-approve -state="${RUNTIME_ROOT}/terraform/terraform.tfstate"
 }
 
 check_airflow() {
@@ -64,15 +68,15 @@ check_hive_cli() {
 }
 
 run_hudi_demo() {
-  python "${WORKSPACE}/spark/hudi_example.py"
+  python "${WORKSPACE}/hudi/hudi_example.py"
 }
 
 run_iceberg_demo() {
-  python "${WORKSPACE}/spark/iceberg_example.py"
+  python "${WORKSPACE}/iceberg/iceberg_example.py"
 }
 
 run_delta_demo() {
-  python "${WORKSPACE}/spark/delta_example.py"
+  python "${WORKSPACE}/delta/delta_example.py"
 }
 
 run_all_demos() {

@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 from pyspark.sql import SparkSession
 
-WAREHOUSE = str(Path.home() / "iceberg_warehouse")
+RUNTIME_ROOT = Path(os.environ.get("RUNTIME_ROOT", Path.home() / "runtime"))
+WAREHOUSE = str(RUNTIME_ROOT / "lakehouse" / "iceberg_warehouse")
 
 spark = (
     SparkSession.builder.appName("data-lab-iceberg-demo")

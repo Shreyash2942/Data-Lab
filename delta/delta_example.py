@@ -1,8 +1,10 @@
+import os
 from pathlib import Path
 from delta import configure_spark_with_delta_pip
 from pyspark.sql import SparkSession
 
-DELTA_PATH = str(Path.home() / "delta_tables" / "customers")
+RUNTIME_ROOT = Path(os.environ.get("RUNTIME_ROOT", Path.home() / "runtime"))
+DELTA_PATH = str(RUNTIME_ROOT / "lakehouse" / "delta_tables" / "customers")
 
 builder = (
     SparkSession.builder.appName("data-lab-delta-demo")

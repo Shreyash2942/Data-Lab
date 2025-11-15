@@ -8,24 +8,27 @@ fi
 
 HOME_DIR="${HOME:-/home/datalab}"
 WORKSPACE="${WORKSPACE:-${HOME_DIR}}"
+RUNTIME_ROOT="${RUNTIME_ROOT:-${WORKSPACE}/runtime}"
+mkdir -p "${RUNTIME_ROOT}"
 
-HDFS_BASE="${WORKSPACE}/hadoop/dfs"
+HDFS_BASE="${RUNTIME_ROOT}/hadoop/dfs"
 HDFS_NAME_DIR="${HDFS_BASE}/name"
 HDFS_DATA_DIR="${HDFS_BASE}/data"
-SPARK_PID_DIR="${WORKSPACE}/spark/pids"
-SPARK_LOG_DIR="${WORKSPACE}/spark/logs"
-SPARK_EVENTS_DIR="${WORKSPACE}/spark/events"
-HIVE_METASTORE_DB="${WORKSPACE}/hive/metastore_db"
-HIVE_WAREHOUSE="${WORKSPACE}/hive/warehouse"
-HIVE_PID_DIR="${WORKSPACE}/hive/pids"
-KAFKA_BASE="${WORKSPACE}/kafka"
+SPARK_PID_DIR="${RUNTIME_ROOT}/spark/pids"
+SPARK_LOG_DIR="${RUNTIME_ROOT}/spark/logs"
+SPARK_EVENTS_DIR="${RUNTIME_ROOT}/spark/events"
+SPARK_WAREHOUSE_DIR="${RUNTIME_ROOT}/spark/warehouse"
+HIVE_METASTORE_DB="${RUNTIME_ROOT}/hive/metastore_db"
+HIVE_WAREHOUSE="${RUNTIME_ROOT}/hive/warehouse"
+HIVE_PID_DIR="${RUNTIME_ROOT}/hive/pids"
+KAFKA_BASE="${RUNTIME_ROOT}/kafka"
 KAFKA_PID_DIR="${KAFKA_BASE}/pids"
 KAFKA_LOG_DIR="${KAFKA_BASE}/logs"
 KAFKA_ZK_DATA_DIR="${KAFKA_BASE}/zookeeper-data"
-HADOOP_LOG_DIR="${WORKSPACE}/hadoop/logs"
-YARN_LOG_DIR="${WORKSPACE}/hadoop/logs/yarn"
-MAPRED_LOG_DIR="${WORKSPACE}/hadoop/logs/mapred"
-AIRFLOW_PID_DIR="${WORKSPACE}/airflow/pids"
+HADOOP_LOG_DIR="${RUNTIME_ROOT}/hadoop/logs"
+YARN_LOG_DIR="${RUNTIME_ROOT}/hadoop/logs/yarn"
+MAPRED_LOG_DIR="${RUNTIME_ROOT}/hadoop/logs/mapred"
+AIRFLOW_PID_DIR="${RUNTIME_ROOT}/airflow/pids"
 
 : "${SPARK_HOME:=/opt/spark}"
 : "${HADOOP_HOME:=/opt/hadoop}"
@@ -58,7 +61,7 @@ ensure_hadoop_dirs() {
   mkdir -p \
     "${HDFS_NAME_DIR}" \
     "${HDFS_DATA_DIR}" \
-    "${WORKSPACE}/hadoop/tmp" \
+    "${RUNTIME_ROOT}/hadoop/tmp" \
     "${HADOOP_LOG_DIR}" \
     "${YARN_LOG_DIR}" \
     "${MAPRED_LOG_DIR}"
@@ -105,7 +108,7 @@ ensure_hadoop_running() {
 }
 
 ensure_spark_dirs() {
-  mkdir -p "${SPARK_PID_DIR}" "${SPARK_LOG_DIR}" "${SPARK_EVENTS_DIR}" "${WORKSPACE}/spark/warehouse"
+  mkdir -p "${SPARK_PID_DIR}" "${SPARK_LOG_DIR}" "${SPARK_EVENTS_DIR}" "${SPARK_WAREHOUSE_DIR}"
 }
 
 start_spark_cluster() {
@@ -125,7 +128,7 @@ stop_spark_cluster() {
 }
 
 ensure_hive_dirs() {
-  mkdir -p "${HIVE_METASTORE_DB}" "${HIVE_WAREHOUSE}" "${HIVE_PID_DIR}" "${WORKSPACE}/hive/tmp"
+  mkdir -p "${HIVE_METASTORE_DB}" "${HIVE_WAREHOUSE}" "${HIVE_PID_DIR}" "${RUNTIME_ROOT}/hive/tmp"
 }
 
 init_hive_metastore_if_needed() {
@@ -133,7 +136,7 @@ init_hive_metastore_if_needed() {
     echo "[*] Initializing Hive metastore (Derby)..."
     if ! "${SCHEMATOOL_BIN}" -dbType derby -initSchema; then
       echo "[!] Hive metastore initialization failed; cleaning and retrying once..."
-      rm -rf "${HIVE_METASTORE_DB}" "${WORKSPACE}/hive/tmp"/*
+      rm -rf "${HIVE_METASTORE_DB}" "${RUNTIME_ROOT}/hive/tmp"/*
       if ! "${SCHEMATOOL_BIN}" -dbType derby -initSchema; then
         echo "[!] Hive metastore initialization still failing. Check ${HIVE_METASTORE_DB} manually."
         return 1
