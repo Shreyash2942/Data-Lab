@@ -1,0 +1,26 @@
+# Git metadata
+.git
+.gitignore
+
+# Environment files
+.env
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Runtime state (logs, warehouses, caches)
+runtime/
+airflow/logs/
+
+# Misc generated files
+*.log
+*.pid

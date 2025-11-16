@@ -6,6 +6,9 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Environment overrides
+.env
+
 # Python
 __pycache__/
 *.pyc

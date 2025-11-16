@@ -52,6 +52,14 @@ esac
 export SPARK_PID_DIR SPARK_LOG_DIR SPARK_EVENTS_DIR
 export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=file://${SPARK_EVENTS_DIR}"
 export HADOOP_LOG_DIR YARN_LOG_DIR MAPRED_LOG_DIR
+export HIVE_PID_DIR
+export _HIVE_PID_DIR="${HIVE_PID_DIR}"
+export HIVE_SERVER2_PID_DIR="${HIVE_PID_DIR}"
+export HIVE_METASTORE_PID_DIR="${HIVE_PID_DIR}"
+export HIVESERVER2_PID_DIR="${HIVE_PID_DIR}"
+export METASTORE_PID_DIR="${HIVE_PID_DIR}"
+export HIVE_SERVER2_PID_FILE="${HIVE_PID_DIR}/hiveserver2.pid"
+export HIVE_METASTORE_PID_FILE="${HIVE_PID_DIR}/metastore.pid"
 
 is_hadoop_running() {
   pgrep -f NameNode >/dev/null 2>&1 && pgrep -f ResourceManager >/dev/null 2>&1
@@ -300,19 +308,24 @@ read -p "Select option: " opt
 case "$opt" in
   1)
     start_spark_cluster
+    echo "[+] Spark services started."
     ;;
   2)
     start_hadoop_services
+    echo "[+] Hadoop services started."
     ;;
   3)
     ensure_hadoop_running
     start_hive_services
+    echo "[+] Hive services started."
     ;;
   4)
     start_kafka_services
+    echo "[+] Kafka services started."
     ;;
   5)
     start_airflow_services
+    echo "[+] Airflow services started."
     ;;
   6)
     start_data_services

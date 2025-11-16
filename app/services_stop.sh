@@ -22,21 +22,27 @@ read -p "Select option: " opt
 case "$opt" in
   1)
     call_control --stop-spark
+    echo "[+] Spark services stopped."
     ;;
   2)
     call_control --stop-hadoop
+    echo "[+] Hadoop services stopped."
     ;;
   3)
     call_control --stop-hive
+    echo "[+] Hive services stopped."
     ;;
   4)
     call_control --stop-kafka
+    echo "[+] Kafka services stopped."
     ;;
   5)
     call_control --stop-airflow
+    echo "[+] Airflow services stopped."
     ;;
   6)
     call_control --stop-core
+    echo "[+] Spark/Hadoop/Hive/Kafka services stopped."
     ;;
   7)
     docker compose stop "${SERVICE_NAME}"

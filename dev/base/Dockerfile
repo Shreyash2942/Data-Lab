@@ -145,8 +145,11 @@ RUN install -d /etc/profile.d \
     && cat <<'EOF' >/etc/profile.d/datalab-path.sh \
     && chmod 0644 /etc/profile.d/datalab-path.sh \
     && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /etc/bash.bashrc \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /etc/bash.bashrc \
     && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
     && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
     && chown ${LAB_APP_USER}:${LAB_APP_USER} /home/${LAB_APP_USER}/.bashrc /home/${LAB_APP_USER}/.profile
 # Ensures login shells (e.g., after `su - datalab`) can find the big data CLIs.
 export SPARK_HOME=/opt/spark

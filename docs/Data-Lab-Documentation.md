@@ -12,8 +12,13 @@ This environment is designed for teaching, demos, and local experimentation.
   - `datalab` (default)
   - `datalab_root` (admin)
   - `root` (system)
+- `docker compose exec data-lab bash` drops you into `root`, but `/root` points at `/home/datalab`. You can `su - datalab` for day-to-day work (recommended) or `su - datalab_root` for admin tasks. If you prefer a non-root session immediately, run `docker compose exec -u datalab data-lab bash`.
 
 Use this doc plus each stack's README to explain configuration and usage.
+
+## Environment Setup
+
+- First run `cp .env.example .env` (or the Windows equivalent) at the repo root so Docker Compose loads a writable `.env`. The `.env` file is gitignored; customize it per machine while `.env.example` remains the reference.
 
 ## dbt Defaults
 
@@ -25,6 +30,7 @@ Use this doc plus each stack's README to explain configuration and usage.
 - All mutable state is isolated under `~/runtime` inside the container (bind-mounted from `repo_root/runtime`).
 - Each stack gets its own subfolder: `runtime/airflow`, `runtime/spark`, `runtime/hadoop`, `runtime/hive`, `runtime/kafka`, `runtime/lakehouse`, `runtime/dbt`, `runtime/terraform`, etc.
 - Deleting a subfolder resets that stack without touching source code.
+- The root `.dockerignore` excludes `runtime/`, `airflow/logs/`, and other generated state from the build context so `docker compose build` stays fast even after long-lived sessions.
 
 ## Hadoop Single-Node Setup
 
