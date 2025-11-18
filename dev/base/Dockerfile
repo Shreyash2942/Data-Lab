@@ -144,6 +144,7 @@ USER root
 RUN install -d /etc/profile.d \
     && cat <<'EOF' >/etc/profile.d/datalab-path.sh \
     && chmod 0644 /etc/profile.d/datalab-path.sh \
+    && sed -i 's/\r$//' /etc/profile.d/datalab-path.sh \
     && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /etc/bash.bashrc \
     && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /etc/bash.bashrc \
     && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
@@ -169,8 +170,10 @@ EOF
 
 RUN cat <<'EOF' >/etc/profile.d/hive-cli.sh
 alias beeline='/opt/hive/bin/beeline'
-alias hive='/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab'
+alias hive='/opt/hive/bin/hive --service cli'
+alias hivehs2='/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab'
 EOF
+RUN sed -i 's/\r$//' /etc/profile.d/hive-cli.sh
 
 USER ${LAB_APP_USER}
 

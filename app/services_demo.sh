@@ -6,15 +6,45 @@ if [ -z "${BASH_VERSION:-}" ]; then
   exit 1
 fi
 
-HOME_DIR="${HOME:-/home/datalab}"
-WORKSPACE="${WORKSPACE:-${HOME_DIR}}"
-RUNTIME_ROOT="${RUNTIME_ROOT:-${WORKSPACE}/runtime}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+if [ ! -f "/.dockerenv" ] && [ -z "${INSIDE_DATALAB:-}" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+Please run this script inside the data-lab container (e.g. `docker compose exec data-lab bash`)
+or install Docker CLI so it can exec into the container automatically.
+EOF
+    exit 1
+  fi
+  (
+    cd "${REPO_ROOT}"
+    docker compose exec -e INSIDE_DATALAB=1 "${SERVICE_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+  )
+  exit $?
+fi
+
+strip_cr() {
+  local value="${1:-}"
+  value="${value//$'\r'/}"
+  printf '%s' "${value}"
+}
+
+HOME_DIR="$(strip_cr "${HOME:-/home/datalab}")"
+WORKSPACE="$(strip_cr "${WORKSPACE:-${HOME_DIR}}")"
+RUNTIME_ROOT="$(strip_cr "${RUNTIME_ROOT:-${WORKSPACE}/runtime}")"
 mkdir -p "${RUNTIME_ROOT}"
 
 : "${SPARK_HOME:=/opt/spark}"
 : "${HADOOP_HOME:=/opt/hadoop}"
 : "${HIVE_HOME:=/opt/hive}"
 : "${KAFKA_HOME:=/opt/kafka}"
+SPARK_HOME="$(strip_cr "${SPARK_HOME}")"
+HADOOP_HOME="$(strip_cr "${HADOOP_HOME}")"
+HIVE_HOME="$(strip_cr "${HIVE_HOME}")"
+KAFKA_HOME="$(strip_cr "${KAFKA_HOME}")"
 
 HADOOP_BIN="${HADOOP_HOME}/bin/hadoop"
 HIVE_BIN="${HIVE_HOME}/bin/hive"
@@ -79,6 +109,14 @@ run_delta_demo() {
   python "${WORKSPACE}/delta/delta_example.py"
 }
 
+run_hdfs_smoke_test() {
+  bash "${WORKSPACE}/hadoop/scripts/hdfs_check.sh"
+}
+
+setup_hive_demo_databases() {
+  bash "${WORKSPACE}/hive/bootstrap_demo.sh"
+}
+
 run_all_demos() {
   echo "[*] Running Python example..."
   run_python_example || echo "Python example failed."
@@ -95,8 +133,14 @@ run_all_demos() {
   echo "[*] Checking Hadoop..."
   check_hadoop || true
 
+  echo "[*] Running HDFS smoke test..."
+  run_hdfs_smoke_test || echo "HDFS smoke test failed."
+
   echo "[*] Running Hive CLI..."
   check_hive_cli || true
+
+  echo "[*] Creating Hive demo databases..."
+  setup_hive_demo_databases || echo "Hive demo setup failed."
 
   echo "[*] Running Kafka demo..."
   run_kafka_demo || echo "Kafka demo failed."
@@ -128,6 +172,8 @@ handle_cli_flag() {
     --run-hudi-demo) run_hudi_demo; exit 0 ;;
     --run-iceberg-demo) run_iceberg_demo; exit 0 ;;
     --run-delta-demo) run_delta_demo; exit 0 ;;
+    --run-hdfs-check) run_hdfs_smoke_test; exit 0 ;;
+    --setup-hive-demo) setup_hive_demo_databases; exit 0 ;;
     --run-all-demos) run_all_demos; exit 0 ;;
   esac
 }
@@ -149,6 +195,8 @@ echo "11) Run all demos/checks"
 echo "12) Hudi demo"
 echo "13) Iceberg demo"
 echo "14) Delta Lake demo"
+echo "15) HDFS smoke test (upload + list sample file)"
+echo "16) Hive demo databases (create + show tables)"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -167,6 +215,8 @@ case "$opt" in
   12) run_hudi_demo ;;
   13) run_iceberg_demo ;;
   14) run_delta_demo ;;
+  15) run_hdfs_smoke_test ;;
+  16) setup_hive_demo_databases ;;
   0) echo "Bye." ;;
   *) echo "Invalid option."; exit 1 ;;
 esac

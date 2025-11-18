@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -e
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+if [ ! -f "/.dockerenv" ] && [ -z "${INSIDE_DATALAB:-}" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Please run inside the data-lab container (docker compose exec data-lab bash)." >&2
+    exit 1
+  fi
+  (
+    cd "${APP_REPO_ROOT}"
+    docker compose exec -e INSIDE_DATALAB=1 "${SERVICE_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+  )
+  exit $?
+fi
+
+source "${APP_DIR}/scripts/common.sh"
+source "${APP_DIR}/scripts/hadoop/manage.sh"
+source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/services_utils.sh"
+
+restart_component() {
+  local stop_fn=$1
+  local start_fn=$2
+  "${stop_fn}" || true
+  "${start_fn}"
+}
+
+handle_cli_flag() {
+  case "$1" in
+    --restart-spark) restart_component services::stop_spark_cluster services::start_spark_cluster; exit 0 ;;
+    --restart-hadoop) restart_component hadoop::stop hadoop::start; exit 0 ;;
+    --restart-hive)
+      hive::stop || true
+      hive::prepare_cli
+      exit 0
+      ;;
+    --restart-kafka) restart_component services::stop_kafka services::start_kafka; exit 0 ;;
+    --restart-airflow) restart_component services::stop_airflow services::start_airflow; exit 0 ;;
+    --restart-core)
+      services::stop_kafka || true
+      hive::stop || true
+      hadoop::stop || true
+      services::stop_spark_cluster || true
+      hadoop::ensure_running
+      services::start_spark_cluster
+      hive::prepare_cli
+      services::start_kafka
+      echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+      exit 0
+      ;;
+  esac
+}
+
+handle_cli_flag "${1:-}" || true
+
+echo "=== Data Lab :: RESTART MENU ==="
+echo "1) Restart Spark services"
+echo "2) Restart Hadoop services"
+echo "3) Restart Hive services"
+echo "4) Restart Kafka services"
+echo "5) Restart Airflow webserver & scheduler"
+echo "6) Restart ALL core services (Spark/Hadoop/Hive/Kafka)"
+echo "7) Restart Docker container only"
+echo "0) Exit"
+read -p "Select option: " opt
+
+case "$opt" in
+  1)
+    restart_component services::stop_spark_cluster services::start_spark_cluster
+    echo "[+] Spark services restarted."
+    ;;
+  2)
+    restart_component hadoop::stop hadoop::start
+    echo "[+] Hadoop services restarted."
+    ;;
+  3)
+    hive::stop || true
+    hive::prepare_cli
+    echo "[+] Hive services restarted."
+    ;;
+  4)
+    restart_component services::stop_kafka services::start_kafka
+    echo "[+] Kafka services restarted."
+    ;;
+  5)
+    restart_component services::stop_airflow services::start_airflow
+    echo "[+] Airflow services restarted."
+    ;;
+  6)
+    services::stop_kafka || true
+    hive::stop || true
+    hadoop::stop || true
+    services::stop_spark_cluster || true
+    hadoop::ensure_running
+    services::start_spark_cluster
+    hive::prepare_cli
+    services::start_kafka
+    echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+    ;;
+  7)
+    (
+      cd "${APP_REPO_ROOT}"
+      docker compose restart "${SERVICE_NAME}"
+    )
+    ;;
+  0)
+    echo "Bye."
+    ;;
+  *)
+    echo "Invalid option."
+    exit 1
+    ;;
+esac

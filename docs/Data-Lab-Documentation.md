@@ -18,7 +18,13 @@ Use this doc plus each stack's README to explain configuration and usage.
 
 ## Environment Setup
 
-- First run `cp .env.example .env` (or the Windows equivalent) at the repo root so Docker Compose loads a writable `.env`. The `.env` file is gitignored; customize it per machine while `.env.example` remains the reference.
+Run the example-to-local env copy once so Docker Compose picks up a writable `.env`:
+
+```bash
+cp .env.example .env
+```
+
+On Windows use `copy .env.example .env`. The generated `.env` stays gitignored, so update it per machine while `.env.example` remains the shared reference.
 
 ## dbt Defaults
 
@@ -35,18 +41,20 @@ Use this doc plus each stack's README to explain configuration and usage.
 ## Hadoop Single-Node Setup
 
 - `dev/hadoop/conf/*.xml` ships with pseudo-distributed defaults (localhost NameNode/YARN).
-- Use `~/app/services_start.sh` option 2 to format (first run) and start the Hadoop daemons. Option 6 (or `~/app/services_start.sh --start-core`) starts the entire Spark/Hadoop/Hive/Kafka bundle. Run `~/app/services_stop.sh` to stop them.
+- Use `~/app/start` option 2 to format (first run) and start the Hadoop daemons. Option 6 (or `~/app/start --start-core`) starts the entire Spark/Hadoop/Hive/Kafka bundle. Run `~/app/stop` to stop them.
 - HDFS data directories live under `~/runtime/hadoop/dfs`, so they persist outside the container.
+- Quick verification: `bash ~/hadoop/scripts/hdfs_check.sh` uploads `~/hadoop/sample_data/hello_hdfs.txt` into `/data-lab/demo/hello_hdfs.txt` in HDFS and prints it back so you can confirm NameNode/DataNode access.
 
 ## Spark Master + Worker
 
 - `dev/spark/conf/spark-env.sh` and `spark-defaults.conf` configure a localhost master (`spark://localhost:7077`), worker, and history server with logs under `~/runtime/spark/events`.
-- Use helper option 1 to start only the Spark master/worker/history server. Combine it with option 6 or `~/app/services_start.sh --start-core` when you need the full stack. Stop everything with `~/app/services_stop.sh`.
+- Use helper option 1 to start only the Spark master/worker/history server. Combine it with option 6 or `~/app/start --start-core` when you need the full stack. Stop everything with `~/app/stop`.
 
 ## Hive Metastore + HiveServer2
 
 - `dev/hive/conf/hive-site.xml` configures an embedded Derby metastore stored in `~/runtime/hive/metastore_db` with a warehouse path at `~/runtime/hive/warehouse`.
-- From the helper script choose option 3 to start the metastore + HiveServer2 (it auto-starts Hadoop if needed). Use option 6 for the broader Spark/Hadoop/Hive/Kafka bundle. Stop services with `~/app/services_stop.sh` and run the CLI via the `hive` alias once HiveServer2 is up.
+- From the helper script choose option 3 to start the metastore + HiveServer2 (it auto-starts Hadoop if needed). Use option 6 for the broader Spark/Hadoop/Hive/Kafka bundle. Stop services with `~/app/stop` and run the CLI via the `hive` alias once HiveServer2 is up (enable the current-db prompt with `hive --hiveconf hive.cli.print.current.db=true`).
+- Quick verification: `bash ~/hive/bootstrap_demo.sh` uses the Hive CLI to create the `sales_demo`, `analytics_demo`, and `staging_demo` databases from `~/hive/init_demo_databases.sql`, and displays sample tables so you can confirm Hive is working.
 
 ## Lakehouse / Table Formats
 
@@ -57,5 +65,5 @@ Use this doc plus each stack's README to explain configuration and usage.
 ## Kafka Broker
 
 - `dev/kafka/conf/server.properties` and `zookeeper.properties` define a single-node Kafka + Zookeeper stack with logs/data under `~/runtime/kafka`.
-- Start it with option 4 of the helper (or `services_start.sh --start-core`); stop via `~/app/services_stop.sh`.
+- Start it with option 4 of the helper (or `~/app/start --start-core`); stop via `~/app/stop`.
 - The broker is exposed on `PLAINTEXT://localhost:9092`. Run the interactive demo from `~/app/services_demo.sh` option 4 (or directly via `~/kafka/demo.sh`) to verify the pipeline.

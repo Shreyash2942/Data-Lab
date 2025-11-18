@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -e
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+if [ ! -f "/.dockerenv" ] && [ -z "${INSIDE_DATALAB:-}" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+Please run this script inside the data-lab container (e.g. `docker compose exec data-lab bash`)
+or install Docker CLI so it can exec into the container automatically.
+EOF
+    exit 1
+  fi
+  (
+    cd "${APP_REPO_ROOT}"
+    docker compose exec -e INSIDE_DATALAB=1 "${SERVICE_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+  )
+  exit $?
+fi
+
+source "${APP_DIR}/scripts/common.sh"
+source "${APP_DIR}/scripts/hadoop/manage.sh"
+source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/services_utils.sh"
+
+handle_cli_flag() {
+  case "$1" in
+    --start-spark) services::start_spark_cluster; exit 0 ;;
+    --start-hadoop) hadoop::start; exit 0 ;;
+    --start-hive) hive::prepare_cli; exit 0 ;;
+    --start-kafka) services::start_kafka; exit 0 ;;
+    --start-airflow) services::start_airflow; exit 0 ;;
+    --start-core)
+      hadoop::ensure_running
+      services::start_spark_cluster
+      hive::prepare_cli
+      services::start_kafka
+      echo "[+] Spark, Hadoop, Hive, and Kafka services started."
+      exit 0
+      ;;
+  esac
+}
+
+handle_cli_flag "${1:-}" || true
+
+echo "=== Data Lab :: START MENU ==="
+echo "1) Start Spark services"
+echo "2) Start Hadoop services"
+echo "3) Prepare Hive CLI (Hadoop + metastore + HS2)"
+echo "4) Start Kafka services"
+echo "5) Start Airflow webserver & scheduler"
+echo "6) Start ALL core services (Spark/Hadoop/Hive/Kafka)"
+echo "0) Exit"
+read -p "Select option: " opt
+
+case "$opt" in
+  1)
+    services::start_spark_cluster
+    echo "[+] Spark services started."
+    ;;
+  2)
+    hadoop::start
+    echo "[+] Hadoop services started."
+    ;;
+  3)
+    hive::prepare_cli
+    ;;
+  4)
+    services::start_kafka
+    echo "[+] Kafka services started."
+    ;;
+  5)
+    services::start_airflow
+    echo "[+] Airflow services started."
+    ;;
+  6)
+    hadoop::ensure_running
+    services::start_spark_cluster
+    hive::prepare_cli
+    services::start_kafka
+    echo "[+] Spark, Hadoop, Hive, and Kafka services started."
+    ;;
+  0)
+    echo "Bye."
+    ;;
+  *)
+    echo "Invalid option."
+    exit 1
+    ;;
+esac
