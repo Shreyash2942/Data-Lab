@@ -6,7 +6,7 @@ Apache Kafka (3.7.1, Scala 2.13) runs inside the `data-lab` container alongside 
 
 1. Start the data services:  
    ```bash
-   bash ~/app/services_start.sh   # choose option 4 (or run with --start-core)
+   bash ~/app/start   # choose option 4 (or run with --start-core)
    ```
 2. Run the built-in shell demo to create a topic, publish two messages, and consume them:
    ```bash
@@ -24,7 +24,7 @@ Apache Kafka (3.7.1, Scala 2.13) runs inside the `data-lab` container alongside 
    kafka-console-producer.sh --bootstrap-server localhost:9092 --topic datalab_demo
    kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic datalab_demo --from-beginning
    ```
-5. Stop everything with `bash ~/app/services_stop.sh`.
+5. Stop everything with `bash ~/app/stop`.
 
 ## Resources
 - Official docs: https://kafka.apache.org/documentation/

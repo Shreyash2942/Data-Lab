@@ -71,6 +71,13 @@ docker compose exec -u datalab_root data-lab bash
 whoami   # datalab_root
 ```
 
+Storage sanity checks (after Hadoop/Hive are running):
+
+```bash
+bash ~/hadoop/scripts/hdfs_check.sh   # uploads sample data into HDFS and prints it back
+bash ~/hive/bootstrap_demo.sh # creates three demo databases + tables
+```
+
 ## Runtime Storage
 
 All logs, metadata, warehouses, and other mutable state live under `runtime/` at the repo root. Docker bind-mounts this directory to `/home/datalab/runtime` so every stack (Airflow, Spark, Hadoop, Hive, Kafka, dbt, Terraform, lakehouse demos, etc.) writes into its own subfolder. Remove a specific subfolder (e.g., `runtime/airflow`) when you want to reset that stack; the helper scripts recreate it automatically.
@@ -82,7 +89,7 @@ The `.dockerignore` file keeps `runtime/`, `airflow/logs/`, and other generated 
 You can work either from `~/app` (inside the container) or from the same path when running as root/datalab_root (because `/home/datalab` is shared). Launch the orchestration menu with:
 
 ```bash
-bash ~/app/services_start.sh
+bash ~/app/start
 ```
 
 Current menu layout:
@@ -96,7 +103,7 @@ Current menu layout:
 | `5` | Start Airflow webserver & scheduler (metadata/logs in `~/runtime/airflow`). |
 | `6` | Start ALL core services (Spark/Hadoop/Hive/Kafka). |
 
-To stop running services, use `bash ~/app/services_stop.sh`. To cycle (stop + start) them, run `bash ~/app/services_restart.sh` (all menu options work inside the container except option `7`, which needs the host Docker CLI).
+To stop running services, use `bash ~/app/stop`. To cycle (stop + start) them, run `bash ~/app/restart` (all menu options work inside the container except option `7`, which needs the host Docker CLI).
 
 ## Demo Helper
 
@@ -122,11 +129,24 @@ bash ~/app/services_demo.sh
 | `12` | Run the bundled Apache Hudi quickstart (writes/reads `~/runtime/lakehouse/hudi_tables`). |
 | `13` | Run the Apache Iceberg quickstart (creates tables in `~/runtime/lakehouse/iceberg_warehouse`). |
 | `14` | Run the Delta Lake quickstart (creates tables in `~/runtime/lakehouse/delta_tables`). |
+| `15` | Run the HDFS smoke test (uploads `~/hadoop/sample_data/hello_hdfs.txt` into `/data-lab/demo`). |
+| `16` | Create/show the Hive demo databases (`sales_demo`, `analytics_demo`, `staging_demo`) via the Hive CLI. |
 
 ### Hive CLI shortcut
 
-Once Hive services start, simply run `hive` (or `beeline`) in any shell. The command is aliased to `/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab`, so you connect to HiveServer2 automatically—even in the default `docker compose exec data-lab bash` shell—and can issue `SHOW DATABASES;` right away.
+Option `3` in `bash ~/app/start` brings up Hadoop plus the embedded Derby metastore. After that you can simply run `hivelegacy` (classic-style prompt) or `hivecli` (plain Beeline) from any shell inside the container—both commands are on your `PATH` and call the wrapped scripts in `~/app/scripts/hive/`. They auto-connect to `jdbc:hive2://localhost:10001/...`, add `hive.cli.print.current.db=true;` so `USE db;` shows in the prompt, and verify HS2 before launching. Prefer Spark SQL? Run `spark-sql -e 'SHOW DATABASES;'`.
 
+The wrapper honors `HIVE_CLI_HOST/PORT/HTTP_PATH/AUTH/USER/PASS` environment variables, so you can override the endpoint if you change the HS2 port.
+
+Only start HiveServer2 (for JDBC/ODBC tools such as Airflow’s Hive hook) when you need it. A helper script handles the startup + verification:
+
+```bash
+# from the host
+docker compose exec -u datalab data-lab bash   # or omit -u to run as root
+bash ~/app/scripts/hive/hs2.sh start
+```
+
+That script launches HS2 over HTTP (`localhost:10001/cliservice`), waits for the port, and runs `SHOW DATABASES` through the Beeline wrapper. Stop it with `bash ~/app/scripts/hive/hs2.sh stop`.
 ## Published Ports
 
 All services share the single container `data-lab`. Docker publishes the following named ports so dashboards (Docker Desktop, Portainer, etc.) clearly identify them:
@@ -144,7 +164,7 @@ All services share the single container `data-lab`. Docker publishes the followi
 
 ### Working as `root` vs `datalab`
 
-- `docker compose exec data-lab bash` lands at `root`, but `/root` is a symlink to `/home/datalab`. That means `~/app/services_start.sh`, `~/runtime`, and every stack folder look identical whether you are `root`, `datalab`, or `datalab_root`.
+- `docker compose exec data-lab bash` lands at `root`, but `/root` is a symlink to `/home/datalab`. That means `~/app/start`, `~/runtime`, and every stack folder look identical whether you are `root`, `datalab`, or `datalab_root`.
 - You can launch services from either user; the helper scripts derive paths from `$HOME`/`$WORKSPACE`, so both contexts start Hadoop, Hive, Spark, Kafka, and Airflow the same way.
 - For non-root work, simply run `su - datalab` (or `docker compose exec -u datalab data-lab bash`) and continue. Drop back to `root` or `datalab_root` only when you need elevated permissions.
 
