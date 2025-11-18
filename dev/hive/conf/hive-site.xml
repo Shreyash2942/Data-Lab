@@ -22,6 +22,22 @@
     <value>false</value>
   </property>
   <property>
+    <name>hive.server2.transport.mode</name>
+    <value>binary</value>
+  </property>
+  <property>
+    <name>hive.server2.thrift.bind.host</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hive.server2.thrift.port</name>
+    <value>10000</value>
+  </property>
+  <property>
+    <name>hive.server2.authentication</name>
+    <value>NOSASL</value>
+  </property>
+  <property>
     <name>system:java.io.tmpdir</name>
     <value>/home/datalab/runtime/hive/tmp</value>
   </property>
