@@ -1,0 +1,3 @@
+Hello from Data Lab!
+This file lives under ~/hadoop/sample_data/ inside the container.
+The scripts/hdfs_check.sh helper uploads it into HDFS so you can verify NameNode/DataNode access quickly.
