@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME_ROOT="${RUNTIME_ROOT:-${HOME}/runtime}"
+SPARK_CONF_DIR_DEFAULT="${RUNTIME_ROOT}/spark/conf"
+LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
+SPARK_BIN="${SPARK_HOME:-/opt/spark}/bin/spark-submit"
+
+ensure_log4j() {
+  mkdir -p "${SPARK_CONF_DIR_DEFAULT}"
+  if [ -f "${LOG4J_FILE}" ]; then
+    return
+  fi
+
+  local template="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties.template"
+  if [ ! -f "${template}" ] && [ -f "${SPARK_HOME:-/opt/spark}/conf/log4j2.properties.template" ]; then
+    template="${SPARK_HOME:-/opt/spark}/conf/log4j2.properties.template"
+  fi
+
+  if [ -f "${template}" ]; then
+    tr -d '\r' < "${template}" > "${LOG4J_FILE}"
+  else
+    printf 'rootLogger.level = INFO\n' > "${LOG4J_FILE}"
+  fi
+
+  if ! grep -q "rootLogger.level" "${LOG4J_FILE}"; then
+    printf 'rootLogger.level = WARN\n' >> "${LOG4J_FILE}"
+  else
+    perl -0pi -e 's/rootLogger\.level\s*=\s*\w+/rootLogger.level = WARN/' "${LOG4J_FILE}"
+  fi
+
+  if ! grep -q "logger.spark.level" "${LOG4J_FILE}"; then
+    printf 'logger.spark.name = org.apache.spark\nlogger.spark.level = WARN\n' >> "${LOG4J_FILE}"
+  fi
+}
+
+ensure_log4j
+
+export SPARK_CONF_DIR="${SPARK_CONF_DIR:-${SPARK_CONF_DIR_DEFAULT}}"
+export SPARK_SUBMIT_OPTS="-Dlog4j.configurationFile=${LOG4J_FILE} ${SPARK_SUBMIT_OPTS:-}"
+
+exec "${SPARK_BIN}" "$@"
