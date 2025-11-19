@@ -24,18 +24,19 @@ fi
 source "${APP_DIR}/scripts/common.sh"
 source "${APP_DIR}/scripts/hadoop/manage.sh"
 source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/spark/manage.sh"
 source "${APP_DIR}/scripts/services_utils.sh"
 
 handle_cli_flag() {
   case "$1" in
-    --start-spark) services::start_spark_cluster; exit 0 ;;
+    --start-spark) spark::start; exit 0 ;;
     --start-hadoop) hadoop::start; exit 0 ;;
     --start-hive) hive::prepare_cli; exit 0 ;;
     --start-kafka) services::start_kafka; exit 0 ;;
     --start-airflow) services::start_airflow; exit 0 ;;
     --start-core)
       hadoop::ensure_running
-      services::start_spark_cluster
+      spark::start
       hive::prepare_cli
       services::start_kafka
       echo "[+] Spark, Hadoop, Hive, and Kafka services started."
@@ -58,7 +59,7 @@ read -p "Select option: " opt
 
 case "$opt" in
   1)
-    services::start_spark_cluster
+    spark::start
     echo "[+] Spark services started."
     ;;
   2)
@@ -78,7 +79,7 @@ case "$opt" in
     ;;
   6)
     hadoop::ensure_running
-    services::start_spark_cluster
+    spark::start
     hive::prepare_cli
     services::start_kafka
     echo "[+] Spark, Hadoop, Hive, and Kafka services started."

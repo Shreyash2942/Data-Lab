@@ -21,6 +21,7 @@ fi
 source "${APP_DIR}/scripts/common.sh"
 source "${APP_DIR}/scripts/hadoop/manage.sh"
 source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/spark/manage.sh"
 source "${APP_DIR}/scripts/services_utils.sh"
 
 restart_component() {
@@ -32,7 +33,7 @@ restart_component() {
 
 handle_cli_flag() {
   case "$1" in
-    --restart-spark) restart_component services::stop_spark_cluster services::start_spark_cluster; exit 0 ;;
+    --restart-spark) restart_component spark::stop spark::start; exit 0 ;;
     --restart-hadoop) restart_component hadoop::stop hadoop::start; exit 0 ;;
     --restart-hive)
       hive::stop || true
@@ -45,9 +46,9 @@ handle_cli_flag() {
       services::stop_kafka || true
       hive::stop || true
       hadoop::stop || true
-      services::stop_spark_cluster || true
+      spark::stop || true
       hadoop::ensure_running
-      services::start_spark_cluster
+      spark::start
       hive::prepare_cli
       services::start_kafka
       echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
@@ -71,7 +72,7 @@ read -p "Select option: " opt
 
 case "$opt" in
   1)
-    restart_component services::stop_spark_cluster services::start_spark_cluster
+    restart_component spark::stop spark::start
     echo "[+] Spark services restarted."
     ;;
   2)
@@ -95,9 +96,9 @@ case "$opt" in
     services::stop_kafka || true
     hive::stop || true
     hadoop::stop || true
-    services::stop_spark_cluster || true
+    spark::stop || true
     hadoop::ensure_running
-    services::start_spark_cluster
+    spark::start
     hive::prepare_cli
     services::start_kafka
     echo "[+] Spark/Hadoop/Hive/Kafka services restarted."

@@ -4,26 +4,6 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
-services::ensure_spark_dirs() {
-  mkdir -p "${SPARK_PID_DIR}" "${SPARK_LOG_DIR}" "${SPARK_EVENTS_DIR}" "${SPARK_WAREHOUSE_DIR}"
-}
-
-services::start_spark_cluster() {
-  services::ensure_spark_dirs
-  echo "[*] Starting Spark master, worker, and history server..."
-  bash "${SPARK_HOME}/sbin/start-master.sh"
-  bash "${SPARK_HOME}/sbin/start-worker.sh" "spark://localhost:7077"
-  bash "${SPARK_HOME}/sbin/start-history-server.sh"
-  echo "Spark master UI: http://localhost:9090  |  History UI: http://localhost:18080"
-}
-
-services::stop_spark_cluster() {
-  echo "[*] Stopping Spark master, worker, and history server..."
-  bash "${SPARK_HOME}/sbin/stop-history-server.sh" || true
-  bash "${SPARK_HOME}/sbin/stop-worker.sh" || true
-  bash "${SPARK_HOME}/sbin/stop-master.sh" || true
-}
-
 services::ensure_kafka_dirs() {
   mkdir -p "${KAFKA_PID_DIR}" "${KAFKA_LOG_DIR}" "${KAFKA_ZK_DATA_DIR}"
 }
