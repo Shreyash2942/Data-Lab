@@ -21,9 +21,9 @@ fi
 source "${APP_DIR}/scripts/common.sh"
 source "${APP_DIR}/scripts/hadoop/manage.sh"
 source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/airflow/manage.sh"
 source "${APP_DIR}/scripts/kafka/manage.sh"
 source "${APP_DIR}/scripts/spark/manage.sh"
-source "${APP_DIR}/scripts/services_utils.sh"
 
 handle_cli_flag() {
   case "$1" in
@@ -31,7 +31,7 @@ handle_cli_flag() {
     --stop-hadoop) hadoop::stop; exit 0 ;;
     --stop-hive) hive::stop; exit 0 ;;
     --stop-kafka) kafka::stop; exit 0 ;;
-    --stop-airflow) services::stop_airflow; exit 0 ;;
+    --stop-airflow) airflow::stop; exit 0 ;;
     --stop-core)
       kafka::stop || true
       hive::stop || true
@@ -74,7 +74,7 @@ case "$opt" in
     echo "[+] Kafka services stopped."
     ;;
   5)
-    services::stop_airflow
+    airflow::stop
     echo "[+] Airflow services stopped."
     ;;
   6)

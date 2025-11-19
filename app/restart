@@ -21,9 +21,9 @@ fi
 source "${APP_DIR}/scripts/common.sh"
 source "${APP_DIR}/scripts/hadoop/manage.sh"
 source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/airflow/manage.sh"
 source "${APP_DIR}/scripts/kafka/manage.sh"
 source "${APP_DIR}/scripts/spark/manage.sh"
-source "${APP_DIR}/scripts/services_utils.sh"
 
 restart_component() {
   local stop_fn=$1
@@ -42,7 +42,7 @@ handle_cli_flag() {
       exit 0
       ;;
     --restart-kafka) restart_component kafka::stop kafka::start; exit 0 ;;
-    --restart-airflow) restart_component services::stop_airflow services::start_airflow; exit 0 ;;
+    --restart-airflow) restart_component airflow::stop airflow::start; exit 0 ;;
     --restart-core)
       kafka::stop || true
       hive::stop || true
@@ -90,7 +90,7 @@ case "$opt" in
     echo "[+] Kafka services restarted."
     ;;
   5)
-    restart_component services::stop_airflow services::start_airflow
+    restart_component airflow::stop airflow::start
     echo "[+] Airflow services restarted."
     ;;
   6)

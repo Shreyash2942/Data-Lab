@@ -105,6 +105,13 @@ Current menu layout:
 
 To stop running services, use `bash ~/app/stop`. To cycle (stop + start) them, run `bash ~/app/restart` (all menu options work inside the container except option `7`, which needs the host Docker CLI).
 
+### Airflow Login
+
+Starting Airflow via `bash ~/app/start --start-airflow` (or menu option 5) automatically ensures two things:
+
+- The default config disables bundled example DAGs (`load_examples = False`) before initializing the metadata DB, so you only see files that live under `~/airflow/dags`.
+- An admin user is created if missing (username `datalab`, password `airflow`). Sign into http://localhost:8080 with those credentials, then change the password or add more accounts as needed.
+
 ## Demo Helper
 
 Run sample jobs and validation checks with:
