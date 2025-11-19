@@ -24,7 +24,13 @@ Apache Kafka (3.7.1, Scala 2.13) runs inside the `data-lab` container alongside 
    kafka-console-producer.sh --bootstrap-server localhost:9092 --topic datalab_demo
    kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic datalab_demo --from-beginning
    ```
-5. Stop everything with `bash ~/app/stop`.
+5. Want an interactive chat-style test? Open two terminals:
+   ```bash
+   bash ~/kafka/chat_demo.sh consumer   # terminal A
+   bash ~/kafka/chat_demo.sh producer   # terminal B
+   ```
+   Every line you type in the producer window immediately appears in the consumer.
+6. Stop everything with `bash ~/app/stop`.
 
 ## Resources
 - Official docs: https://kafka.apache.org/documentation/
