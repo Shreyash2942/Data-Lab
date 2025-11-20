@@ -18,6 +18,11 @@ runtime/*
 !runtime/README.md
 !runtime/*/.gitkeep
 
+# dbt build artifacts
+dbt/logs/
+dbt/target/
+dbt/.user.yml
+
 # Misc generated files
 *.log
 *.pid
