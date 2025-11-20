@@ -1,18 +1,41 @@
-# Delta Tables
+# Delta Lake Layer
 
-Option **14** in `~/app/services_demo.sh` runs `~/delta/delta_example.py`, creating a Delta table at `~/runtime/lakehouse/delta_tables/customers`. Those files live at `repo_root/runtime/lakehouse/delta_tables` on the host. You can also run it by hand:
+The Delta quickstart exercises the bundled `delta-spark` runtime to create/query a Delta table. Scripts live under `~/delta`, while table storage sits in `~/runtime/lakehouse/delta_tables`.
+
+## Layout
+
+| Path | Purpose |
+| --- | --- |
+| `delta/delta_example.py` | Writes and reads a `customers` table via Spark. |
+| `runtime/lakehouse/delta_tables` | Warehouse that stores Delta tables. |
+
+## Running the demo
 
 ```bash
-cd ~/app
-bash services_demo.sh   # option 14
-# or
+# helper menu (option 14)
+bash ~/app/services_demo.sh --run-delta-demo
+
+# or run manually
 python ~/delta/delta_example.py
 ```
 
-Inspect the table with:
+Inspect the table afterwards:
 
 ```bash
-/home/datalab/spark/bin/pyspark --packages io.delta:delta-spark_2.12:3.2.0
+spark-sql -e "SELECT * FROM delta.\`~/runtime/lakehouse/delta_tables/customers\`"
+# or in PySpark
+python - <<'PY'
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName("delta-check").getOrCreate()
+spark.read.format("delta").load("~/runtime/lakehouse/delta_tables/customers").show()
+PY
 ```
 
-then `spark.read.format("delta").load("~/runtime/lakehouse/delta_tables/customers").show()`.
+## Notes
+
+- Spark should be running (option 1/6) so the session picks up the Delta jars already placed under `/opt/spark/jars`.
+- Remove `runtime/lakehouse/delta_tables` if you want a clean run.
+
+## Resources
+
+- Official docs: https://docs.delta.io/latest/

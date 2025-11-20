@@ -78,6 +78,174 @@ bash ~/hadoop/scripts/hdfs_check.sh   # uploads sample data into HDFS and prints
 bash ~/hive/bootstrap_demo.sh # creates three demo databases + tables
 ```
 
+## Stack Reference
+
+Every tool installs into the shared home directory (`/home/datalab`). Use the sections below as mini runbooks for each stack.
+
+### Python 3
+
+- Location: `~/python`
+- Run the bundled sample:
+
+```bash
+python ~/python/example.py
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --run-python-example` (option `1`)
+- Docs: https://docs.python.org/3/
+
+### Apache Spark
+
+- Location: `~/spark`
+- Start the Spark master, worker, and history server with `bash ~/app/start` option `1` (or option `6` to launch everything).
+- Run the PySpark example locally:
+
+```bash
+python ~/spark/example_pyspark.py
+spark-submit ~/spark/example_pyspark.py
+```
+
+- UI endpoints: Spark master (`http://localhost:9090`), history server (`http://localhost:18080`)
+- Docs: https://spark.apache.org/docs/latest/
+
+### Apache Airflow
+
+- Location: `~/airflow` (DAGs live under `~/airflow/dags`)
+- Start/stop via `bash ~/app/start --start-airflow` or menu option `5`; stop with `bash ~/app/stop --stop-airflow`.
+- Default login: username `datalab`, password `airflow` at http://localhost:8080
+- Quick checks:
+
+```bash
+airflow version
+airflow dags list
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --check-airflow` (option `8`)
+- Docs: https://airflow.apache.org/docs/
+
+### dbt
+
+- Location: `~/dbt`, runtime warehouse in `~/runtime/dbt`
+- Typical workflow:
+
+```bash
+cd ~/dbt
+dbt debug
+dbt run
+dbt test
+```
+
+- Run from anywhere with `export DBT_PROFILES_DIR=~/dbt && dbt --project-dir ~/dbt run`
+- Menu helper: `bash ~/app/services_demo.sh --run-dbt-project` (option `3`)
+- See `dbt/README.md` for more details
+- Docs: https://docs.getdbt.com/
+
+### Hadoop
+
+- Binaries live at `/opt/hadoop`, helper scripts under `~/hadoop`
+- Start HDFS/YARN via `bash ~/app/start` option `2` (or option `6`)
+- Validate storage:
+
+```bash
+bash ~/hadoop/scripts/hdfs_check.sh
+hadoop version
+```
+
+- Logs/state: `~/runtime/hadoop`
+- Docs: https://hadoop.apache.org/docs/stable/
+
+### Hive
+
+- Config + scripts under `~/hive`, warehouse in `~/runtime/hive`
+- Start Hive Metastore + HiveServer2 via `bash ~/app/start` option `3`
+- CLI shortcuts available everywhere:
+
+```bash
+hivecli        # Beeline wrapper
+hivelegacy     # classic CLI experience
+```
+
+- Need just HiveServer2? `bash ~/app/scripts/hive/hs2.sh start`
+- Menu helper: `bash ~/app/services_demo.sh --check-hive` (option `10`) or `--setup-hive-demo` (option `16`)
+- Docs: https://cwiki.apache.org/confluence/display/Hive/Home
+
+### Apache Kafka
+
+- Location: `~/kafka`
+- Start ZooKeeper + Kafka via `bash ~/app/start` option `4`
+- Run the shell demo (creates a topic, produces/consumes sample messages):
+
+```bash
+bash ~/kafka/demo.sh
+```
+
+- List topics manually:
+
+```bash
+kafka-topics.sh --bootstrap-server localhost:9092 --list
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --run-kafka-demo` (option `4`)
+- Docs: https://kafka.apache.org/documentation/
+
+### Java 11
+
+- Sources live under `~/java`
+- Compile/run the sample:
+
+```bash
+javac ~/java/Example.java
+java -cp ~/java Example
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --run-java-example` (option `5`)
+- Docs: https://docs.oracle.com/en/java/
+
+### Scala
+
+- Sources live under `~/scala`
+- Compile/run the sample app:
+
+```bash
+scalac ~/scala/example.scala
+scala -cp ~/scala HelloDataLab
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --run-scala-example` (option `6`)
+- Docs: https://docs.scala-lang.org/
+
+### Terraform
+
+- Configs live in `~/terraform`, state defaults to `~/runtime/terraform`
+- Initialize/apply from inside the container:
+
+```bash
+export TF_DATA_DIR=~/runtime/terraform/.terraform
+terraform -chdir=~/terraform init
+terraform -chdir=~/terraform apply -auto-approve -state=~/runtime/terraform/terraform.tfstate
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --run-terraform-demo` (option `7`)
+- Docs: https://developer.hashicorp.com/terraform/docs
+
+### Lakehouse Formats (Hudi, Iceberg, Delta)
+
+- Example scripts live under `~/hudi`, `~/iceberg`, and `~/delta`
+- Each demo writes into `~/runtime/lakehouse/<format>` so you can inspect outputs after a run
+- Execute the bundled quickstarts:
+
+```bash
+python ~/hudi/hudi_example.py
+python ~/iceberg/iceberg_example.py
+python ~/delta/delta_example.py
+```
+
+- Menu helper: `bash ~/app/services_demo.sh --run-hudi-demo` (option `12`), `--run-iceberg-demo` (option `13`), `--run-delta-demo` (option `14`)
+- Docs: 
+  - Hudi: https://hudi.apache.org/docs/
+  - Iceberg: https://iceberg.apache.org/docs/latest/
+  - Delta Lake: https://docs.delta.io/latest/
+
 ## Runtime Storage
 
 All logs, metadata, warehouses, and other mutable state live under `runtime/` at the repo root. Docker bind-mounts this directory to `/home/datalab/runtime` so every stack (Airflow, Spark, Hadoop, Hive, Kafka, dbt, Terraform, lakehouse demos, etc.) writes into its own subfolder. Remove a specific subfolder (e.g., `runtime/airflow`) when you want to reset that stack; the helper scripts recreate it automatically.

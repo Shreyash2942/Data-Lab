@@ -1,6 +1,44 @@
 # Airflow Layer
 
-DAGs for Apache Airflow available in the monolithic container.
+All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/airflow`). Airflow 2.9 is preinstalled and configured for a local SQLite metadata database plus a filesystem executor for lightweight demos.
+
+## Layout
+
+| Path | Purpose |
+| --- | --- |
+| `airflow/dags/` | Place DAG files here; they sync to `~/airflow/dags`. |
+| `airflow/plugins/` | Optional plugins/macros/components. |
+| `~/runtime/airflow` | Metadata DB, logs, PID files (safe to delete to reset). |
+
+## Starting Airflow
+
+Use the helper to bring up the scheduler + webserver:
+
+```bash
+bash ~/app/start --start-airflow      # or choose option 5 from the menu
+```
+
+By default the web UI is available at http://localhost:8080 with credentials `datalab` / `airflow`. Stop services when finished:
+
+```bash
+bash ~/app/stop --stop-airflow
+```
+
+## Common commands
+
+```bash
+airflow version
+airflow dags list
+airflow dags test example_dag 2024-01-01
+```
+
+You can also invoke option `8` in `~/app/services_demo.sh` (`--check-airflow`) for a quick version check.
+
+## Notes
+
+- Airflow uses the shared home directory, so switching users (`root`, `datalab`, `datalab_root`) still surfaces the same DAG folder.
+- Delete `runtime/airflow` on the host if you need a clean metadata/logs reset; the helper recreates it on startup.
 
 ## Resources
+
 - Official docs: https://airflow.apache.org/docs/
