@@ -1,356 +1,180 @@
-# Data Lab -- Monolithic (Single Container) with Modular Layout
+# Data Lab – All-in-One Data Engineering Sandbox (Single Container)
 
-This project runs **all data engineering tools inside ONE container**: `data-lab`.
+A production-inspired data engineering lab that runs Spark, Airflow, Hadoop, Hive, Kafka, dbt, and lakehouse formats inside one Docker container. Modular layout, helper scripts, and per-stack docs make it portfolio-ready and easy to demo.
 
-You still get a **modular file/folder layout** for clarity and debugging:
-- `/dev/base` defines the main image build (all stacks baked in).
-- `/dev/<tech>/Dockerfile` shows how each stack is installed individually (for debug/reference).
-- `/python`, `/spark`, `/airflow`, etc. contain examples and README files.
+> 🚀 Launch an end-to-end data engineering environment in minutes. Perfect for learning, prototyping, and showing your skills on GitHub.
 
-## Tech Stacks Included (inside one container)
+![Data Lab Cover](docs/images/coverimage.png)
 
-- Python 3
-- Apache Spark (3.5.1, Hadoop 3)
-- Apache Airflow
-- dbt (Core + Postgres adapter)
-- Hadoop (3.3.6)
-- Hive (4.0.1)
-- Apache Kafka (3.7.1, Scala 2.13)
-- Java 11
-- Scala
-- Terraform (CLI, optional/demo)
-- Lakehouse formats: Apache Hudi 0.15.0, Apache Iceberg 1.6.1, Delta Lake 3.2.0 (Spark runtimes baked in)
+## Project Overview
 
-These versions are the most recent stable releases that run cleanly on OpenJDK 11, so the entire stack shares a single, compatible JDK.
+- **One container, many stacks**: all services run inside `data-lab`.
+- **Modular folders**: Spark, Airflow, Hive, Hadoop, Kafka, dbt, Terraform, Hudi, Iceberg, Delta, Python, Java, Scala each have examples, configs, and READMEs.
+- **Lakehouse ready**: Hudi, Iceberg, and Delta examples write to `runtime/lakehouse/`.
+- **Helper UX**: `app/start`, `app/stop`, `app/restart`, `app/services_demo.sh` orchestrate everything.
+- **Realistic users**: `datalab` (dev), `datalab_root` (admin), `root` share the same home for consistent paths.
 
-## User Model
+## Included Tech Stacks
 
-Inside the `data-lab` container:
+Each stack has its own folder, README, and example project so you can explore, extend, or showcase it.
 
-- `datalab` - default non-root user for all dev workloads.
-- `datalab_root` - admin user (for maintenance/installs).
-- `root` - real system root (the default shell when you `docker compose exec data-lab bash`). Root's home directory is symlinked to `/home/datalab`, so root and datalab always see the exact same `~/app`, `~/runtime`, and helper scripts.
+**Core Data Engineering Frameworks**
+- Apache Spark 3.5.1 — distributed compute with PySpark examples, Spark UI, history server (`spark/README.md`, `spark/example_pyspark.py`). Docs: https://spark.apache.org/docs/latest/
+- Apache Hadoop 3.3.6 — HDFS, YARN, MapReduce configured with local storage (`hadoop/README.md`). Docs: https://hadoop.apache.org/docs/stable/
+- Apache Hive 4.0.1 — SQL engine with Metastore + HS2, CLI wrappers, demo databases (`hive/README.md`, `hive/bootstrap_demo.sh`). Docs: https://cwiki.apache.org/confluence/display/Hive/Home
+- Apache Kafka 3.7.1 — Zookeeper + broker with interactive producer/consumer demos (`kafka/README.md`, `kafka/demo.sh`). Docs: https://kafka.apache.org/documentation/
+
+**Orchestration & Transformation**
+- Apache Airflow — web UI + scheduler; DAGs live in `airflow/dags` (`airflow/README.md`). Docs: https://airflow.apache.org/docs/
+- dbt Core (DuckDB) — out-of-the-box DuckDB profile; run models instantly (`dbt/README.md`, `dbt/profiles.yml`). Docs: https://docs.getdbt.com/
+
+**Lakehouse Technologies**
+- Apache Hudi 0.15.0 (`hudi/README.md`)
+- Apache Iceberg 1.6.1 (`iceberg/README.md`)
+- Delta Lake 3.2.0 (`delta/README.md`)
+- Each includes Python examples, Spark runtime support, and isolated demo warehouses under `runtime/lakehouse/`.
+
+**Programming Languages**
+- Python 3 (`python/README.md`)
+- Java 11 (`java/README.md`)
+- Scala (`scala/README.md`)
+- Each folder has sample programs for compile/run/integration checks.
+
+**Infrastructure as Code**
+- Terraform CLI — preconfigured demo and state layout (`terraform/README.md`). Docs: https://developer.hashicorp.com/terraform/docs
+
+**Extended docs**
+- `docs/Data-Lab-Documentation.md` for deeper background.
 
 ## Quick Start
 
-From repo root (copy the example env file once so Compose reads `.env`):
-
 ```bash
-cp .env.example .env   # first run only; skip if .env already exists
+cp .env.example .env
 docker compose build
 docker compose up -d
 
-# Enter the container (drops you in as root so you can switch users as needed)
+# enter the container (root shares the same home as datalab)
 docker compose exec data-lab bash
-
-# Switch to the dev user (recommended for day-to-day work, but optional because root shares the same home)
-su - datalab
-
-# Need the intermediate admin user?
-docker compose exec -u datalab_root data-lab bash
+su - datalab    # recommended dev user
 ```
 
-Check tools (inside container):
+Launch the service controller:
 
 ```bash
-python --version
-java -version
-spark-submit --version
-hadoop version
-hive --version || echo "Hive CLI present; metastore not configured (demo)"
-kafka-topics.sh --bootstrap-server localhost:9092 --list || echo "Kafka broker not started yet"
-airflow version
-dbt --version
-terraform version || echo "Terraform optional"
+bash ~/app/start     # menu or flags: --start-airflow, --start-spark, etc.
 ```
 
-Use admin user when needed:
+Run all demos/smoke tests:
 
 ```bash
-docker compose exec -u datalab_root data-lab bash
-whoami   # datalab_root
+bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-demo, etc.
 ```
 
-Storage sanity checks (after Hadoop/Hive are running):
+## User Model
 
-```bash
-bash ~/hadoop/scripts/hdfs_check.sh   # uploads sample data into HDFS and prints it back
-bash ~/hive/bootstrap_demo.sh # creates three demo databases + tables
-```
+- `datalab` — default dev user (recommended for day-to-day)
+- `datalab_root` — elevated admin
+- `root` — system root (defaults when you `docker compose exec data-lab bash`)
+- All three map to `/home/datalab` (root is symlinked), so paths like `~/app`, `~/runtime`, `~/spark`, `~/airflow` are identical.
 
-## Stack Reference
+## Service Control & Demos
 
-Every tool installs into the shared home directory (`/home/datalab`). Use the sections below as mini runbooks for each stack.
+- **Start/stop/restart**: `bash ~/app/start`, `bash ~/app/stop`, `bash ~/app/restart` (menu or flag-driven, e.g., `--start-core`, `--stop-airflow`).
+- **Demo runner**: `bash ~/app/services_demo.sh` to execute Python, Spark, dbt, Kafka, Java, Scala, Terraform, Airflow check, Hadoop/HDFS check, Hive demo, Hudi/Iceberg/Delta quickstarts.
+- **Airflow login**: http://localhost:8080 (default: `datalab` / `airflow`).
 
-### Python 3
+## Published Ports
 
-- Location: `~/python`
-- Run the bundled sample:
-
-```bash
-python ~/python/example.py
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --run-python-example` (option `1`)
-- Docs: https://docs.python.org/3/
-
-### Apache Spark
-
-- Location: `~/spark`
-- Start the Spark master, worker, and history server with `bash ~/app/start` option `1` (or option `6` to launch everything).
-- Run the PySpark example locally:
-
-```bash
-python ~/spark/example_pyspark.py
-spark-submit ~/spark/example_pyspark.py
-```
-
-- UI endpoints: Spark master (`http://localhost:9090`), history server (`http://localhost:18080`)
-- Docs: https://spark.apache.org/docs/latest/
-
-### Apache Airflow
-
-- Location: `~/airflow` (DAGs live under `~/airflow/dags`)
-- Start/stop via `bash ~/app/start --start-airflow` or menu option `5`; stop with `bash ~/app/stop --stop-airflow`.
-- Default login: username `datalab`, password `airflow` at http://localhost:8080
-- Quick checks:
-
-```bash
-airflow version
-airflow dags list
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --check-airflow` (option `8`)
-- Docs: https://airflow.apache.org/docs/
-
-### dbt
-
-- Location: `~/dbt`, runtime warehouse in `~/runtime/dbt`
-- Typical workflow:
-
-```bash
-cd ~/dbt
-dbt debug
-dbt run
-dbt test
-```
-
-- Run from anywhere with `export DBT_PROFILES_DIR=~/dbt && dbt --project-dir ~/dbt run`
-- Menu helper: `bash ~/app/services_demo.sh --run-dbt-project` (option `3`)
-- See `dbt/README.md` for more details
-- Docs: https://docs.getdbt.com/
-
-### Hadoop
-
-- Binaries live at `/opt/hadoop`, helper scripts under `~/hadoop`
-- Start HDFS/YARN via `bash ~/app/start` option `2` (or option `6`)
-- Validate storage:
-
-```bash
-bash ~/hadoop/scripts/hdfs_check.sh
-hadoop version
-```
-
-- Logs/state: `~/runtime/hadoop`
-- Docs: https://hadoop.apache.org/docs/stable/
-
-### Hive
-
-- Config + scripts under `~/hive`, warehouse in `~/runtime/hive`
-- Start Hive Metastore + HiveServer2 via `bash ~/app/start` option `3`
-- CLI shortcuts available everywhere:
-
-```bash
-hivecli        # Beeline wrapper
-hivelegacy     # classic CLI experience
-```
-
-- Need just HiveServer2? `bash ~/app/scripts/hive/hs2.sh start`
-- Menu helper: `bash ~/app/services_demo.sh --check-hive` (option `10`) or `--setup-hive-demo` (option `16`)
-- Docs: https://cwiki.apache.org/confluence/display/Hive/Home
-
-### Apache Kafka
-
-- Location: `~/kafka`
-- Start ZooKeeper + Kafka via `bash ~/app/start` option `4`
-- Run the shell demo (creates a topic, produces/consumes sample messages):
-
-```bash
-bash ~/kafka/demo.sh
-```
-
-- List topics manually:
-
-```bash
-kafka-topics.sh --bootstrap-server localhost:9092 --list
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --run-kafka-demo` (option `4`)
-- Docs: https://kafka.apache.org/documentation/
-
-### Java 11
-
-- Sources live under `~/java`
-- Compile/run the sample:
-
-```bash
-javac ~/java/Example.java
-java -cp ~/java Example
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --run-java-example` (option `5`)
-- Docs: https://docs.oracle.com/en/java/
-
-### Scala
-
-- Sources live under `~/scala`
-- Compile/run the sample app:
-
-```bash
-scalac ~/scala/example.scala
-scala -cp ~/scala HelloDataLab
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --run-scala-example` (option `6`)
-- Docs: https://docs.scala-lang.org/
-
-### Terraform
-
-- Configs live in `~/terraform`, state defaults to `~/runtime/terraform`
-- Initialize/apply from inside the container:
-
-```bash
-export TF_DATA_DIR=~/runtime/terraform/.terraform
-terraform -chdir=~/terraform init
-terraform -chdir=~/terraform apply -auto-approve -state=~/runtime/terraform/terraform.tfstate
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --run-terraform-demo` (option `7`)
-- Docs: https://developer.hashicorp.com/terraform/docs
-
-### Lakehouse Formats (Hudi, Iceberg, Delta)
-
-- Example scripts live under `~/hudi`, `~/iceberg`, and `~/delta`
-- Each demo writes into `~/runtime/lakehouse/<format>` so you can inspect outputs after a run
-- Execute the bundled quickstarts:
-
-```bash
-python ~/hudi/hudi_example.py
-python ~/iceberg/iceberg_example.py
-python ~/delta/delta_example.py
-```
-
-- Menu helper: `bash ~/app/services_demo.sh --run-hudi-demo` (option `12`), `--run-iceberg-demo` (option `13`), `--run-delta-demo` (option `14`)
-- Docs: 
-  - Hudi: https://hudi.apache.org/docs/
-  - Iceberg: https://iceberg.apache.org/docs/latest/
-  - Delta Lake: https://docs.delta.io/latest/
+- `airflow-ui` 8080:8080 — Airflow webserver
+- `spark-ui` 4040:4040 — Spark app UI
+- `spark-master` 9090:9090 — Spark master UI
+- `spark-history` 18080:18080 — Spark history server
+- `kafka-broker` 9092:9092 — Kafka broker
+- `hadoop-namenode` 9870:9870 — HDFS NameNode UI
+- `yarn-resourcemanager` 8088:8088 — YARN RM UI
+- `hiveserver2` 10000:10000 — HiveServer2 JDBC
 
 ## Runtime Storage
 
-All logs, metadata, warehouses, and other mutable state live under `runtime/` at the repo root. Docker bind-mounts this directory to `/home/datalab/runtime` so every stack (Airflow, Spark, Hadoop, Hive, Kafka, dbt, Terraform, lakehouse demos, etc.) writes into its own subfolder. Remove a specific subfolder (e.g., `runtime/airflow`) when you want to reset that stack; the helper scripts recreate it automatically.
+`runtime/` is bind-mounted to `/home/datalab/runtime` for logs, warehouses, metadata (Airflow, Spark, Hadoop, Hive, Kafka, dbt, Terraform, lakehouse demos). Remove a subfolder (e.g., `runtime/airflow`) to reset that stack; helper scripts recreate it.
 
-The `.dockerignore` file keeps `runtime/`, `airflow/logs/`, and other generated files out of the Docker build context, so images stay small even though the logs remain available through the bind mount.
+## Project Structure (High-Level)
 
-## Service Control Helper
+![Architecture Overview](docs/images/architcture.png)
 
-You can work either from `~/app` (inside the container) or from the same path when running as root/datalab_root (because `/home/datalab` is shared). Launch the orchestration menu with:
-
-```bash
-bash ~/app/start
+```
+data-lab/
+├── dev/                 # Dockerfiles (base + per-stack references)
+├── app/                 # Start/stop/restart/service orchestration scripts
+├── python/              # Python example + README
+├── spark/               # Spark example + README
+├── airflow/             # DAGs + README
+├── hive/                # Hive scripts/config + README
+├── hadoop/              # Hadoop scripts/config + README
+├── dbt/                 # dbt project + profiles.yml + README
+├── kafka/               # Kafka demos (producer/consumer/shell) + README
+├── terraform/           # Terraform demo + README
+├── hudi/                # Hudi example + README
+├── iceberg/             # Iceberg example + README
+├── delta/               # Delta Lake example + README
+├── java/                # Java example + README
+├── scala/               # Scala example + README
+├── runtime/             # Bind-mounted state (logs, warehouses, metadata)
+├── docs/                # Extended documentation
+├── docker-compose.yml   # Single-container orchestration
+├── .env.example         # Env defaults for Compose
+└── README.md            # You are here
 ```
 
-Current menu layout:
+## Inside the Container (~/)
 
-| Option | Action |
-| --- | --- |
-| `1` | Start the Spark master, worker, and history server (state in `~/runtime/spark`). |
-| `2` | Start Hadoop HDFS + YARN + MapReduce (logs in `~/runtime/hadoop/logs`). |
-| `3` | Start Hive Metastore + HiveServer2 (state in `~/runtime/hive`). Automatically starts Hadoop if it isn't already running. |
-| `4` | Start Zookeeper + Kafka broker (data/logs in `~/runtime/kafka`). |
-| `5` | Start Airflow webserver & scheduler (metadata/logs in `~/runtime/airflow`). |
-| `6` | Start ALL core services (Spark/Hadoop/Hive/Kafka). |
+Everything mounts to `/home/datalab` (also `/root` via symlink), so paths look like:
 
-To stop running services, use `bash ~/app/stop`. To cycle (stop + start) them, run `bash ~/app/restart` (all menu options work inside the container except option `7`, which needs the host Docker CLI).
-
-### Airflow Login
-
-Starting Airflow via `bash ~/app/start --start-airflow` (or menu option 5) automatically ensures two things:
-
-- The default config disables bundled example DAGs (`load_examples = False`) before initializing the metadata DB, so you only see files that live under `~/airflow/dags`.
-- An admin user is created if missing (username `datalab`, password `airflow`). Sign into http://localhost:8080 with those credentials, then change the password or add more accounts as needed.
-
-## Demo Helper
-
-Run sample jobs and validation checks with:
-
-```bash
-bash ~/app/services_demo.sh
 ```
-
-| Option | Action |
-| --- | --- |
-| `1` | Run the Python example (`python/example.py`). |
-| `2` | Run the Spark example (`spark/example_pyspark.py`). |
-| `3` | Run `dbt debug && dbt run` inside `~/dbt`. |
-| `4` | Execute the Kafka shell demo (`kafka/demo.sh`). |
-| `5` | Compile/run the Java example. |
-| `6` | Compile/run the Scala example. |
-| `7` | Execute the Terraform demo in `~/terraform`. |
-| `8` | Airflow version check. |
-| `9` | Hadoop version check. |
-| `10` | Hive CLI check (`SHOW DATABASES;`). |
-| `11` | Run all demos/checks sequentially. |
-| `12` | Run the bundled Apache Hudi quickstart (writes/reads `~/runtime/lakehouse/hudi_tables`). |
-| `13` | Run the Apache Iceberg quickstart (creates tables in `~/runtime/lakehouse/iceberg_warehouse`). |
-| `14` | Run the Delta Lake quickstart (creates tables in `~/runtime/lakehouse/delta_tables`). |
-| `15` | Run the HDFS smoke test (uploads `~/hadoop/sample_data/hello_hdfs.txt` into `/data-lab/demo`). |
-| `16` | Create/show the Hive demo databases (`sales_demo`, `analytics_demo`, `staging_demo`) via the Hive CLI. |
-
-### Hive CLI shortcut
-
-Option `3` in `bash ~/app/start` brings up Hadoop plus the embedded Derby metastore. After that you can simply run `hivelegacy` (classic-style prompt) or `hivecli` (plain Beeline) from any shell inside the container—both commands are on your `PATH` and call the wrapped scripts in `~/app/scripts/hive/`. They auto-connect to `jdbc:hive2://localhost:10001/...`, add `hive.cli.print.current.db=true;` so `USE db;` shows in the prompt, and verify HS2 before launching. Prefer Spark SQL? Run `spark-sql -e 'SHOW DATABASES;'`.
-
-The wrapper honors `HIVE_CLI_HOST/PORT/HTTP_PATH/AUTH/USER/PASS` environment variables, so you can override the endpoint if you change the HS2 port.
-
-Only start HiveServer2 (for JDBC/ODBC tools such as Airflow’s Hive hook) when you need it. A helper script handles the startup + verification:
-
-```bash
-# from the host
-docker compose exec -u datalab data-lab bash   # or omit -u to run as root
-bash ~/app/scripts/hive/hs2.sh start
+~/
+├── app/                 # Helper scripts: start/stop/restart/services_demo.sh
+├── airflow/             # Airflow home + dags/ folder
+├── dbt/                 # dbt project + profiles.yml (DuckDB)
+├── delta/               # Delta Lake example
+├── hadoop/              # Hadoop scripts/config
+├── hive/                # Hive scripts/config; cli wrappers in app/bin
+├── hudi/                # Hudi example
+├── iceberg/             # Iceberg example
+├── java/                # Java example
+├── kafka/               # Kafka demos (producer/consumer/chat/demo.sh)
+├── python/              # Python example
+├── scala/               # Scala example
+├── spark/               # Spark example + configs
+├── terraform/           # Terraform demo
+├── runtime/             # Logs/metadata/state for all stacks (airflow, spark, dbt, lakehouse, etc.)
+└── app/bin/             # Convenience shims (hivecli, hivelegacy, spark-submit)
 ```
-
-That script launches HS2 over HTTP (`localhost:10001/cliservice`), waits for the port, and runs `SHOW DATABASES` through the Beeline wrapper. Stop it with `bash ~/app/scripts/hive/hs2.sh stop`.
-## Published Ports
-
-All services share the single container `data-lab`. Docker publishes the following named ports so dashboards (Docker Desktop, Portainer, etc.) clearly identify them:
-
-| Name | Host ↔ Container | Service |
-| --- | --- | --- |
-| `airflow-ui` | `8080:8080/tcp` | Airflow webserver or other UI demos |
-| `spark-ui` | `4040:4040/tcp` | Spark application UI |
-| `spark-master` | `9090:9090/tcp` | Spark master web UI |
-| `spark-history` | `18080:18080/tcp` | Spark history server |
-| `kafka-broker` | `9092:9092/tcp` | Kafka broker |
-| `hadoop-namenode` | `9870:9870/tcp` | HDFS NameNode UI |
-| `yarn-resourcemanager` | `8088:8088/tcp` | YARN ResourceManager UI |
-| `hiveserver2` | `10000:10000/tcp` | HiveServer2 JDBC endpoint |
-
-### Working as `root` vs `datalab`
-
-- `docker compose exec data-lab bash` lands at `root`, but `/root` is a symlink to `/home/datalab`. That means `~/app/start`, `~/runtime`, and every stack folder look identical whether you are `root`, `datalab`, or `datalab_root`.
-- You can launch services from either user; the helper scripts derive paths from `$HOME`/`$WORKSPACE`, so both contexts start Hadoop, Hive, Spark, Kafka, and Airflow the same way.
-- For non-root work, simply run `su - datalab` (or `docker compose exec -u datalab data-lab bash`) and continue. Drop back to `root` or `datalab_root` only when you need elevated permissions.
-
-## dbt profile
-
-The repo now ships with `dbt/profiles.yml`, which targets a local DuckDB database located at `~/runtime/dbt/data_lab.duckdb`. You can run `dbt debug` or `dbt run` immediately inside the container without provisioning Postgres. Update the profile if you want to point at an external warehouse.
 
 ## System Requirements
 
-- Docker / Docker Desktop (recent)
-- 4+ GB RAM (8+ GB recommended)
-- 8-15 GB free disk space
+- Docker Desktop (recent)
+- 4 GB RAM minimum (8+ GB recommended)
+- 8–15 GB disk space
+- macOS, Linux, or Windows (WSL2 recommended)
 
-For details, see `docs/Data-Lab-Documentation.md`.
+## Perfect For
+
+- Data engineering practice and portfolio builds
+- Interview prep and live demos
+- Learning Spark, Kafka, Hive, or lakehouse concepts
+- Anyone wanting a “mini-production” DE environment on a laptop
+
+---
+
+## Reference Links
+
+- Spark: https://spark.apache.org/docs/latest/
+- Airflow: https://airflow.apache.org/docs/
+- dbt: https://docs.getdbt.com/
+- Hadoop: https://hadoop.apache.org/docs/stable/
+- Hive: https://cwiki.apache.org/confluence/display/Hive/Home
+- Kafka: https://kafka.apache.org/documentation/
+- Hudi: https://hudi.apache.org/docs/
+- Iceberg: https://iceberg.apache.org/docs/latest/
+- Delta Lake: https://docs.delta.io/latest/
+- Terraform: https://developer.hashicorp.com/terraform/docs
