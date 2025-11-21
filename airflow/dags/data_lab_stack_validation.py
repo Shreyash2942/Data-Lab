@@ -3,11 +3,16 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
+class DataLabBashOperator(BashOperator):
+  # Disable file-based templating so bash_command strings aren't treated as template file paths.
+  template_ext = ()
+
 
 def bash_task(task_id: str, command: str, **kwargs) -> BashOperator:
-  return BashOperator(
+  return DataLabBashOperator(
       task_id=task_id,
       bash_command=command,
+      do_xcom_push=False,
       **kwargs,
   )
 
