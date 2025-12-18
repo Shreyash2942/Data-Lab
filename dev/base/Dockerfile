@@ -56,7 +56,8 @@ ENV HIVE_VERSION=4.0.1 \
     HIVE_HOME=/opt/hive
 
 ARG HIVE_TGZ_SHA256=2bf988a1ed17437b1103e367939c25a13f64d36cf6d1c3bef8c3f319f0067619
-ADD https://downloads.apache.org/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz /tmp/hive.tgz
+# Use the Apache archive to avoid 404s when the mirror rotates
+ADD https://archive.apache.org/dist/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz /tmp/hive.tgz
 RUN echo "${HIVE_TGZ_SHA256}  /tmp/hive.tgz" | sha256sum -c - \
     && tar -xzf /tmp/hive.tgz -C /opt \
     && mv /opt/apache-hive-${HIVE_VERSION}-bin ${HIVE_HOME} \
@@ -90,16 +91,13 @@ RUN curl -fsSL "https://repo1.maven.org/maven2/org/apache/hudi/${HUDI_SPARK_ARTI
     && curl -fsSL "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar" -o /opt/spark/jars/iceberg-spark-runtime.jar \
     && curl -fsSL "https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/${DELTA_VERSION}/delta-spark_2.12-${DELTA_VERSION}.jar" -o /opt/spark/jars/delta-spark.jar
 
-ENV LAB_ROOT_USER=datalab_root \
-    LAB_APP_USER=datalab
+ENV LAB_APP_USER=datalab
 
-# Create users/home before any chown operations
-RUN useradd -m -s /bin/bash "${LAB_ROOT_USER}" \
-    && useradd -m -s /bin/bash "${LAB_APP_USER}" \
+# Create app user; keep root home separate
+RUN useradd -m -s /bin/bash "${LAB_APP_USER}" \
     && mkdir -p /home/${LAB_APP_USER} \
     && chown -R ${LAB_APP_USER}:${LAB_APP_USER} /home/${LAB_APP_USER} \
-    && rm -rf /root \
-    && ln -s /home/${LAB_APP_USER} /root
+    && echo "${LAB_APP_USER}:${LAB_APP_USER}" | chpasswd
 
 COPY dev/hadoop/conf/ /tmp/hadoop-conf/
 RUN cp /tmp/hadoop-conf/* ${HADOOP_HOME}/etc/hadoop/ \
@@ -139,26 +137,41 @@ ENV SPARK_HOME=/opt/spark \
     WORKSPACE=/home/${LAB_APP_USER} \
     PATH="$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin"
 
+# Ensure Desktop doesn't auto-group containers into a stack by default
+LABEL com.docker.compose.project="" \
+      com.docker.compose.service="" \
+      com.docker.compose.oneoff=""
+
 # Ensure login shells inherit the same PATH/custom variables
 USER root
-RUN install -d /etc/profile.d \
-    && cat <<'EOF' >/etc/profile.d/datalab-path.sh \
-    && chmod 0644 /etc/profile.d/datalab-path.sh \
-    && sed -i 's/\r$//' /etc/profile.d/datalab-path.sh \
-    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /etc/bash.bashrc \
-    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /etc/bash.bashrc \
-    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
-    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
-    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
-    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
-    && chown ${LAB_APP_USER}:${LAB_APP_USER} /home/${LAB_APP_USER}/.bashrc /home/${LAB_APP_USER}/.profile
-# Ensures login shells (e.g., after `su - datalab`) can find the big data CLIs.
+# Copy only the required project folders into the image (preserving folder names)
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} app /home/${LAB_APP_USER}/app
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} airflow /home/${LAB_APP_USER}/airflow
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} dbt /home/${LAB_APP_USER}/dbt
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} delta /home/${LAB_APP_USER}/delta
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} hadoop /home/${LAB_APP_USER}/hadoop
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} hive /home/${LAB_APP_USER}/hive
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} hudi /home/${LAB_APP_USER}/hudi
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} iceberg /home/${LAB_APP_USER}/iceberg
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} java /home/${LAB_APP_USER}/java
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} kafka /home/${LAB_APP_USER}/kafka
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} python /home/${LAB_APP_USER}/python
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} scala /home/${LAB_APP_USER}/scala
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} spark /home/${LAB_APP_USER}/spark
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} terraform /home/${LAB_APP_USER}/terraform
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} runtime /home/${LAB_APP_USER}/runtime
+
+RUN install -d /etc/profile.d
+
+RUN cat <<'EOF' >/etc/profile.d/datalab-path.sh
+# Data Lab environment and PATH additions (applied to all users)
 export SPARK_HOME=/opt/spark
 export HADOOP_HOME=/opt/hadoop
 export HIVE_HOME=/opt/hive
 export KAFKA_HOME=/opt/kafka
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-export WORKSPACE="$HOME"
+# Force a shared workspace path so root and datalab use the same mounts
+export WORKSPACE="/home/datalab"
 export RUNTIME_ROOT="${WORKSPACE}/runtime"
 export AIRFLOW_HOME="${RUNTIME_ROOT}/airflow"
 export AIRFLOW__CORE__DAGS_FOLDER="${WORKSPACE}/airflow/dags"
@@ -168,13 +181,32 @@ export TF_DATA_DIR="${RUNTIME_ROOT}/terraform/.terraform"
 export PATH="$JAVA_HOME/bin:$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin"
 EOF
 
+RUN chmod 0644 /etc/profile.d/datalab-path.sh \
+    && sed -i 's/\r$//' /etc/profile.d/datalab-path.sh \
+    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /etc/bash.bashrc \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /etc/bash.bashrc \
+    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
+    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
+    && chown ${LAB_APP_USER}:${LAB_APP_USER} /home/${LAB_APP_USER}/.bashrc /home/${LAB_APP_USER}/.profile
+
 RUN cat <<'EOF' >/etc/profile.d/hive-cli.sh
 alias beeline='/opt/hive/bin/beeline'
-alias hive='/opt/hive/bin/hive --service cli'
+# Default hive command connects to local HS2 (HTTP on 10001/cliservice)
+alias hive='bash /home/datalab/app/scripts/hive/cli.sh'
 alias hivehs2='/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab'
 EOF
 RUN sed -i 's/\r$//' /etc/profile.d/hive-cli.sh
 
+# Entrypoint: fix permissions on host-mounted paths, then exec the given command
+COPY dev/base/entrypoint.sh /usr/local/bin/datalab-entrypoint.sh
+RUN chmod +x /usr/local/bin/datalab-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/datalab-entrypoint.sh"]
+
 USER ${LAB_APP_USER}
 
-CMD ["bash"]
+# Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
+# Advertise the common service ports (map them on `docker run` as needed)
+EXPOSE 4040 8080 8088 9000 9090 9092 9870 10000 18080
+CMD ["sleep", "infinity"]

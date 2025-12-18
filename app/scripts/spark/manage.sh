@@ -5,6 +5,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 
+# Guard in case strip_cr was not loaded (e.g., if common.sh failed to source)
+if ! declare -F strip_cr >/dev/null; then
+  strip_cr() {
+    local value="${1:-}"
+    value="${value//$'\r'/}"
+    printf '%s' "${value}"
+  }
+fi
+
 : "${SPARK_MASTER_HOST:=localhost}"
 : "${SPARK_MASTER_PORT:=7077}"
 : "${SPARK_MASTER_WEBUI_PORT:=9090}"

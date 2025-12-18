@@ -8,7 +8,7 @@ services:
     image: data-lab:latest
     container_name: data-lab
     user: root
-    working_dir: /home/datalab
+    working_dir: /
     env_file:
       - .env
     volumes:
@@ -60,5 +60,13 @@ services:
         published: 10000
         protocol: tcp
         name: hiveserver2
+      - target: 10001   # HiveServer2 HTTP (cliservice)
+        published: 10001
+        protocol: tcp
+        name: hiveserver2-http
+      - target: 9002    # Kafka UI (inside data-lab container)
+        published: 9002
+        protocol: tcp
+        name: kafka-ui
     tty: true
     command: ["sleep", "infinity"]

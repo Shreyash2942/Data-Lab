@@ -24,28 +24,15 @@ with DAG(
     schedule=None,
     catchup=False,
 ) as dag:
+
   start_core_services = bash_task(
       "start_core_services",
       "bash ~/app/start --start-core",
   )
 
-  python_example = bash_task(
-      "python_example",
-      "python ~/python/example.py",
-  )
-
-  spark_example = bash_task(
-      "spark_example",
-      "spark-submit ~/spark/example_pyspark.py",
-  )
-
-  dbt_run = bash_task(
-      "dbt_run",
-      "cd ~/dbt && dbt debug && dbt run",
-  )
-
-  hadoop_hdfs_check = bash_task(
-      "hadoop_hdfs_check",
+  # Core service demos
+  hadoop_demo = bash_task(
+      "hadoop_demo",
       "bash ~/hadoop/scripts/hdfs_check.sh",
   )
 
@@ -54,9 +41,20 @@ with DAG(
       "bash ~/hive/bootstrap_demo.sh",
   )
 
+  spark_demo = bash_task(
+      "spark_demo",
+      "spark-submit ~/spark/example_pyspark.py",
+  )
+
   kafka_demo = bash_task(
       "kafka_demo",
       "bash ~/kafka/demo.sh",
+  )
+
+  # Additional language / tool demos (independent)
+  python_example = bash_task(
+      "python_example",
+      "python ~/python/example.py",
   )
 
   java_example = bash_task(
@@ -72,12 +70,12 @@ with DAG(
   terraform_demo = bash_task(
       "terraform_demo",
       (
-          "export TF_DATA_DIR=~/runtime/terraform/.terraform && "
-          "terraform -chdir=~/terraform init && "
-          "terraform -chdir=~/terraform apply -auto-approve "
-          "-state=~/runtime/terraform/terraform.tfstate && "
-          "terraform -chdir=~/terraform destroy -auto-approve "
-          "-state=~/runtime/terraform/terraform.tfstate"
+          "export TF_DATA_DIR=/home/datalab/runtime/terraform/.terraform && "
+          "terraform -chdir=/home/datalab/terraform init && "
+          "terraform -chdir=/home/datalab/terraform apply -auto-approve "
+          "-state=/home/datalab/runtime/terraform/terraform.tfstate && "
+          "terraform -chdir=/home/datalab/terraform destroy -auto-approve "
+          "-state=/home/datalab/runtime/terraform/terraform.tfstate"
       ),
   )
 
@@ -99,16 +97,25 @@ with DAG(
   stop_core_services = bash_task(
       "stop_core_services",
       "bash ~/app/stop --stop-core",
-      trigger_rule="all_done",
+      trigger_rule="all_success",
   )
 
-  validation_tasks = [
-      python_example,
-      spark_example,
-      dbt_run,
-      hadoop_hdfs_check,
+  # Dependencies:
+  # start -> hadoop -> hive -> spark -> {kafka, hudi, iceberg, delta}
+  # start -> independent language/tool demos
+  start_core_services >> hadoop_demo >> hive_demo_databases >> spark_demo
+  spark_demo >> [kafka_demo, hudi_quickstart, iceberg_quickstart, delta_quickstart]
+
+  start_core_services >> [python_example, java_example, scala_example, terraform_demo]
+
+  # Everything must finish before stopping core services
+  all_tasks = [
+      start_core_services,
+      hadoop_demo,
       hive_demo_databases,
+      spark_demo,
       kafka_demo,
+      python_example,
       java_example,
       scala_example,
       terraform_demo,
@@ -116,7 +123,5 @@ with DAG(
       iceberg_quickstart,
       delta_quickstart,
   ]
-
-  start_core_services >> validation_tasks
-  for task in validation_tasks:
+  for task in all_tasks:
     task >> stop_core_services

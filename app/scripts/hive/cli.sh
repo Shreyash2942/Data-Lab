@@ -10,6 +10,8 @@ HS2_USER="${HIVE_CLI_USER:-datalab}"
 HS2_PASS="${HIVE_CLI_PASS:-}"
 HS2_PROMPT="${HIVE_CLI_PROMPT:-hive (!d)> }"
 HIVE_RC_FILE="${HIVE_RC_FILE:-${HOME}/.hiverc}"
+BEELINE_SILENT="${HIVE_CLI_SILENT:-true}"
+BEELINE_VERBOSE="${HIVE_CLI_VERBOSE:-false}"
 
 JDBC_URL="jdbc:hive2://${HS2_HOST}:${HS2_PORT}/${HS2_DB};transportMode=http;httpPath=${HS2_HTTP_PATH};auth=${HS2_AUTH}"
 
@@ -43,6 +45,7 @@ EOF
 else
   grep -q 'set hive.cli.print.current.db=true;' "${HIVE_RC_FILE}" || echo 'set hive.cli.print.current.db=true;' >> "${HIVE_RC_FILE}"
   sed -i '/hive\.cli\.print\.current\.db\.useColor/d' "${HIVE_RC_FILE}" 2>/dev/null || true
+  sed -i '/hive\.root\.logger/d' "${HIVE_RC_FILE}" 2>/dev/null || true
   sed -i '/!set prompt/d' "${HIVE_RC_FILE}" 2>/dev/null || true
 fi
 
@@ -51,8 +54,17 @@ if [ -z "${HIVE_CLI_SKIP_RC:-}" ]; then
   INIT_ARGS+=(-i "${HIVE_RC_FILE}")
 fi
 
+BEELINE_OPTS=()
+if [ "${BEELINE_SILENT}" = "true" ]; then
+  BEELINE_OPTS+=(--silent=true)
+fi
+if [ "${BEELINE_VERBOSE}" = "false" ]; then
+  BEELINE_OPTS+=(--verbose=false)
+fi
+
 exec beeline \
   "${INIT_ARGS[@]}" \
+  "${BEELINE_OPTS[@]}" \
   --hiveconf beeline.prompt="${HS2_PROMPT}" \
   --hiveconf hive.cli.print.current.db=true \
   -u "${JDBC_URL}" -n "${HS2_USER}" -p "${HS2_PASS}" "$@"

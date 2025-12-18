@@ -15,7 +15,7 @@ The Delta quickstart exercises the bundled `delta-spark` runtime to create/query
 # helper menu (option 14)
 bash ~/app/services_demo.sh --run-delta-demo
 
-# or run manually
+# or run manually (runs in local[*] mode and pulls delta-spark + delta-storage)
 python ~/delta/delta_example.py
 ```
 

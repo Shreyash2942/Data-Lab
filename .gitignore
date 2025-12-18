@@ -5,6 +5,7 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+.ipynb_checkpoints/
 
 # Environment overrides
 .env
@@ -12,16 +13,55 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+.venv/
+venv/
+.eggs/
+*.egg-info
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+coverage.xml
+htmlcov/
 
 # Runtime state (logs, metadata, warehouses)
 runtime/*
 !runtime/README.md
 !runtime/*/.gitkeep
 
+# Airflow state (host/compose mounts)
+airflow/logs/
+airflow/pids/
+airflow/airflow.db
+
 # dbt build artifacts
 dbt/logs/
 dbt/target/
 dbt/.user.yml
+
+# Terraform state
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# JVM / Scala artifacts
+target/
+*.class
+*.jar
+.bloop/
+.metals/
 
 # Misc generated files
 *.log

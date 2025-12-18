@@ -1,24 +1,22 @@
 # Hive Layer
 
-Hive now ships with a configured embedded Derby metastore and warehouse path (`~/runtime/hive/warehouse`). Prepare the CLI from inside the container with:
+Hive ships with an embedded Derby metastore and warehouse path (`~/runtime/hive/warehouse`). Prepare the CLI from inside the container with:
 
 ```bash
 bash ~/app/start   # choose option 3 to prep the metastore
 bash ~/app/stop    # stop Spark/Hadoop/Hive/Kafka when finished
 ```
 
-Use option 6 (or `~/app/start --start-core`) if you want the entire Spark/Hadoop/Hive/Kafka stack in one go.
+Use option 6 (or `~/app/start --start-core`) if you want the entire Spark/Hadoop/Hive/Kafka stack in one go. That command ensures Hadoop is running, creates any missing metastore tables, and drops you back into the shell so you can run Hive directly. From any directory in the container you can now type:
 
-That command ensures Hadoop is running, creates any missing metastore tables, and drops you back into the shell so you can run Hive directly. From any directory in the container you can now type:
-
-- `hivelegacy` – wraps `~/app/scripts/hive/legacy_cli.sh`, auto-connects to HS2, and shows prompts like `hive (default)>`.
-- `hivecli` – wraps `~/app/scripts/hive/cli.sh`, launching Beeline against the same endpoint.
+- `hivelegacy` - wraps `~/app/scripts/hive/legacy_cli.sh`, auto-connects to HS2, and shows prompts like `hive (default)>`.
+- `hivecli` - wraps `~/app/scripts/hive/cli.sh`, launching Beeline against the HTTP HS2 endpoint (default `localhost:10001/cliservice`, `auth=noSasl`, user `datalab`).
 
 Both obey the `HIVE_CLI_HOST/PORT/HTTP_PATH/AUTH/USER/PASS` environment variables, so you can point them at any HS2 you start manually. Prefer Spark? `spark-sql -e 'SHOW DATABASES;'` works too.
 
 ### Need HiveServer2?
 
-Only start HS2 when you need a JDBC/ODBC endpoint (e.g. for Airflow’s Hive hook). Use the helper script (run as root inside the container):
+Only start HS2 when you need a JDBC/ODBC endpoint (e.g. for Airflow's Hive hook). Use the helper script (run as root inside the container):
 
 ```bash
 # from the host (datalab user or root)
@@ -40,7 +38,7 @@ After Hive is running, create a few ready-made schemas/tables with:
 bash ~/hive/bootstrap_demo.sh
 ```
 
-The helper uses the Hive CLI (so you'll see the `hive (<current-db>)>` prompt) to create the `sales_demo`, `analytics_demo`, and `staging_demo` databases from `~/hive/init_demo_databases.sql`, loads sample rows, and shows the resulting tables so you can verify HiveServer2 quickly.
+The helper waits for the HTTP HS2 endpoint, then runs `~/hive/init_demo_databases.sql` through the same Beeline wrapper used by `hivecli`, creating `sales_demo`, `analytics_demo`, and `staging_demo` and loading sample rows so you can verify HiveServer2 quickly.
 
 ## Resources
 - Official docs: https://cwiki.apache.org/confluence/display/Hive/Home

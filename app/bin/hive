@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Preferred Hive CLI entrypoint: auto-connects to local HS2 via HTTP
+exec bash "${HOME}/app/scripts/hive/cli.sh" "$@"

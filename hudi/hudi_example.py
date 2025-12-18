@@ -20,12 +20,18 @@ def build_spark() -> SparkSession:
 
 
 def write_batch(df, mode="overwrite"):
+    write_opts = {
+        "hoodie.table.name": "users_hudi",
+        "hoodie.datasource.write.recordkey.field": "id",
+        "hoodie.datasource.write.precombine.field": "ts",
+        "hoodie.datasource.write.operation": "upsert",
+        # Avoid metadata server/HFile code paths that are incompatible with our Hadoop bits.
+        "hoodie.embed.timeline.server": "false",
+        "hoodie.metadata.enable": "false",
+    }
     (
         df.write.format("hudi")
-        .option("hoodie.table.name", "users_hudi")
-        .option("hoodie.datasource.write.recordkey.field", "id")
-        .option("hoodie.datasource.write.precombine.field", "ts")
-        .option("hoodie.datasource.write.operation", "upsert")
+        .options(**write_opts)
         .mode(mode)
         .save(str(HUDI_BASE_PATH))
     )
@@ -48,6 +54,7 @@ def main():
     write_batch(initial, mode="overwrite")
     (
         spark.read.format("hudi")
+        .option("hoodie.metadata.enable", "false")
         .load(str(HUDI_BASE_PATH))
         .select("id", "name", "ts")
         .orderBy("id")
@@ -65,7 +72,11 @@ def main():
     write_batch(updates, mode="append")
 
     log("Current Hudi table contents (with commit timestamps)...")
-    current = spark.read.format("hudi").load(str(HUDI_BASE_PATH))
+    current = (
+        spark.read.format("hudi")
+        .option("hoodie.metadata.enable", "false")
+        .load(str(HUDI_BASE_PATH))
+    )
     current.select("_hoodie_commit_time", "id", "name", "ts").orderBy("id").show()
 
     spark.stop()

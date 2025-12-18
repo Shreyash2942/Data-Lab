@@ -10,9 +10,8 @@ This environment is designed for teaching, demos, and local experimentation.
   - `/python`, `/spark`, ... → code + README per stack
 - Dual users:
   - `datalab` (default)
-  - `datalab_root` (admin)
   - `root` (system)
-- `docker compose exec data-lab bash` drops you into `root`, but `/root` points at `/home/datalab`. You can `su - datalab` for day-to-day work (recommended) or `su - datalab_root` for admin tasks. If you prefer a non-root session immediately, run `docker compose exec -u datalab data-lab bash`.
+- `docker compose exec data-lab bash` drops you into `root`. The workspace is at `/home/datalab`; `cd /home/datalab` or `su - datalab` for day-to-day work (recommended). If you prefer a non-root session immediately, run `docker compose exec -u datalab data-lab bash`.
 
 Use this doc plus each stack's README to explain configuration and usage.
 

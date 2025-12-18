@@ -29,7 +29,7 @@ Need additional packages? Install them in the container (or bake them into the D
 
 ## Notes
 
-- Project code and runtime state share the same home directory regardless of whether you run as `root`, `datalab`, or `datalab_root`.
+- Project code and runtime state share the same home directory regardless of whether you run as `root` or `datalab`.
 - Logs or generated artifacts should land in `~/runtime/python` (create it as needed) so they persist on the host and stay out of version control.
 
 ## Resources

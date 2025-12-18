@@ -7,7 +7,9 @@ source "${SCRIPT_DIR}/../common.sh"
 source "${SCRIPT_DIR}/../hadoop/manage.sh"
 
 HIVE_HS2_LOG_FILE="${HIVE_LOG_DIR}/hiveserver2-http.log"
-HIVE_HS2_PID_FILE="${HIVE_PID_DIR}/hiveserver2-http.pid"
+# Hive writes both http and legacy PID files; manage both to avoid stale blocks.
+HIVE_HS2_HTTP_PID_FILE="${HIVE_PID_DIR}/hiveserver2-http.pid"
+HIVE_HS2_LEGACY_PID_FILE="${HIVE_PID_DIR}/hiveserver2.pid"
 HIVE_SCRIPTS_DIR="${WORKSPACE}/app/scripts/hive"
 HIVE_BEELINE_CLI="${HIVE_SCRIPTS_DIR}/cli.sh"
 
@@ -40,7 +42,7 @@ hive::wait_for_port() {
 import os, socket, sys, time
 host = os.environ["HS2_WAIT_HOST"]
 port = int(os.environ["HS2_WAIT_PORT"])
-deadline = time.time() + 60
+deadline = time.time() + 120
 while time.time() < deadline:
     s = socket.socket()
     s.settimeout(2)
@@ -75,22 +77,28 @@ PY
 }
 
 hive::cleanup_stale_hs2() {
-  if [[ -f "${HIVE_HS2_PID_FILE}" ]] && ! kill -0 "$(cat "${HIVE_HS2_PID_FILE}")" 2>/dev/null; then
-    rm -f "${HIVE_HS2_PID_FILE}"
-  fi
+  local pidfile
+  for pidfile in "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"; do
+    if [[ -f "${pidfile}" ]] && ! kill -0 "$(cat "${pidfile}")" 2>/dev/null; then
+      rm -f "${pidfile}"
+    fi
+  done
 
   if pgrep -f "hive.*hiveserver2" >/dev/null 2>&1; then
     if ! hive::port_open localhost "${HIVE_SERVER2_HTTP_PORT}"; then
       echo "[*] Removing stale HiveServer2 processes..."
       pkill -f "hive.*hiveserver2" || true
       sleep 1
-      rm -f "${HIVE_HS2_PID_FILE}"
+      rm -f "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"
     fi
   fi
 }
 
 hive::hs2_running() {
-  [[ -f "${HIVE_HS2_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_PID_FILE}")" 2>/dev/null
+  if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_HTTP_PID_FILE}")" 2>/dev/null; then
+    return 0
+  fi
+  [[ -f "${HIVE_HS2_LEGACY_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_LEGACY_PID_FILE}")" 2>/dev/null
 }
 
 hive::start_hs2() {
@@ -98,7 +106,13 @@ hive::start_hs2() {
 
   if hive::hs2_running; then
     if hive::port_open localhost "${HIVE_SERVER2_HTTP_PORT}"; then
-      echo "[*] HiveServer2 already running (PID $(cat "${HIVE_HS2_PID_FILE}"))."
+      local running_pid="<unknown>"
+      if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]]; then
+        running_pid="$(cat "${HIVE_HS2_HTTP_PID_FILE}")"
+      elif [[ -f "${HIVE_HS2_LEGACY_PID_FILE}" ]]; then
+        running_pid="$(cat "${HIVE_HS2_LEGACY_PID_FILE}")"
+      fi
+      echo "[*] HiveServer2 already running (PID ${running_pid})."
       return
     fi
     echo "[*] HiveServer2 PID detected but port ${HIVE_SERVER2_HTTP_PORT} is closed; restarting..."
@@ -118,13 +132,17 @@ hive::start_hs2() {
       --hiveconf hive.server2.thrift.http.path="${HIVE_SERVER2_HTTP_PATH}" \
       --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
       > "${HIVE_HS2_LOG_FILE}" 2>&1 &
-  echo $! > "${HIVE_HS2_PID_FILE}"
+  echo $! > "${HIVE_HS2_HTTP_PID_FILE}"
   if ! hive::wait_for_port localhost "${HIVE_SERVER2_HTTP_PORT}"; then
     echo "[!] HiveServer2 failed to open port ${HIVE_SERVER2_HTTP_PORT}. Recent log lines:" >&2
     tail -n 40 "${HIVE_HS2_LOG_FILE}" >&2 || true
     return 1
   fi
   echo "[+] HiveServer2 listening (log: ${HIVE_HS2_LOG_FILE})."
+  # Remove stale legacy PID file if Hive created it (Hive writes both names on some versions).
+  if [[ -f "${HIVE_HS2_LEGACY_PID_FILE}" ]] && ! kill -0 "$(cat "${HIVE_HS2_LEGACY_PID_FILE}")" 2>/dev/null; then
+    rm -f "${HIVE_HS2_LEGACY_PID_FILE}"
+  fi
 }
 
 hive::stop_hs2() {
@@ -133,8 +151,18 @@ hive::stop_hs2() {
     return
   fi
   echo "[*] Stopping HiveServer2..."
-  kill "$(cat "${HIVE_HS2_PID_FILE}")" 2>/dev/null || true
-  rm -f "${HIVE_HS2_PID_FILE}"
+  # Prefer the HTTP PID file, fall back to legacy if needed.
+  local pid=""; local pidfile=""
+  for pidfile in "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"; do
+    if [[ -f "${pidfile}" ]]; then
+      pid="$(cat "${pidfile}")"
+      break
+    fi
+  done
+  if [[ -n "${pid}" ]]; then
+    kill "${pid}" 2>/dev/null || true
+  fi
+  rm -f "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"
 }
 
 hive::stop() {

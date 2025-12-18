@@ -12,7 +12,7 @@ A production-inspired data engineering lab that runs Spark, Airflow, Hadoop, Hiv
 - **Modular folders**: Spark, Airflow, Hive, Hadoop, Kafka, dbt, Terraform, Hudi, Iceberg, Delta, Python, Java, Scala each have examples, configs, and READMEs.
 - **Lakehouse ready**: Hudi, Iceberg, and Delta examples write to `runtime/lakehouse/`.
 - **Helper UX**: `app/start`, `app/stop`, `app/restart`, `app/services_demo.sh` orchestrate everything.
-- **Realistic users**: `datalab` (dev), `datalab_root` (admin), `root` share the same home for consistent paths.
+- **Realistic users**: `datalab` (dev) and `root`; project workspace lives under `/home/datalab` (switch to `datalab` for day-to-day work).
 
 ## Included Tech Stacks
 
@@ -72,11 +72,9 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 
 ## User Model
 
-- `datalab` — default dev user (recommended for day-to-day)
-- `datalab_root` — elevated admin
-- `root` — system root (defaults when you `docker compose exec data-lab bash`)
-- All three map to `/home/datalab` (root is symlinked), so paths like `~/app`, `~/runtime`, `~/spark`, `~/airflow` are identical.
-
+- `datalab`: default dev user (home at `/home/datalab`, recommended for day-to-day)
+- `root`: system root (defaults when you `docker compose exec data-lab bash`)
+- Project files live in `/home/datalab`; if you start as `root`, `cd /home/datalab` or `su - datalab` to work in the shared workspace.
 ## Service Control & Demos
 
 - **Start/stop/restart**: `bash ~/app/start`, `bash ~/app/stop`, `bash ~/app/restart` (menu or flag-driven, e.g., `--start-core`, `--stop-airflow`).
@@ -89,10 +87,12 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 - `spark-ui` 4040:4040 — Spark app UI
 - `spark-master` 9090:9090 — Spark master UI
 - `spark-history` 18080:18080 — Spark history server
-- `kafka-broker` 9092:9092 — Kafka broker
+- `kafka-broker` 9092:9092 �?" Kafka broker
+- `kafka-ui` 9002:9002 �?" Kafka UI (Kafdrop)
 - `hadoop-namenode` 9870:9870 — HDFS NameNode UI
 - `yarn-resourcemanager` 8088:8088 — YARN RM UI
-- `hiveserver2` 10000:10000 — HiveServer2 JDBC
+- `hiveserver2` 10000:10000 �?" HiveServer2 JDBC
+- `hiveserver2-http` 10001:10001 �?" HiveServer2 HTTP (cliservice)
 
 ## Runtime Storage
 
@@ -128,7 +128,7 @@ data-lab/
 
 ## Inside the Container (~/)
 
-Everything mounts to `/home/datalab` (also `/root` via symlink), so paths look like:
+Everything mounts to `/home/datalab`, so paths look like:
 
 ```
 ~/
@@ -178,3 +178,77 @@ Everything mounts to `/home/datalab` (also `/root` via symlink), so paths look l
 - Iceberg: https://iceberg.apache.org/docs/latest/
 - Delta Lake: https://docs.delta.io/latest/
 - Terraform: https://developer.hashicorp.com/terraform/docs
+
+
+## Standalone run scripts (optional)
+
+- Linux/macOS: `./run-standalone.sh` (make it executable first: `chmod +x run-standalone.sh`).
+- Windows PowerShell: `powershell -File .\run-standalone.ps1`.
+
+Both scripts start a non-stackable container at `/`, map the project folders into `/home/datalab`, and publish the common service ports (Airflow 8080, Spark 4040/9090/18080, Kafka 9092, Hadoop 9870/8088, Hive 10000/10001, Kafdrop 9002). Set `IMAGE`/`$Image` if you want to pull from a registry instead of using the local build.
+Quick copy/paste commands:
+- Linux/macOS:
+  - `chmod +x run-standalone.sh`
+  - `NAME=datalab IMAGE=data-lab:latest ./run-standalone.sh`
+- Windows PowerShell:
+  - `powershell -File .\run-standalone.ps1 -Name datalab -Image data-lab:latest`
+Customization:
+- Set `NAME`/`$Name` and `IMAGE`/`$Image` to control container name and image source.
+- Add extra ports: `EXTRA_PORTS="-p 8081:8081 -p 1234:1234"` (bash) or `-ExtraPorts "-p 8081:8081"` (PowerShell).
+- Add extra volumes: `EXTRA_VOLUMES="-v /host/path:/container/path"` (bash) or `-ExtraVolumes "-v C:\data:/data"` (PowerShell).
+
+### Standalone: step-by-step
+
+1) **Pull (optional if you already built locally):**
+   ```bash
+   docker pull yourhubuser/data-lab:latest
+   ```
+
+2) **Run with provided scripts:**
+   - Linux/macOS:
+     ```bash
+     chmod +x run-standalone.sh
+     NAME=datalab IMAGE=data-lab:latest ./run-standalone.sh
+     # add extras if needed:
+     # EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/container/path" NAME=my-lab IMAGE=yourhubuser/data-lab:latest ./run-standalone.sh
+     ```
+   - Windows PowerShell:
+     ```powershell
+     powershell -File .\run-standalone.ps1 -Name datalab -Image data-lab:latest
+     # add extras if needed:
+     # powershell -File .\run-standalone.ps1 -Name my-lab -Image yourhubuser/data-lab:latest -ExtraPorts "-p 8081:8081" -ExtraVolumes "-v C:\data:/data"
+     ```
+
+3) **Enter the container (root at /, then switch to datalab):**
+   ```bash
+   docker exec -it -w / datalab bash
+   ls /
+   su - datalab
+   ls /
+   cd ~
+   ls
+   ```
+   Expected output (example):
+   ```
+   # ls /
+   bin  boot  dev  etc  home  lib  lib32  lib64  libx32  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+   # su - datalab
+   $ ls /
+   bin  boot  dev  etc  home  lib  lib32  lib64  libx32  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+   $ cd ~
+   $ ls
+   airflow  app  dbt  delta  hadoop  hive  hudi  iceberg  java  kafka  python  runtime  scala  spark  terraform
+   ```
+
+Notes:
+- The scripts blank compose labels to avoid stack grouping.
+- Default published ports: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 10000, 10001, 9002. Override with `EXTRA_PORTS`/`-ExtraPorts` if needed.
+- Default mounts map repo subfolders into `/home/datalab/...` and `runtime` for state; add more with `EXTRA_VOLUMES`/`-ExtraVolumes`.
+
+### Standalone script guide (quick usage)
+- Pick your script: `run-standalone.sh` (Linux/macOS) or `run-standalone.ps1` (Windows PowerShell).
+- Set the basics: container name (`NAME`/`-Name`) and image (`IMAGE`/`-Image`), e.g., `NAME=datalab IMAGE=data-lab:latest`.
+- Optional ports: add `EXTRA_PORTS`/`-ExtraPorts` to publish more host ports (format: `-p host:container`).
+- Optional volumes: add `EXTRA_VOLUMES`/`-ExtraVolumes` for extra bind mounts (format: `-v host_path:container_path`).
+- Run the script from the repo root so the default mounts map local folders into `/home/datalab/...`.
+- Enter the container: `docker exec -it -w / <name> bash`, then `su - datalab` for a login shell.

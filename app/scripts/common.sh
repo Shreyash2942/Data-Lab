@@ -64,6 +64,7 @@ common::init_workdir
 
 : "${SPARK_HOME:=/opt/spark}"
 : "${HADOOP_HOME:=/opt/hadoop}"
+: "${HADOOP_MAPRED_HOME:=${HADOOP_HOME}}"
 : "${HIVE_HOME:=/opt/hive}"
 : "${KAFKA_HOME:=/opt/kafka}"
 : "${HIVE_SERVER2_THRIFT_PORT:=10000}"
@@ -73,6 +74,7 @@ common::init_workdir
 
 SPARK_HOME="$(strip_cr "${SPARK_HOME}")"
 HADOOP_HOME="$(strip_cr "${HADOOP_HOME}")"
+HADOOP_MAPRED_HOME="$(strip_cr "${HADOOP_MAPRED_HOME}")"
 HIVE_HOME="$(strip_cr "${HIVE_HOME}")"
 KAFKA_HOME="$(strip_cr "${KAFKA_HOME}")"
 HIVE_SERVER2_THRIFT_PORT="$(strip_cr "${HIVE_SERVER2_THRIFT_PORT}")"
@@ -80,7 +82,7 @@ HIVE_SERVER2_THRIFT_HOST="$(strip_cr "${HIVE_SERVER2_THRIFT_HOST}")"
 HIVE_SERVER2_HTTP_PORT="$(strip_cr "${HIVE_SERVER2_HTTP_PORT}")"
 HIVE_SERVER2_HTTP_PATH="$(strip_cr "${HIVE_SERVER2_HTTP_PATH}")"
 
-export SPARK_HOME HADOOP_HOME HIVE_HOME KAFKA_HOME \
+export SPARK_HOME HADOOP_HOME HADOOP_MAPRED_HOME HIVE_HOME KAFKA_HOME \
   HIVE_SERVER2_THRIFT_PORT HIVE_SERVER2_THRIFT_HOST \
   HIVE_SERVER2_HTTP_PORT HIVE_SERVER2_HTTP_PATH
 
@@ -111,14 +113,32 @@ esac
 common::ensure_cli_shortcuts() {
   local rc_file="${HOME}/.bashrc"
   local export_line='export PATH="$HOME/app/bin:$PATH"'
+  local hive_alias="alias hive='bash \"${HOME}/app/scripts/hive/cli.sh\"'"
+  local profile_file="${HOME}/.profile"
 
   if [ ! -e "${rc_file}" ]; then
-    printf '# Data Lab CLI shortcuts\n%s\n' "${export_line}" > "${rc_file}" 2>/dev/null || true
+    printf '# Data Lab CLI shortcuts\n%s\n%s\n' "${export_line}" "${hive_alias}" > "${rc_file}" 2>/dev/null || true
     return
   fi
 
   if [ -w "${rc_file}" ] && ! grep -Fq 'app/bin' "${rc_file}" 2>/dev/null; then
     printf '\n# Data Lab CLI shortcuts\n%s\n' "${export_line}" >> "${rc_file}" 2>/dev/null || true
+  fi
+
+  if [ -w "${rc_file}" ] && ! grep -Fq "${hive_alias}" "${rc_file}" 2>/dev/null; then
+    printf '%s\n' "${hive_alias}" >> "${rc_file}" 2>/dev/null || true
+  fi
+
+  # Ensure login shells also pick up the alias/PATH
+  if [ ! -e "${profile_file}" ]; then
+    printf '%s\n%s\n' "${export_line}" "${hive_alias}" > "${profile_file}" 2>/dev/null || true
+  else
+    if [ -w "${profile_file}" ] && ! grep -Fq 'app/bin' "${profile_file}" 2>/dev/null; then
+      printf '%s\n' "${export_line}" >> "${profile_file}" 2>/dev/null || true
+    fi
+    if [ -w "${profile_file}" ] && ! grep -Fq "${hive_alias}" "${profile_file}" 2>/dev/null; then
+      printf '%s\n' "${hive_alias}" >> "${profile_file}" 2>/dev/null || true
+    fi
   fi
 }
 

@@ -14,7 +14,7 @@ Includes:
 - Airflow
 - dbt Core + Postgres adapter
 - Terraform (optional)
-- Dual users: `datalab` (default), `datalab_root` (admin)
+- Dual users: `datalab` (default) and `root` (admin)
 
 Lakehouse tooling baked in:
 

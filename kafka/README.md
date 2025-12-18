@@ -8,6 +8,7 @@ Apache Kafka (3.7.1, Scala 2.13) runs inside the `data-lab` container alongside 
    ```bash
    bash ~/app/start   # choose option 4 (or run with --start-core)
    ```
+   - Kafka UI: Kafdrop auto-starts with Kafka. After recreating the `data-lab` container to expose port 9000 (`docker compose up -d --force-recreate data-lab`), open http://localhost:9000.
 2. Run the built-in shell demo to create a topic, publish two messages, and consume them:
    ```bash
    bash ~/kafka/demo.sh

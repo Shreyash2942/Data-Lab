@@ -2,8 +2,17 @@
 # shellcheck disable=SC1091
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/../common.sh"
+KAFKA_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${KAFKA_SCRIPT_DIR}/../common.sh"
+
+# Guard in case strip_cr was not loaded (e.g., if common.sh failed to source)
+if ! declare -F strip_cr >/dev/null; then
+  strip_cr() {
+    local value="${1:-}"
+    value="${value//$'\r'/}"
+    printf '%s' "${value}"
+  }
+fi
 
 KAFKA_ZK_PID_FILE="${KAFKA_PID_DIR}/zookeeper.pid"
 KAFKA_BROKER_PID_FILE="${KAFKA_PID_DIR}/kafka.pid"
@@ -13,6 +22,32 @@ KAFKA_BROKER_LOG="${KAFKA_LOG_DIR}/kafka.log"
 : "${KAFKA_BROKER_PORT:=9092}"
 KAFKA_ZK_PORT="$(strip_cr "${KAFKA_ZK_PORT}")"
 KAFKA_BROKER_PORT="$(strip_cr "${KAFKA_BROKER_PORT}")"
+: "${KAFKA_BROKER_ID:=}"
+
+kafka::broker_id() {
+  # Prefer explicit env, otherwise read from server.properties, default to 1.
+  if [[ -n "${KAFKA_BROKER_ID}" ]]; then
+    printf '%s' "${KAFKA_BROKER_ID}"
+    return
+  fi
+  if [[ -f "${KAFKA_HOME}/config/server.properties" ]]; then
+    local id
+    id="$(grep -E '^broker.id=' "${KAFKA_HOME}/config/server.properties" | tail -n1 | cut -d'=' -f2)"
+    id="$(strip_cr "${id:-}")"
+    if [[ -n "${id}" ]]; then
+      printf '%s' "${id}"
+      return
+    fi
+  fi
+  printf '1'
+}
+
+kafka::clear_stale_znode() {
+  local bid
+  bid="$(kafka::broker_id)"
+  echo "[*] Attempting to clear stale broker znode /brokers/ids/${bid}..."
+  "${KAFKA_HOME}/bin/zookeeper-shell.sh" "localhost:${KAFKA_ZK_PORT}" deleteall "/brokers/ids/${bid}" >/dev/null 2>&1 || true
+}
 
 kafka::ensure_dirs() {
   mkdir -p "${KAFKA_PID_DIR}" "${KAFKA_LOG_DIR}" "${KAFKA_ZK_DATA_DIR}"
@@ -85,6 +120,8 @@ kafka::start_zookeeper() {
 }
 
 kafka::start_broker() {
+  # Clear any stale broker znode before the first start to avoid KeeperErrorCode=NodeExists
+  kafka::clear_stale_znode
   kafka::cleanup_stale_pids
   if kafka::pid_alive "${KAFKA_BROKER_PID_FILE}" && kafka::port_open localhost "${KAFKA_BROKER_PORT}"; then
     echo "[*] Kafka already running (PID $(cat "${KAFKA_BROKER_PID_FILE}"))."
@@ -102,7 +139,35 @@ kafka::start_broker() {
   if ! kafka::wait_for_port localhost "${KAFKA_BROKER_PORT}"; then
     echo "[!] Kafka broker failed to open port ${KAFKA_BROKER_PORT}. Recent log lines:" >&2
     tail -n 40 "${KAFKA_BROKER_LOG}" >&2 || true
-    return 1
+    # Handle common stale znode error once, then retry.
+    if grep -q "KeeperErrorCode = NodeExists" "${KAFKA_BROKER_LOG}" 2>/dev/null; then
+      kafka::clear_stale_znode
+      echo "[*] Retrying Kafka broker start after clearing stale znode..."
+      rm -f "${KAFKA_BROKER_PID_FILE}"
+      LOG_DIR="${KAFKA_LOG_DIR}" \
+      nohup "${KAFKA_HOME}/bin/kafka-server-start.sh" "${KAFKA_HOME}/config/server.properties" \
+        > "${KAFKA_BROKER_LOG}" 2>&1 &
+      echo $! > "${KAFKA_BROKER_PID_FILE}"
+      if ! kafka::wait_for_port localhost "${KAFKA_BROKER_PORT}"; then
+        echo "[!] Kafka broker retry failed to open port ${KAFKA_BROKER_PORT}. Recent log lines:" >&2
+        tail -n 40 "${KAFKA_BROKER_LOG}" >&2 || true
+        return 1
+      fi
+    else
+      return 1
+    fi
+  fi
+}
+
+kafka::start_ui() {
+  local ui_script="${KAFKA_SCRIPT_DIR}/ui.sh"
+  if [[ ! -x "${ui_script}" ]]; then
+    echo "[!] Kafka UI script not found at ${ui_script}" >&2
+    return 0
+  fi
+  echo "[*] Starting Kafka UI (Kafdrop)..."
+  if ! bash "${ui_script}" start; then
+    echo "[!] Kafka UI failed to start; see runtime/kafdrop/kafdrop.log" >&2
   fi
 }
 
@@ -117,7 +182,11 @@ kafka::start() {
     echo "[!] Failed to start Kafka broker; see logs above." >&2
     return 1
   fi
+  kafka::start_ui
   echo "Kafka broker listening on localhost:${KAFKA_BROKER_PORT}"
+  local ui_port="${KAFDROP_PORT:-9002}"
+  echo "Kafka UI (single-container, Kafdrop): http://localhost:${ui_port}"
+  echo "CLI examples: kafka-topics.sh --bootstrap-server localhost:${KAFKA_BROKER_PORT} --list"
 }
 
 kafka::stop_broker() {
@@ -140,6 +209,14 @@ kafka::stop_zookeeper() {
 
 kafka::stop() {
   echo "[*] Stopping Kafka services..."
+  kafka::stop_ui
   kafka::stop_broker
   kafka::stop_zookeeper
+}
+
+kafka::stop_ui() {
+  local ui_script="${KAFKA_SCRIPT_DIR}/ui.sh"
+  if [[ -x "${ui_script}" ]]; then
+    bash "${ui_script}" stop || true
+  fi
 }

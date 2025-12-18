@@ -1,10 +1,15 @@
 import os
 from pathlib import Path
-from delta import configure_spark_with_delta_pip
 from pyspark.sql import SparkSession
 
 RUNTIME_ROOT = Path(os.environ.get("RUNTIME_ROOT", Path.home() / "runtime"))
 DELTA_PATH = RUNTIME_ROOT / "lakehouse" / "delta_tables" / "customers"
+DELTA_VERSION = os.environ.get("DELTA_VERSION", "3.2.0")
+DELTA_PACKAGES = f"io.delta:delta-spark_2.12:{DELTA_VERSION},io.delta:delta-storage:{DELTA_VERSION}"
+LOCAL_JARS = [
+    Path.home() / ".ivy2" / "jars" / f"io.delta_delta-spark_2.12-{DELTA_VERSION}.jar",
+    Path.home() / ".ivy2" / "jars" / f"io.delta_delta-storage-{DELTA_VERSION}.jar",
+]
 
 
 def log(msg: str) -> None:
@@ -12,15 +17,27 @@ def log(msg: str) -> None:
 
 
 def build_spark() -> SparkSession:
+    local_jars = [str(p) for p in LOCAL_JARS if p.exists()]
+    jars_conf = ",".join(local_jars) if local_jars else None
+    extra_classpath = ":".join(local_jars) if local_jars else None
+
     builder = (
         SparkSession.builder.appName("data-lab-delta-demo")
+        # Force local master for the demo so driver picks up the jars we ship/resolve.
+        .config("spark.master", "local[*]")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config(
             "spark.sql.catalog.spark_catalog",
             "org.apache.spark.sql.delta.catalog.DeltaCatalog",
         )
     )
-    return configure_spark_with_delta_pip(builder).getOrCreate()
+    # Ensure both delta-spark and delta-storage are on the classpath.
+    if jars_conf:
+        builder = builder.config("spark.jars", jars_conf)
+        builder = builder.config("spark.driver.extraClassPath", extra_classpath)
+        builder = builder.config("spark.executor.extraClassPath", extra_classpath)
+    builder = builder.config("spark.jars.packages", DELTA_PACKAGES)
+    return builder.getOrCreate()
 
 
 def main():

@@ -22,4 +22,4 @@ echo "[*] Consuming the messages (from beginning)..."
   --from-beginning \
   --max-messages 2
 
-echo "✅ Kafka demo finished."
+echo "バ. Kafka demo finished."
