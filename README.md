@@ -1,4 +1,4 @@
-# Data Lab â€“ All-in-One Data Engineering Sandbox (Single Container)
+# Data Lab - All-in-One Data Engineering Sandbox (Single Container)
 
 A production-inspired data engineering lab that runs Spark, Airflow, Hadoop, Hive, Kafka, dbt, and lakehouse formats inside one Docker container. Modular layout, helper scripts, and per-stack docs make it portfolio-ready and easy to demo.
 
@@ -87,12 +87,12 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 - `spark-ui` 4040:4040 â€” Spark app UI
 - `spark-master` 9090:9090 â€” Spark master UI
 - `spark-history` 18080:18080 â€” Spark history server
-- `kafka-broker` 9092:9092 ƒ?" Kafka broker
-- `kafka-ui` 9002:9002 ƒ?" Kafka UI (Kafdrop)
+- `kafka-broker` 9092:9092 ï¿½?" Kafka broker
+- `kafka-ui` 9002:9002 ï¿½?" Kafka UI (Kafdrop)
 - `hadoop-namenode` 9870:9870 â€” HDFS NameNode UI
 - `yarn-resourcemanager` 8088:8088 â€” YARN RM UI
-- `hiveserver2` 10000:10000 ƒ?" HiveServer2 JDBC
-- `hiveserver2-http` 10001:10001 ƒ?" HiveServer2 HTTP (cliservice)
+- `hiveserver2` 10000:10000 ï¿½?" HiveServer2 JDBC
+- `hiveserver2-http` 10001:10001 ï¿½?" HiveServer2 HTTP (cliservice)
 
 ## Runtime Storage
 
