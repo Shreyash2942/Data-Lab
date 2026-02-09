@@ -180,18 +180,19 @@ Everything mounts to `/home/datalab`, so paths look like:
 - Terraform: https://developer.hashicorp.com/terraform/docs
 
 
-## Standalone run scripts (optional)
+## Standalone run scripts (optional, in `scripts/`)
 
-- Linux/macOS: `./run-standalone.sh` (make it executable first: `chmod +x run-standalone.sh`).
-- Windows PowerShell: `powershell -File .\run-standalone.ps1`.
+- Linux/macOS: `./scripts/run-standalone.sh` (make it executable first: `chmod +x scripts/run-standalone.sh`).
+- Windows PowerShell: `powershell -File .\scripts\run-standalone.ps1`.
+- Interactive (prompts for name, image, extra port, extra mount): `./scripts/run-standalone-interactive.sh`.
 
 Both scripts start a non-stackable container at `/`, map the project folders into `/home/datalab`, and publish the common service ports (Airflow 8080, Spark 4040/9090/18080, Kafka 9092, Hadoop 9870/8088, Hive 10000/10001, Kafdrop 9002). Set `IMAGE`/`$Image` if you want to pull from a registry instead of using the local build.
 Quick copy/paste commands:
 - Linux/macOS:
-  - `chmod +x run-standalone.sh`
-  - `NAME=datalab IMAGE=data-lab:latest ./run-standalone.sh`
+  - `chmod +x scripts/run-standalone.sh`
+  - `NAME=datalab IMAGE=data-lab:latest ./scripts/run-standalone.sh`
 - Windows PowerShell:
-  - `powershell -File .\run-standalone.ps1 -Name datalab -Image data-lab:latest`
+  - `powershell -File .\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest`
 Customization:
 - Set `NAME`/`$Name` and `IMAGE`/`$Image` to control container name and image source.
 - Add extra ports: `EXTRA_PORTS="-p 8081:8081 -p 1234:1234"` (bash) or `-ExtraPorts "-p 8081:8081"` (PowerShell).
@@ -203,20 +204,21 @@ Customization:
    ```bash
    docker pull yourhubuser/data-lab:latest
    ```
+   If you want the published image: `docker pull shreyash42/data-lab:latest`
 
 2) **Run with provided scripts:**
    - Linux/macOS:
      ```bash
-     chmod +x run-standalone.sh
-     NAME=datalab IMAGE=data-lab:latest ./run-standalone.sh
+     chmod +x scripts/run-standalone.sh
+     NAME=datalab IMAGE=data-lab:latest ./scripts/run-standalone.sh
      # add extras if needed:
-     # EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/container/path" NAME=my-lab IMAGE=yourhubuser/data-lab:latest ./run-standalone.sh
+     # EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/container/path" NAME=my-lab IMAGE=yourhubuser/data-lab:latest ./scripts/run-standalone.sh
      ```
    - Windows PowerShell:
      ```powershell
-     powershell -File .\run-standalone.ps1 -Name datalab -Image data-lab:latest
+     powershell -File .\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest
      # add extras if needed:
-     # powershell -File .\run-standalone.ps1 -Name my-lab -Image yourhubuser/data-lab:latest -ExtraPorts "-p 8081:8081" -ExtraVolumes "-v C:\data:/data"
+     # powershell -File .\scripts\run-standalone.ps1 -Name my-lab -Image yourhubuser/data-lab:latest -ExtraPorts "-p 8081:8081" -ExtraVolumes "-v C:\data:/data"
      ```
 
 3) **Enter the container (root at /, then switch to datalab):**
@@ -244,9 +246,25 @@ Notes:
 - The scripts blank compose labels to avoid stack grouping.
 - Default published ports: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 10000, 10001, 9002. Override with `EXTRA_PORTS`/`-ExtraPorts` if needed.
 - Default mounts map repo subfolders into `/home/datalab/...` and `runtime` for state; add more with `EXTRA_VOLUMES`/`-ExtraVolumes`.
+- Public image: `shreyash42/data-lab:latest` on Docker Hub.
+- Manual run (no helper script) using the public image:
+  - Pull the image:
+    ```bash
+    docker pull shreyash42/data-lab:latest
+    ```
+    (fetches the latest published container from Docker Hub)
+  - Run the container with default ports:
+    ```bash
+    docker run -d --name datalab \
+      -p 8080:8080 -p 4040:4040 -p 9090:9090 -p 18080:18080 \
+      -p 9092:9092 -p 9870:9870 -p 8088:8088 -p 10000:10000 -p 10001:10001 -p 9002:9002 \
+      shreyash42/data-lab:latest \
+      sleep infinity
+    ```
+    (starts the container detached with the standard service port mappings)
 
 ### Standalone script guide (quick usage)
-- Pick your script: `run-standalone.sh` (Linux/macOS) or `run-standalone.ps1` (Windows PowerShell).
+- Pick your script: `scripts/run-standalone.sh` (Linux/macOS), `scripts/run-standalone.ps1` (Windows PowerShell), or `scripts/run-standalone-interactive.sh` (interactive prompts).
 - Set the basics: container name (`NAME`/`-Name`) and image (`IMAGE`/`-Image`), e.g., `NAME=datalab IMAGE=data-lab:latest`.
 - Optional ports: add `EXTRA_PORTS`/`-ExtraPorts` to publish more host ports (format: `-p host:container`).
 - Optional volumes: add `EXTRA_VOLUMES`/`-ExtraVolumes` for extra bind mounts (format: `-v host_path:container_path`).
