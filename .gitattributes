@@ -1,0 +1,16 @@
+# Normalize text files in the repo and force per-script line endings.
+* text=auto
+
+# Shell scripts must stay LF for Linux/macOS and containers.
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Extensionless bash entrypoints in this repo.
+app/start text eol=lf
+app/stop text eol=lf
+app/restart text eol=lf
+app/datalab-check text eol=lf
+app/bin/* text eol=lf
+
+# PowerShell scripts use CRLF for Windows PowerShell compatibility.
+*.ps1 text eol=crlf

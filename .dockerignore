@@ -61,10 +61,9 @@ dbt/target/
 dbt/.user.yml
 
 # Runtime state (logs, warehouses, caches)
-# Keep the placeholder docs/gitkeeps so Dockerfile COPY still works
+# Keep only the runtime README in build context; avoid traversing runtime reparse points on Windows.
 runtime/*
 !runtime/README.md
-!runtime/*/.gitkeep
 
 # Misc generated files
 *.log

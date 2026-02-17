@@ -202,6 +202,14 @@ RUN sed -i 's/\r$//' /etc/profile.d/hive-cli.sh
 # Entrypoint: fix permissions on host-mounted paths, then exec the given command
 COPY dev/base/entrypoint.sh /usr/local/bin/datalab-entrypoint.sh
 RUN chmod +x /usr/local/bin/datalab-entrypoint.sh
+
+RUN cat <<'EOF' >/usr/local/bin/datalab_app
+#!/usr/bin/env bash
+set -e
+
+exec bash /home/datalab/app/start "$@"
+EOF
+RUN chmod +x /usr/local/bin/datalab_app
 ENTRYPOINT ["/usr/local/bin/datalab-entrypoint.sh"]
 
 USER ${LAB_APP_USER}

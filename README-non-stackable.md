@@ -26,3 +26,4 @@ powershell -ExecutionPolicy Bypass -File .\run-standalone.ps1 -Name datalab -Ima
 - Default ports: 8080 (Airflow), 4040/9090/18080 (Spark), 9092 (Kafka), 9870/8088 (Hadoop), 10000/10001 (Hive), 9002 (Kafdrop).
 - Default mounts map the repo folders into `/home/datalab/...` plus `runtime` for state. Add more with `EXTRA_VOLUMES` (bash) or `-ExtraVolumes` (PowerShell).
 - Enter the container: `docker exec -it -w / datalab bash` then `su - datalab` for the dev user.
+- Start services from anywhere inside the container with `datalab_app` (equivalent to `bash /home/datalab/app/start`).

@@ -61,7 +61,8 @@ su - datalab    # recommended dev user
 Launch the service controller:
 
 ```bash
-bash ~/app/start     # menu or flags: --start-airflow, --start-spark, etc.
+datalab_app          # same as: bash ~/app/start
+datalab_app --start-core
 ```
 
 Run all demos/smoke tests:
@@ -186,6 +187,10 @@ Everything mounts to `/home/datalab`, so paths look like:
 - Windows PowerShell: `powershell -File .\scripts\run-standalone.ps1`.
 - Interactive (prompts for name, image, extra port, extra mount): `./scripts/run-standalone-interactive.sh`.
 
+Direct script download links:
+- Linux/macOS script: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh
+- Windows PowerShell script: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1
+
 Both scripts start a non-stackable container at `/`, map the project folders into `/home/datalab`, and publish the common service ports (Airflow 8080, Spark 4040/9090/18080, Kafka 9092, Hadoop 9870/8088, Hive 10000/10001, Kafdrop 9002). Set `IMAGE`/`$Image` if you want to pull from a registry instead of using the local build.
 Quick copy/paste commands:
 - Linux/macOS:
@@ -193,6 +198,15 @@ Quick copy/paste commands:
   - `NAME=datalab IMAGE=data-lab:latest ./scripts/run-standalone.sh`
 - Windows PowerShell:
   - `powershell -File .\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest`
+
+Download + run without cloning whole repo:
+- Linux/macOS:
+  - `curl -fsSL https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh -o run-standalone.sh`
+  - `chmod +x run-standalone.sh`
+  - `NAME=datalab IMAGE=shreyash42/data-lab:latest ./run-standalone.sh`
+- Windows PowerShell:
+  - `Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1" -OutFile ".\run-standalone.ps1"`
+  - `powershell -ExecutionPolicy Bypass -File .\run-standalone.ps1 -Name datalab -Image shreyash42/data-lab:latest`
 Customization:
 - Set `NAME`/`$Name` and `IMAGE`/`$Image` to control container name and image source.
 - Add extra ports: `EXTRA_PORTS="-p 8081:8081 -p 1234:1234"` (bash) or `-ExtraPorts "-p 8081:8081"` (PowerShell).
@@ -207,6 +221,9 @@ Customization:
    If you want the published image: `docker pull shreyash42/data-lab:latest`
 
 2) **Run with provided scripts:**
+   - Script download links:
+     - Linux/macOS: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh
+     - Windows PowerShell: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1
    - Linux/macOS:
      ```bash
      chmod +x scripts/run-standalone.sh
@@ -220,6 +237,18 @@ Customization:
      # add extras if needed:
      # powershell -File .\scripts\run-standalone.ps1 -Name my-lab -Image yourhubuser/data-lab:latest -ExtraPorts "-p 8081:8081" -ExtraVolumes "-v C:\data:/data"
      ```
+   - Download + run (without cloning full repo):
+     - Linux/macOS:
+       ```bash
+       curl -fsSL https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh -o run-standalone.sh
+       chmod +x run-standalone.sh
+       NAME=datalab IMAGE=shreyash42/data-lab:latest ./run-standalone.sh
+       ```
+     - Windows PowerShell:
+       ```powershell
+       Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1" -OutFile ".\run-standalone.ps1"
+       powershell -ExecutionPolicy Bypass -File .\run-standalone.ps1 -Name datalab -Image shreyash42/data-lab:latest
+       ```
 
 3) **Enter the container (root at /, then switch to datalab):**
    ```bash
