@@ -216,5 +216,5 @@ USER ${LAB_APP_USER}
 
 # Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
 # Advertise the common service ports (map them on `docker run` as needed)
-EXPOSE 4040 8080 8088 9000 9090 9092 9870 10000 18080
+EXPOSE 4040 8080 8088 9002 9090 9092 9870 10000 10001 18080
 CMD ["sleep", "infinity"]

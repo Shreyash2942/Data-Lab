@@ -13,6 +13,50 @@ function Test-ContainerExists {
   return ($names -contains $Name)
 }
 
+function Get-HostPortFromMapping {
+  Param([string]$Mapping)
+  if ($Mapping -notmatch "^\d+:\d+$") {
+    throw "Invalid port mapping '$Mapping'. Expected format 'host:container'."
+  }
+  return [int]($Mapping.Split(":")[0])
+}
+
+function Get-ContainerPortFromMapping {
+  Param([string]$Mapping)
+  if ($Mapping -notmatch "^\d+:\d+$") {
+    throw "Invalid port mapping '$Mapping'. Expected format 'host:container'."
+  }
+  return [int]($Mapping.Split(":")[1])
+}
+
+function Test-HostPortFree {
+  Param([int]$Port)
+  $listener = $null
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+    $listener.Start()
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($null -ne $listener) {
+      $listener.Stop()
+    }
+  }
+}
+
+function Get-FreeHostPort {
+  Param([int]$PreferredPort, [int[]]$ReservedPorts)
+  $candidate = $PreferredPort
+  while ($candidate -le 65535) {
+    if (($ReservedPorts -notcontains $candidate) -and (Test-HostPortFree -Port $candidate)) {
+      return $candidate
+    }
+    $candidate++
+  }
+  throw "Could not find a free host port for preferred base $PreferredPort."
+}
+
 if (-not $NewName) {
   $NewName = Read-Host "New container name"
 }
@@ -38,6 +82,29 @@ $defaultPorts = @(
   "9092:9092", "9870:9870", "8088:8088", "10000:10000",
   "10001:10001", "9002:9002"
 )
+
+$resolvedDefaultPorts = @()
+$reservedPorts = @()
+foreach ($mapping in $defaultPorts) {
+  $preferredHostPort = Get-HostPortFromMapping -Mapping $mapping
+  $containerPort = Get-ContainerPortFromMapping -Mapping $mapping
+  $resolvedHostPort = Get-FreeHostPort -PreferredPort $preferredHostPort -ReservedPorts $reservedPorts
+  $reservedPorts += $resolvedHostPort
+  $resolvedDefaultPorts += "$resolvedHostPort`:$containerPort"
+}
+
+$normalizedExtraPorts = @()
+foreach ($mapping in $ExtraPorts) {
+  $hostPort = Get-HostPortFromMapping -Mapping $mapping
+  if ($reservedPorts -contains $hostPort) {
+    throw "Extra host port $hostPort conflicts with a mapped default port. Choose a different -ExtraPorts value."
+  }
+  if (-not (Test-HostPortFree -Port $hostPort)) {
+    throw "Extra host port $hostPort is already in use."
+  }
+  $reservedPorts += $hostPort
+  $normalizedExtraPorts += $mapping
+}
 
 $collectedVolumes = @()
 while ($true) {
@@ -84,8 +151,8 @@ while (Test-ContainerExists $NewName) {
 }
 
 $portArgs = @()
-foreach ($p in $defaultPorts) { $portArgs += @("-p", $p) }
-foreach ($p in $ExtraPorts) { $portArgs += @("-p", $p) }
+foreach ($p in $resolvedDefaultPorts) { $portArgs += @("-p", $p) }
+foreach ($p in $normalizedExtraPorts) { $portArgs += @("-p", $p) }
 
 $volumeArgs = @()
 foreach ($v in $collectedVolumes) { $volumeArgs += @("-v", $v) }
@@ -106,6 +173,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Output "Container $NewName started from image $image."
+Write-Output "Published ports:"
+foreach ($p in $resolvedDefaultPorts) {
+  Write-Output "  - $p"
+}
+if ($normalizedExtraPorts.Count -gt 0) {
+  foreach ($p in $normalizedExtraPorts) {
+    Write-Output "  - $p (extra)"
+  }
+}
 if ($collectedVolumes.Count -gt 0) {
   Write-Output "Mounted: $($collectedVolumes -join ', ')"
 }

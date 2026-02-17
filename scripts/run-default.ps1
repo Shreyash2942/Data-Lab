@@ -14,16 +14,24 @@ $ports = @(
   "4040:4040",   # Spark UI
   "8080:8080",   # Airflow UI
   "8088:8088",   # YARN RM
-  "9000:9000",   # Kafka UI
+  "9002:9002",   # Kafka UI (Kafdrop)
   "9090:9090",   # Spark master UI
   "9092:9092",   # Kafka broker
   "9870:9870",   # HDFS UI
   "10000:10000", # HiveServer2
+  "10001:10001", # HiveServer2 HTTP
   "18080:18080"  # Spark history
 )
 
 $portArgs = @()
 foreach ($p in $ports) { $portArgs += @("-p", $p) }
 
-$cmd = @("docker", "run", "-d", "--name", $Name) + $portArgs + @("data-lab:latest") + $ExtraArgs
+$cmd = @(
+  "docker", "run", "-d", "--name", $Name,
+  "--user", "root",
+  "--workdir", "/",
+  "--label", "com.docker.compose.project=",
+  "--label", "com.docker.compose.service=",
+  "--label", "com.docker.compose.oneoff="
+) + $portArgs + @("data-lab:latest") + $ExtraArgs
 & $cmd

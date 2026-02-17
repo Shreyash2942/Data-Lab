@@ -9,22 +9,11 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "${SCRIPT_DIR}/scripts/host_exec.sh"
 
-if [ ! -f "/.dockerenv" ] && [ -z "${INSIDE_DATALAB:-}" ]; then
-  if ! command -v docker >/dev/null 2>&1; then
-    cat >&2 <<'EOF'
-Please run this script inside the data-lab container (e.g. `docker compose exec data-lab bash`)
-or install Docker CLI so it can exec into the container automatically.
-EOF
-    exit 1
-  fi
-  (
-    cd "${REPO_ROOT}"
-    docker compose exec -e INSIDE_DATALAB=1 "${SERVICE_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
-  )
-  exit $?
-fi
+datalab::ensure_inside_or_exec "${REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
 strip_cr() {
   local value="${1:-}"

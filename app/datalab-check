@@ -10,20 +10,11 @@ fi
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "${APP_DIR}/scripts/host_exec.sh"
 
-# If run from the host, exec into the container automatically.
-if [ ! -f "/.dockerenv" ] && [ -z "${INSIDE_DATALAB:-}" ]; then
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Please run inside the data-lab container (docker compose exec data-lab bash)." >&2
-    exit 1
-  fi
-  (
-    cd "${APP_REPO_ROOT}"
-    docker compose exec -e INSIDE_DATALAB=1 "${SERVICE_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
-  )
-  exit $?
-fi
+datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
 source "${APP_DIR}/scripts/common.sh"
 

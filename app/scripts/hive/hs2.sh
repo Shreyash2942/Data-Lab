@@ -5,20 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_PATH_FROM_APP="scripts/hive/${SCRIPT_NAME}"
+source "${APP_DIR}/scripts/host_exec.sh"
 
-if [ ! -f "/.dockerenv" ] && [ -z "${INSIDE_DATALAB:-}" ]; then
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Please run inside the data-lab container (docker compose exec data-lab bash)." >&2
-    exit 1
-  fi
-  (
-    cd "${APP_REPO_ROOT}"
-    docker compose exec -e INSIDE_DATALAB=1 "${SERVICE_NAME}" "/home/datalab/app/${SCRIPT_PATH_FROM_APP}" "$@"
-  )
-  exit $?
-fi
+datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_PATH_FROM_APP}" "$@"
 
 source "${APP_DIR}/scripts/common.sh"
 source "${APP_DIR}/scripts/hadoop/manage.sh"
@@ -47,7 +39,11 @@ case "${command}" in
     ;;
   status)
     if hive::hs2_running; then
-      echo "[+] HiveServer2 running (PID $(cat "${HIVE_HS2_PID_FILE}"))"
+      if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]]; then
+        echo "[+] HiveServer2 running (PID $(cat "${HIVE_HS2_HTTP_PID_FILE}"))"
+      else
+        echo "[+] HiveServer2 running."
+      fi
     else
       echo "[-] HiveServer2 not running."
     fi

@@ -78,7 +78,7 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 - Project files live in `/home/datalab`; if you start as `root`, `cd /home/datalab` or `su - datalab` to work in the shared workspace.
 ## Service Control & Demos
 
-- **Start/stop/restart**: `bash ~/app/start`, `bash ~/app/stop`, `bash ~/app/restart` (menu or flag-driven, e.g., `--start-core`, `--stop-airflow`).
+- **Start/stop/restart**: `datalab_app`, `bash ~/app/stop`, `bash ~/app/restart` (menu or flag-driven, e.g., `--start-core`, `--stop-airflow`).
 - **Demo runner**: `bash ~/app/services_demo.sh` to execute Python, Spark, dbt, Kafka, Java, Scala, Terraform, Airflow check, Hadoop/HDFS check, Hive demo, Hudi/Iceberg/Delta quickstarts.
 - **Airflow login**: http://localhost:8080 (default: `datalab` / `airflow`).
 

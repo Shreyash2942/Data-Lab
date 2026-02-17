@@ -11,6 +11,30 @@ Param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Get-HostPortFromMapping {
+  Param([string]$Mapping)
+  if ($Mapping -notmatch "^\d+:\d+$") {
+    throw "Invalid port mapping '$Mapping'. Expected format 'host:container'."
+  }
+  return [int]($Mapping.Split(":")[0])
+}
+
+function Test-HostPortFree {
+  Param([int]$Port)
+  $listener = $null
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+    $listener.Start()
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($null -ne $listener) {
+      $listener.Stop()
+    }
+  }
+}
+
 # Build the image unless explicitly skipped.
 if (-not $SkipBuild) {
   Write-Host "Building image '$Image' from '$Dockerfile'..."
@@ -25,6 +49,24 @@ $defaultPorts = @(
   "9092:9092", "9870:9870", "8088:8088", "10000:10000",
   "10001:10001", "9002:9002"
 )
+
+docker stop $Name 2>$null | Out-Null
+docker rm $Name 2>$null | Out-Null
+
+$allPorts = @($defaultPorts + $ExtraPorts)
+$allHostPorts = @()
+foreach ($mapping in $allPorts) {
+  $allHostPorts += (Get-HostPortFromMapping -Mapping $mapping)
+}
+if (($allHostPorts | Group-Object | Where-Object { $_.Count -gt 1 }).Count -gt 0) {
+  $dupes = ($allHostPorts | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name }) -join ", "
+  throw "Duplicate host port mapping detected: $dupes"
+}
+foreach ($p in $allHostPorts) {
+  if (-not (Test-HostPortFree -Port $p)) {
+    throw "Host port $p is already in use. Stop the conflicting process/container or pass different -ExtraPorts."
+  }
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $defaultVolumes = @(
@@ -44,9 +86,6 @@ $defaultVolumes = @(
   "$repoRoot\delta:/home/datalab/delta",
   "$repoRoot\runtime:/home/datalab/runtime"
 )
-
-docker stop $Name 2>$null | Out-Null
-docker rm $Name 2>$null | Out-Null
 
 $portArgs = @()
 foreach ($p in $defaultPorts) { $portArgs += @("-p", $p) }

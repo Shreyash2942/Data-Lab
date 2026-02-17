@@ -54,8 +54,8 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
 - `run-standalone.ps1` (PowerShell): Same behavior/flags as the bash version (`-Name`, `-Image`, `-ExtraPorts`, `-ExtraVolumes`).
 - `run-standalone-interactive.sh` (bash): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Uses `shreyash42/data-lab:latest` unless `IMAGE` is set. Pass `EXTRA_PORTS` if you want additional ports.
 - `run-standalone-interactive.ps1` (PowerShell): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Uses `shreyash42/data-lab:latest` unless `-Image` is provided. Pass `-ExtraPorts` if you want additional ports. Uses the repo root (parent of `scripts/`) for default mounts.
-- `build-and-run.ps1` (PowerShell): Builds the image (unless `-SkipBuild`), then runs a non-stackable container with standard ports and default repo mounts. Supports `-ExtraPorts` and `-ExtraVolumes`.
-- `copy-container.ps1` (PowerShell): Uses the image from an existing container (default `datalab`), asks for a new container name and bind mounts, and starts another non-stackable container with default ports.
+- `build-and-run.ps1` (PowerShell): Builds the image (unless `-SkipBuild`), then runs a non-stackable container with standard ports and default repo mounts. Supports `-ExtraPorts` and `-ExtraVolumes`, and validates host port conflicts before run.
+- `copy-container.ps1` (PowerShell): Uses the image from an existing container (default `datalab`), asks for a new container name and bind mounts, and starts another non-stackable container. Default UI ports auto-shift to the next free host port when needed to avoid conflicts.
 - `run-default.sh` (bash): Quick run with standard port bindings; accepts extra args after the image name.
 - `run-default.ps1` (PowerShell): Quick run equivalent for Windows; first arg is container name, remaining args are passed to `docker run`.
 
