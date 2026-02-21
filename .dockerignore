@@ -4,6 +4,7 @@
 
 # Environment files
 .env
+datalabcontainer/.env
 
 # OS / editor noise
 .DS_Store
@@ -53,17 +54,24 @@ override.tf.json
 *_override.tf.json
 
 # Airflow/dbt runtime state (host mounts)
-airflow/logs/
-airflow/pids/
-airflow/airflow.db
-dbt/logs/
-dbt/target/
-dbt/.user.yml
+stacks/airflow/logs/
+stacks/airflow/pids/
+stacks/airflow/airflow.db
+stacks/dbt/logs/
+stacks/dbt/target/
+stacks/dbt/.user.yml
 
 # Runtime state (logs, warehouses, caches)
 # Keep only the runtime README in build context; avoid traversing runtime reparse points on Windows.
-runtime/*
-!runtime/README.md
+datalabcontainer/runtime/*
+!datalabcontainer/runtime/README.md
+datalabcontainer/runtime-copies/
+
+# Unused in image build context
+helper/
+docs/
+catalog/
+README*.md
 
 # Misc generated files
 *.log

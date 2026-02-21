@@ -6,10 +6,15 @@ A production-inspired data engineering lab that runs Spark, Airflow, Hadoop, Hiv
 
 ![Data Lab Cover](docs/images/coverimage.png)
 
+Repository layout note:
+- Container assets are under `datalabcontainer/`
+- Stack examples are under `stacks/`
+- Structure reference: `docs/STRUCTURE.md`
+
 ## Project Overview
 
 - **One container, many stacks**: all services run inside `data-lab`.
-- **Modular folders**: Spark, Airflow, Hive, Hadoop, Kafka, dbt, Terraform, Hudi, Iceberg, Delta, Python, Java, Scala each have examples, configs, and READMEs.
+- **Modular folders**: Spark, Airflow, Hive, Hadoop, Kafka, PostgreSQL, MongoDB, Redis, dbt, Terraform, Hudi, Iceberg, Delta, Python, Java, Scala each have examples, configs, and READMEs.
 - **Lakehouse ready**: Hudi, Iceberg, and Delta examples write to `runtime/lakehouse/`.
 - **Helper UX**: `app/start`, `app/stop`, `app/restart`, `app/services_demo.sh` orchestrate everything.
 - **Realistic users**: `datalab` (dev) and `root`; project workspace lives under `/home/datalab` (switch to `datalab` for day-to-day work).
@@ -19,29 +24,34 @@ A production-inspired data engineering lab that runs Spark, Airflow, Hadoop, Hiv
 Each stack has its own folder, README, and example project so you can explore, extend, or showcase it.
 
 **Core Data Engineering Frameworks**
-- Apache Spark 3.5.1 — distributed compute with PySpark examples, Spark UI, history server (`spark/README.md`, `spark/example_pyspark.py`). Docs: https://spark.apache.org/docs/latest/
-- Apache Hadoop 3.3.6 — HDFS, YARN, MapReduce configured with local storage (`hadoop/README.md`). Docs: https://hadoop.apache.org/docs/stable/
-- Apache Hive 4.0.1 — SQL engine with Metastore + HS2, CLI wrappers, demo databases (`hive/README.md`, `hive/bootstrap_demo.sh`). Docs: https://cwiki.apache.org/confluence/display/Hive/Home
-- Apache Kafka 3.7.1 — Zookeeper + broker with interactive producer/consumer demos (`kafka/README.md`, `kafka/demo.sh`). Docs: https://kafka.apache.org/documentation/
+- Apache Spark 3.5.1 — distributed compute with PySpark examples, Spark UI, history server (`stacks/spark/README.md`, `stacks/spark/example_pyspark.py`). Docs: https://spark.apache.org/docs/latest/
+- Apache Hadoop 3.3.6 — HDFS, YARN, MapReduce configured with local storage (`stacks/hadoop/README.md`). Docs: https://hadoop.apache.org/docs/stable/
+- Apache Hive 4.0.1 — SQL engine with Metastore + HS2, CLI wrappers, demo databases (`stacks/hive/README.md`, `stacks/hive/bootstrap_demo.sh`). Docs: https://cwiki.apache.org/confluence/display/Hive/Home
+- Apache Kafka 3.7.1 — Zookeeper + broker with interactive producer/consumer demos (`stacks/kafka/README.md`, `stacks/kafka/demo.sh`). Docs: https://kafka.apache.org/documentation/
 
 **Orchestration & Transformation**
-- Apache Airflow — web UI + scheduler; DAGs live in `airflow/dags` (`airflow/README.md`). Docs: https://airflow.apache.org/docs/
-- dbt Core (DuckDB) — out-of-the-box DuckDB profile; run models instantly (`dbt/README.md`, `dbt/profiles.yml`). Docs: https://docs.getdbt.com/
+- Apache Airflow — web UI + scheduler; DAGs live in `stacks/airflow/dags` (`stacks/airflow/README.md`). Docs: https://airflow.apache.org/docs/
+- dbt Core (DuckDB) — out-of-the-box DuckDB profile; run models instantly (`stacks/dbt/README.md`, `stacks/dbt/profiles.yml`). Docs: https://docs.getdbt.com/
+
+**Databases**
+- PostgreSQL — relational database with SQL examples (`stacks/postgres/README.md`, `stacks/postgres/example_postgres.sql`). Docs: https://www.postgresql.org/docs/
+- MongoDB — NoSQL document database with Python example (`stacks/mongodb/README.md`, `stacks/mongodb/example_mongodb.py`). Docs: https://www.mongodb.com/docs/
+- Redis — in-memory key-value database with Python example (`stacks/redis/README.md`, `stacks/redis/example_redis.py`). Docs: https://redis.io/docs/
 
 **Lakehouse Technologies**
-- Apache Hudi 0.15.0 (`hudi/README.md`)
-- Apache Iceberg 1.6.1 (`iceberg/README.md`)
-- Delta Lake 3.2.0 (`delta/README.md`)
+- Apache Hudi 0.15.0 (`stacks/hudi/README.md`)
+- Apache Iceberg 1.6.1 (`stacks/iceberg/README.md`)
+- Delta Lake 3.2.0 (`stacks/delta/README.md`)
 - Each includes Python examples, Spark runtime support, and isolated demo warehouses under `runtime/lakehouse/`.
 
 **Programming Languages**
-- Python 3 (`python/README.md`)
-- Java 11 (`java/README.md`)
-- Scala (`scala/README.md`)
+- Python 3 (`stacks/python/README.md`)
+- Java 11 (`stacks/java/README.md`)
+- Scala (`stacks/scala/README.md`)
 - Each folder has sample programs for compile/run/integration checks.
 
 **Infrastructure as Code**
-- Terraform CLI — preconfigured demo and state layout (`terraform/README.md`). Docs: https://developer.hashicorp.com/terraform/docs
+- Terraform CLI — preconfigured demo and state layout (`stacks/terraform/README.md`). Docs: https://developer.hashicorp.com/terraform/docs
 
 **Extended docs**
 - `docs/Data-Lab-Documentation.md` for deeper background.
@@ -49,7 +59,8 @@ Each stack has its own folder, README, and example project so you can explore, e
 ## Quick Start
 
 ```bash
-cp .env.example .env
+cp datalabcontainer/.env.example datalabcontainer/.env
+cd datalabcontainer
 docker compose build
 docker compose up -d
 
@@ -79,7 +90,7 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 ## Service Control & Demos
 
 - **Start/stop/restart**: `datalab_app`, `bash ~/app/stop`, `bash ~/app/restart` (menu or flag-driven, e.g., `--start-core`, `--stop-airflow`).
-- **Demo runner**: `bash ~/app/services_demo.sh` to execute Python, Spark, dbt, Kafka, Java, Scala, Terraform, Airflow check, Hadoop/HDFS check, Hive demo, Hudi/Iceberg/Delta quickstarts.
+- **Demo runner**: `bash ~/app/services_demo.sh` to execute Python, Spark, dbt, Kafka, PostgreSQL, MongoDB, Redis, Java, Scala, Terraform, Airflow check, Hadoop/HDFS check, Hive demo, Hudi/Iceberg/Delta quickstarts.
 - **Airflow login**: http://localhost:8080 (default: `datalab` / `airflow`).
 
 ## Published Ports
@@ -94,10 +105,13 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 - `yarn-resourcemanager` 8088:8088 — YARN RM UI
 - `hiveserver2` 10000:10000 �?" HiveServer2 JDBC
 - `hiveserver2-http` 10001:10001 �?" HiveServer2 HTTP (cliservice)
+- `postgres` 5432:5432 - PostgreSQL
+- `mongodb` 27017:27017 - MongoDB
+- `redis` 6379:6379 - Redis
 
 ## Runtime Storage
 
-`runtime/` is bind-mounted to `/home/datalab/runtime` for logs, warehouses, metadata (Airflow, Spark, Hadoop, Hive, Kafka, dbt, Terraform, lakehouse demos). Remove a subfolder (e.g., `runtime/airflow`) to reset that stack; helper scripts recreate it.
+`datalabcontainer/runtime/` is bind-mounted to `/home/datalab/runtime` for logs, warehouses, metadata (Airflow, Spark, Hadoop, Hive, Kafka, dbt, Terraform, lakehouse demos). Remove a subfolder (e.g., `datalabcontainer/runtime/airflow`) to reset that stack; helper scripts recreate it.
 
 ## Project Structure (High-Level)
 
@@ -105,26 +119,12 @@ bash ~/app/services_demo.sh   # menu or flags: --run-spark-example, --run-kafka-
 
 ```
 data-lab/
-├── dev/                 # Dockerfiles (base + per-stack references)
-├── app/                 # Start/stop/restart/service orchestration scripts
-├── python/              # Python example + README
-├── spark/               # Spark example + README
-├── airflow/             # DAGs + README
-├── hive/                # Hive scripts/config + README
-├── hadoop/              # Hadoop scripts/config + README
-├── dbt/                 # dbt project + profiles.yml + README
-├── kafka/               # Kafka demos (producer/consumer/shell) + README
-├── terraform/           # Terraform demo + README
-├── hudi/                # Hudi example + README
-├── iceberg/             # Iceberg example + README
-├── delta/               # Delta Lake example + README
-├── java/                # Java example + README
-├── scala/               # Scala example + README
-├── runtime/             # Bind-mounted state (logs, warehouses, metadata)
+├── datalabcontainer/    # Container assets (compose/app/dev/runtime)
+├── stacks/              # All tech stacks and examples
 ├── docs/                # Extended documentation
-├── docker-compose.yml   # Single-container orchestration
-├── .env.example         # Env defaults for Compose
-└── README.md            # You are here
+├── catalog/             # Stack and run indexes
+├── README.md            # You are here
+└── README-non-stackable.md
 ```
 
 ## Inside the Container (~/)
@@ -143,7 +143,10 @@ Everything mounts to `/home/datalab`, so paths look like:
 ├── iceberg/             # Iceberg example
 ├── java/                # Java example
 ├── kafka/               # Kafka demos (producer/consumer/chat/demo.sh)
+├── mongodb/             # MongoDB example
+├── postgres/            # PostgreSQL example
 ├── python/              # Python example
+├── redis/               # Redis example
 ├── scala/               # Scala example
 ├── spark/               # Spark example + configs
 ├── terraform/           # Terraform demo
@@ -175,37 +178,40 @@ Everything mounts to `/home/datalab`, so paths look like:
 - Hadoop: https://hadoop.apache.org/docs/stable/
 - Hive: https://cwiki.apache.org/confluence/display/Hive/Home
 - Kafka: https://kafka.apache.org/documentation/
+- PostgreSQL: https://www.postgresql.org/docs/
+- MongoDB: https://www.mongodb.com/docs/
+- Redis: https://redis.io/docs/
 - Hudi: https://hudi.apache.org/docs/
 - Iceberg: https://iceberg.apache.org/docs/latest/
 - Delta Lake: https://docs.delta.io/latest/
 - Terraform: https://developer.hashicorp.com/terraform/docs
 
 
-## Standalone run scripts (optional, in `scripts/`)
+## Standalone run scripts (optional, in `helper/scripts/`)
 
-- Linux/macOS: `./scripts/run-standalone.sh` (make it executable first: `chmod +x scripts/run-standalone.sh`).
-- Windows PowerShell: `powershell -File .\scripts\run-standalone.ps1`.
-- Interactive (prompts for name, image, extra port, extra mount): `./scripts/run-standalone-interactive.sh`.
+- Linux/macOS: `./helper/scripts/run-standalone.sh` (make it executable first: `chmod +x helper/scripts/run-standalone.sh`).
+- Windows PowerShell: `powershell -File .\helper\scripts\run-standalone.ps1`.
+- Interactive (prompts for name, image, extra port, extra mount): `./helper/scripts/run-standalone-interactive.sh`.
 
 Direct script download links:
-- Linux/macOS script: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh
-- Windows PowerShell script: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1
+- Linux/macOS script: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.sh
+- Windows PowerShell script: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.ps1
 
-Both scripts start a non-stackable container at `/`, map the project folders into `/home/datalab`, and publish the common service ports (Airflow 8080, Spark 4040/9090/18080, Kafka 9092, Hadoop 9870/8088, Hive 10000/10001, Kafdrop 9002). Set `IMAGE`/`$Image` if you want to pull from a registry instead of using the local build.
+Both scripts start a non-stackable container at `/`, map the project folders into `/home/datalab`, and publish the common service ports (Airflow 8080, Spark 4040/9090/18080, Kafka 9092, Hadoop 9870/8088, Hive 10000/10001, Kafdrop 9002, PostgreSQL 5432, MongoDB 27017, Redis 6379). Set `IMAGE`/`$Image` if you want to pull from a registry instead of using the local build.
 Quick copy/paste commands:
 - Linux/macOS:
-  - `chmod +x scripts/run-standalone.sh`
-  - `NAME=datalab IMAGE=data-lab:latest ./scripts/run-standalone.sh`
+  - `chmod +x helper/scripts/run-standalone.sh`
+  - `NAME=datalab IMAGE=data-lab:latest ./helper/scripts/run-standalone.sh`
 - Windows PowerShell:
-  - `powershell -File .\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest`
+  - `powershell -File .\helper\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest`
 
 Download + run without cloning whole repo:
 - Linux/macOS:
-  - `curl -fsSL https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh -o run-standalone.sh`
+  - `curl -fsSL https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.sh -o run-standalone.sh`
   - `chmod +x run-standalone.sh`
   - `NAME=datalab IMAGE=shreyash42/data-lab:latest ./run-standalone.sh`
 - Windows PowerShell:
-  - `Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1" -OutFile ".\run-standalone.ps1"`
+  - `Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.ps1" -OutFile ".\run-standalone.ps1"`
   - `powershell -ExecutionPolicy Bypass -File .\run-standalone.ps1 -Name datalab -Image shreyash42/data-lab:latest`
 Customization:
 - Set `NAME`/`$Name` and `IMAGE`/`$Image` to control container name and image source.
@@ -222,31 +228,31 @@ Customization:
 
 2) **Run with provided scripts:**
    - Script download links:
-     - Linux/macOS: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh
-     - Windows PowerShell: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1
+     - Linux/macOS: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.sh
+     - Windows PowerShell: https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.ps1
    - Linux/macOS:
      ```bash
-     chmod +x scripts/run-standalone.sh
-     NAME=datalab IMAGE=data-lab:latest ./scripts/run-standalone.sh
+     chmod +x helper/scripts/run-standalone.sh
+     NAME=datalab IMAGE=data-lab:latest ./helper/scripts/run-standalone.sh
      # add extras if needed:
-     # EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/container/path" NAME=my-lab IMAGE=yourhubuser/data-lab:latest ./scripts/run-standalone.sh
+     # EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/container/path" NAME=my-lab IMAGE=yourhubuser/data-lab:latest ./helper/scripts/run-standalone.sh
      ```
    - Windows PowerShell:
      ```powershell
-     powershell -File .\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest
+     powershell -File .\helper\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest
      # add extras if needed:
-     # powershell -File .\scripts\run-standalone.ps1 -Name my-lab -Image yourhubuser/data-lab:latest -ExtraPorts "-p 8081:8081" -ExtraVolumes "-v C:\data:/data"
+     # powershell -File .\helper\scripts\run-standalone.ps1 -Name my-lab -Image yourhubuser/data-lab:latest -ExtraPorts "-p 8081:8081" -ExtraVolumes "-v C:\data:/data"
      ```
    - Download + run (without cloning full repo):
      - Linux/macOS:
        ```bash
-       curl -fsSL https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.sh -o run-standalone.sh
+       curl -fsSL https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.sh -o run-standalone.sh
        chmod +x run-standalone.sh
        NAME=datalab IMAGE=shreyash42/data-lab:latest ./run-standalone.sh
        ```
      - Windows PowerShell:
        ```powershell
-       Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/scripts/run-standalone.ps1" -OutFile ".\run-standalone.ps1"
+       Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Shreyash2942/Data-Lab/main/helper/scripts/run-standalone.ps1" -OutFile ".\run-standalone.ps1"
        powershell -ExecutionPolicy Bypass -File .\run-standalone.ps1 -Name datalab -Image shreyash42/data-lab:latest
        ```
 
@@ -268,12 +274,12 @@ Customization:
    bin  boot  dev  etc  home  lib  lib32  lib64  libx32  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
    $ cd ~
    $ ls
-   airflow  app  dbt  delta  hadoop  hive  hudi  iceberg  java  kafka  python  runtime  scala  spark  terraform
+   airflow  app  dbt  delta  hadoop  hive  hudi  iceberg  java  kafka  mongodb  postgres  python  redis  runtime  scala  spark  terraform
    ```
 
 Notes:
 - The scripts blank compose labels to avoid stack grouping.
-- Default published ports: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 10000, 10001, 9002. Override with `EXTRA_PORTS`/`-ExtraPorts` if needed.
+- Default published ports: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 10000, 10001, 9002, 5432, 27017, 6379. Override with `EXTRA_PORTS`/`-ExtraPorts` if needed.
 - Default mounts map repo subfolders into `/home/datalab/...` and `runtime` for state; add more with `EXTRA_VOLUMES`/`-ExtraVolumes`.
 - Public image: `shreyash42/data-lab:latest` on Docker Hub.
 - Manual run (no helper script) using the public image:
@@ -287,15 +293,22 @@ Notes:
     docker run -d --name datalab \
       -p 8080:8080 -p 4040:4040 -p 9090:9090 -p 18080:18080 \
       -p 9092:9092 -p 9870:9870 -p 8088:8088 -p 10000:10000 -p 10001:10001 -p 9002:9002 \
+      -p 5432:5432 -p 27017:27017 -p 6379:6379 \
       shreyash42/data-lab:latest \
       sleep infinity
     ```
     (starts the container detached with the standard service port mappings)
 
 ### Standalone script guide (quick usage)
-- Pick your script: `scripts/run-standalone.sh` (Linux/macOS), `scripts/run-standalone.ps1` (Windows PowerShell), or `scripts/run-standalone-interactive.sh` (interactive prompts).
+- Pick your script: `helper/scripts/run-standalone.sh` (Linux/macOS), `helper/scripts/run-standalone.ps1` (Windows PowerShell), or `helper/scripts/run-standalone-interactive.sh` (interactive prompts).
 - Set the basics: container name (`NAME`/`-Name`) and image (`IMAGE`/`-Image`), e.g., `NAME=datalab IMAGE=data-lab:latest`.
 - Optional ports: add `EXTRA_PORTS`/`-ExtraPorts` to publish more host ports (format: `-p host:container`).
 - Optional volumes: add `EXTRA_VOLUMES`/`-ExtraVolumes` for extra bind mounts (format: `-v host_path:container_path`).
 - Run the script from the repo root so the default mounts map local folders into `/home/datalab/...`.
 - Enter the container: `docker exec -it -w / <name> bash`, then `su - datalab` for a login shell.
+
+
+
+
+
+
