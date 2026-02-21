@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -e
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "${APP_DIR}/scripts/host_exec.sh"
+
+datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+
+source "${APP_DIR}/scripts/common.sh"
+source "${APP_DIR}/scripts/logs/manage.sh"
+source "${APP_DIR}/scripts/hadoop/manage.sh"
+source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/airflow/manage.sh"
+source "${APP_DIR}/scripts/kafka/manage.sh"
+source "${APP_DIR}/scripts/postgres/manage.sh"
+source "${APP_DIR}/scripts/mongodb/manage.sh"
+source "${APP_DIR}/scripts/redis/manage.sh"
+source "${APP_DIR}/scripts/pgadmin/manage.sh"
+source "${APP_DIR}/scripts/spark/manage.sh"
+
+restart_component() {
+  local stop_fn=$1
+  local start_fn=$2
+  "${stop_fn}" || true
+  "${start_fn}"
+}
+
+handle_cli_flag() {
+  case "$1" in
+    --prune-logs) logs::prune_if_needed; exit 0 ;;
+    --restart-spark) restart_component spark::stop spark::start; exit 0 ;;
+    --restart-hadoop) restart_component hadoop::stop hadoop::start; exit 0 ;;
+    --restart-hive)
+      hive::stop || true
+      hive::prepare_cli
+      exit 0
+      ;;
+    --restart-kafka) restart_component kafka::stop kafka::start; exit 0 ;;
+    --restart-airflow) restart_component airflow::stop airflow::start; exit 0 ;;
+    --restart-postgres) restart_component postgres::stop postgres::start; exit 0 ;;
+    --restart-mongodb) restart_component mongodb::stop mongodb::start; exit 0 ;;
+    --restart-redis) restart_component redis::stop redis::start; exit 0 ;;
+    --restart-pgadmin) restart_component pgadmin::stop pgadmin::start; exit 0 ;;
+    --restart-databases)
+      restart_component postgres::stop postgres::start
+      restart_component mongodb::stop mongodb::start
+      restart_component redis::stop redis::start
+      echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
+      exit 0
+      ;;
+    --restart-core)
+      kafka::stop || true
+      hive::stop || true
+      hadoop::stop || true
+      spark::stop || true
+      hadoop::ensure_running
+      spark::start
+      hive::prepare_cli
+      kafka::start
+      echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+      exit 0
+      ;;
+  esac
+}
+
+if [[ "${1:-}" == "--prune-logs" ]]; then
+  handle_cli_flag "${1}"
+fi
+
+logs::prune_if_needed
+
+handle_cli_flag "${1:-}" || true
+
+echo "=== Data Lab :: RESTART MENU ==="
+echo "1) Restart Spark services"
+echo "2) Restart Hadoop services"
+echo "3) Restart Hive services"
+echo "4) Restart Kafka services"
+echo "5) Restart Airflow webserver & scheduler"
+echo "6) Restart ALL core services (Spark/Hadoop/Hive/Kafka)"
+echo "7) Restart PostgreSQL service"
+echo "8) Restart MongoDB service"
+echo "9) Restart Redis service"
+echo "10) Restart all databases (PostgreSQL/MongoDB/Redis)"
+echo "11) Restart pgAdmin UI"
+echo "12) Restart Docker container only"
+echo "0) Exit"
+read -p "Select option: " opt
+
+case "$opt" in
+  1)
+    restart_component spark::stop spark::start
+    echo "[+] Spark services restarted."
+    ;;
+  2)
+    restart_component hadoop::stop hadoop::start
+    echo "[+] Hadoop services restarted."
+    ;;
+  3)
+    hive::stop || true
+    hive::prepare_cli
+    echo "[+] Hive services restarted."
+    ;;
+  4)
+    restart_component kafka::stop kafka::start
+    echo "[+] Kafka services restarted."
+    ;;
+  5)
+    restart_component airflow::stop airflow::start
+    echo "[+] Airflow services restarted."
+    ;;
+  6)
+    kafka::stop || true
+    hive::stop || true
+    hadoop::stop || true
+    spark::stop || true
+    hadoop::ensure_running
+    spark::start
+    hive::prepare_cli
+    kafka::start
+    echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+    ;;
+  7)
+    restart_component postgres::stop postgres::start
+    echo "[+] PostgreSQL service restarted."
+    ;;
+  8)
+    restart_component mongodb::stop mongodb::start
+    echo "[+] MongoDB service restarted."
+    ;;
+  9)
+    restart_component redis::stop redis::start
+    echo "[+] Redis service restarted."
+    ;;
+  10)
+    restart_component postgres::stop postgres::start
+    restart_component mongodb::stop mongodb::start
+    restart_component redis::stop redis::start
+    echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
+    ;;
+  11)
+    restart_component pgadmin::stop pgadmin::start
+    echo "[+] pgAdmin UI restarted."
+    ;;
+  12)
+    (
+      cd "${APP_REPO_ROOT}"
+      docker compose restart "${SERVICE_NAME}"
+    )
+    ;;
+  0)
+    echo "Bye."
+    ;;
+  *)
+    echo "Invalid option."
+    exit 1
+    ;;
+esac

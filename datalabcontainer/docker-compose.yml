@@ -1,0 +1,85 @@
+services:
+  data-lab:
+    build:
+      context: ..
+      dockerfile: datalabcontainer/dev/base/Dockerfile   # Single container image with all stacks
+    image: data-lab:latest
+    container_name: data-lab
+    user: root
+    working_dir: /
+    env_file:
+      - .env
+    volumes:
+      - ./app:/home/datalab/app
+      - ../stacks/python:/home/datalab/python
+      - ../stacks/spark:/home/datalab/spark
+      - ../stacks/airflow:/home/datalab/airflow
+      - ../stacks/dbt:/home/datalab/dbt
+      - ../stacks/terraform:/home/datalab/terraform
+      - ../stacks/scala:/home/datalab/scala
+      - ../stacks/java:/home/datalab/java
+      - ../stacks/hive:/home/datalab/hive
+      - ../stacks/hadoop:/home/datalab/hadoop
+      - ../stacks/kafka:/home/datalab/kafka
+      - ../stacks/mongodb:/home/datalab/mongodb
+      - ../stacks/postgres:/home/datalab/postgres
+      - ../stacks/redis:/home/datalab/redis
+      - ../stacks/hudi:/home/datalab/hudi
+      - ../stacks/iceberg:/home/datalab/iceberg
+      - ../stacks/delta:/home/datalab/delta
+      - ./runtime:/home/datalab/runtime
+    ports:
+      - target: 8080    # Airflow or other UI
+        published: 8080
+        protocol: tcp
+        name: airflow-ui
+      - target: 4040    # Spark UI
+        published: 4040
+        protocol: tcp
+        name: spark-ui
+      - target: 9090    # Spark master UI
+        published: 9090
+        protocol: tcp
+        name: spark-master
+      - target: 18080   # Spark history server
+        published: 18080
+        protocol: tcp
+        name: spark-history
+      - target: 9092    # Kafka broker
+        published: 9092
+        protocol: tcp
+        name: kafka-broker
+      - target: 9870    # Hadoop NameNode UI
+        published: 9870
+        protocol: tcp
+        name: hadoop-namenode
+      - target: 8088    # YARN ResourceManager UI
+        published: 8088
+        protocol: tcp
+        name: yarn-resourcemanager
+      - target: 10000   # HiveServer2 JDBC
+        published: 10000
+        protocol: tcp
+        name: hiveserver2
+      - target: 10001   # HiveServer2 HTTP (cliservice)
+        published: 10001
+        protocol: tcp
+        name: hiveserver2-http
+      - target: 5432    # PostgreSQL
+        published: 5432
+        protocol: tcp
+        name: postgres
+      - target: 27017   # MongoDB
+        published: 27017
+        protocol: tcp
+        name: mongodb
+      - target: 6379    # Redis
+        published: 6379
+        protocol: tcp
+        name: redis
+      - target: 9002    # Kafka UI (inside data-lab container)
+        published: 9002
+        protocol: tcp
+        name: kafka-ui
+    tty: true
+    command: ["sleep", "infinity"]

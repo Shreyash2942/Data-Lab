@@ -1,0 +1,254 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+
+ARG AIRFLOW_VERSION=2.9.3
+ARG AIRFLOW_PYTHON_MAJOR_MINOR=3.10
+
+# Base tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    openjdk-11-jdk \
+    curl wget git ca-certificates \
+    nodejs npm php-cli php-pgsql \
+    scala \
+    nano vim less \
+    net-tools iputils-ping \
+    procps \
+    postgresql postgresql-client \
+    redis-server \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/bin/python3 /usr/bin/python || true
+
+# Browser-based DB UI dependencies
+RUN npm install -g mongo-express@0.54.0 redis-commander@0.8.0
+
+ENV JAVA11_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
+    JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
+    PATH="$PATH:/usr/lib/jvm/java-11-openjdk-amd64/bin"
+
+# Spark
+ENV SPARK_VERSION=3.5.1 \
+    HADOOP_SHORT=3 \
+    SPARK_HOME=/opt/spark
+
+ARG SPARK_TGZ_SHA512=3d8e3f082c602027d540771e9eba9987f8ea955e978afc29e1349eb6e3f9fe32543e3d3de52dff048ebbd789730454c96447c86ff5b60a98d72620a0f082b355
+ADD https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_SHORT}.tgz /tmp/spark.tgz
+RUN echo "${SPARK_TGZ_SHA512}  /tmp/spark.tgz" | sha512sum -c - \
+    && tar -xzf /tmp/spark.tgz -C /opt \
+    && mv /opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_SHORT} ${SPARK_HOME} \
+    && rm /tmp/spark.tgz
+
+COPY datalabcontainer/dev/spark/conf/ /tmp/spark-conf/
+RUN cp /tmp/spark-conf/* ${SPARK_HOME}/conf/ \
+    && rm -rf /tmp/spark-conf
+
+# Hadoop
+ENV HADOOP_VERSION_FULL=3.3.6 \
+    HADOOP_HOME=/opt/hadoop
+
+ARG HADOOP_TGZ_SHA512=de3eaca2e0517e4b569a88b63c89fae19cb8ac6c01ff990f1ff8f0cc0f3128c8e8a23db01577ca562a0e0bb1b4a3889f8c74384e609cd55e537aada3dcaa9f8a
+ADD https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION_FULL}/hadoop-${HADOOP_VERSION_FULL}.tar.gz /tmp/hadoop.tgz
+RUN echo "${HADOOP_TGZ_SHA512}  /tmp/hadoop.tgz" | sha512sum -c - \
+    && tar -xzf /tmp/hadoop.tgz -C /opt \
+    && mv /opt/hadoop-${HADOOP_VERSION_FULL} ${HADOOP_HOME} \
+    && rm /tmp/hadoop.tgz
+
+# Hive
+ENV HIVE_VERSION=4.0.1 \
+    HIVE_HOME=/opt/hive
+
+ARG HIVE_TGZ_SHA256=2bf988a1ed17437b1103e367939c25a13f64d36cf6d1c3bef8c3f319f0067619
+# Use the Apache archive to avoid 404s when the mirror rotates
+ADD https://archive.apache.org/dist/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz /tmp/hive.tgz
+RUN echo "${HIVE_TGZ_SHA256}  /tmp/hive.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/hive.tgz -C /opt \
+    && mv /opt/apache-hive-${HIVE_VERSION}-bin ${HIVE_HOME} \
+    && rm /tmp/hive.tgz
+
+COPY datalabcontainer/dev/hive/conf/ /tmp/hive-conf/
+RUN cp /tmp/hive-conf/* ${HIVE_HOME}/conf/ \
+    && rm -rf /tmp/hive-conf
+
+ENV KAFKA_VERSION=3.7.1 \
+    KAFKA_SCALA_VERSION=2.13 \
+    KAFKA_HOME=/opt/kafka
+
+ARG KAFKA_TGZ_SHA512=78e985235d245ba9e2951a82e723a62b8aba8b74a2c8376f7271906af715a36de9142c446096f13fd4bff3a4c10f1d080eb924e91e2256ec2db779906fd6737d
+ADD https://archive.apache.org/dist/kafka/${KAFKA_VERSION}/kafka_${KAFKA_SCALA_VERSION}-${KAFKA_VERSION}.tgz /tmp/kafka.tgz
+RUN echo "${KAFKA_TGZ_SHA512}  /tmp/kafka.tgz" | sha512sum -c - \
+    && tar -xzf /tmp/kafka.tgz -C /opt \
+    && mv /opt/kafka_${KAFKA_SCALA_VERSION}-${KAFKA_VERSION} ${KAFKA_HOME} \
+    && rm /tmp/kafka.tgz
+
+COPY datalabcontainer/dev/kafka/conf/ /tmp/kafka-conf/
+RUN cp /tmp/kafka-conf/* ${KAFKA_HOME}/config/ \
+    && rm -rf /tmp/kafka-conf
+
+ENV MONGO_VERSION=7.0.14 \
+    MONGO_HOME=/opt/mongodb
+
+ADD https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-${MONGO_VERSION}.tgz /tmp/mongodb.tgz
+RUN tar -xzf /tmp/mongodb.tgz -C /opt \
+    && mv /opt/mongodb-linux-x86_64-ubuntu2204-${MONGO_VERSION} ${MONGO_HOME} \
+    && rm /tmp/mongodb.tgz
+
+ENV HUDI_VERSION=0.15.0 \
+    HUDI_SPARK_ARTIFACT=hudi-spark3.5-bundle_2.12 \
+    ICEBERG_VERSION=1.6.1 \
+    DELTA_VERSION=3.2.0
+
+RUN curl -fsSL "https://repo1.maven.org/maven2/org/apache/hudi/${HUDI_SPARK_ARTIFACT}/${HUDI_VERSION}/${HUDI_SPARK_ARTIFACT}-${HUDI_VERSION}.jar" -o /opt/spark/jars/hudi-spark-bundle.jar \
+    && curl -fsSL "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar" -o /opt/spark/jars/iceberg-spark-runtime.jar \
+    && curl -fsSL "https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/${DELTA_VERSION}/delta-spark_2.12-${DELTA_VERSION}.jar" -o /opt/spark/jars/delta-spark.jar
+
+ENV LAB_APP_USER=datalab
+
+# Create app user; keep root home separate
+RUN useradd -m -s /bin/bash "${LAB_APP_USER}" \
+    && mkdir -p /home/${LAB_APP_USER} \
+    && chown -R ${LAB_APP_USER}:${LAB_APP_USER} /home/${LAB_APP_USER} \
+    && echo "${LAB_APP_USER}:${LAB_APP_USER}" | chpasswd
+
+COPY datalabcontainer/dev/hadoop/conf/ /tmp/hadoop-conf/
+RUN cp /tmp/hadoop-conf/* ${HADOOP_HOME}/etc/hadoop/ \
+    && chown -R ${LAB_APP_USER}:${LAB_APP_USER} ${HADOOP_HOME}/etc/hadoop \
+    && rm -rf /tmp/hadoop-conf
+
+# Python tooling
+RUN pip install --no-cache-dir \
+    "apache-airflow==${AIRFLOW_VERSION}" \
+    --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${AIRFLOW_PYTHON_MAJOR_MINOR}.txt"
+
+RUN pip install --no-cache-dir \
+    "pyspark==3.5.1" \
+    "dbt-core==1.8.7" "dbt-postgres==1.8.2" "dbt-duckdb==1.8.2" \
+    "confluent-kafka==2.5.0" \
+    "psycopg2-binary==2.9.9" "pymongo==4.8.0" "redis==5.0.8" \
+    "pytest" \
+    "delta-spark==${DELTA_VERSION}"
+
+# pgAdmin is installed in an isolated venv to avoid dependency conflicts
+# with Airflow and other stack packages in the main Python environment.
+RUN python3 -m venv /opt/pgadmin4-venv \
+    && /opt/pgadmin4-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && /opt/pgadmin4-venv/bin/pip install --no-cache-dir "pgadmin4==9.12"
+
+# Terraform (optional)
+ARG TERRAFORM_ZIP_SHA256=3ff056b5e8259003f67fd0f0ed7229499cfb0b41f3ff55cc184088589994f7a5
+ADD https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip /tmp/terraform.zip
+RUN echo "${TERRAFORM_ZIP_SHA256}  /tmp/terraform.zip" | sha256sum -c - \
+    && unzip /tmp/terraform.zip -d /usr/local/bin \
+    && rm /tmp/terraform.zip || true
+
+# Default runtime user
+USER ${LAB_APP_USER}
+WORKDIR /home/${LAB_APP_USER}
+RUN mkdir -p /home/${LAB_APP_USER}/runtime
+
+# Final PATHs for non-login shells (login shells also source profile.d)
+ENV SPARK_HOME=/opt/spark \
+    HADOOP_HOME=/opt/hadoop \
+    HIVE_HOME=/opt/hive \
+    KAFKA_HOME=/opt/kafka \
+    MONGO_HOME=/opt/mongodb \
+    RUNTIME_ROOT=/home/${LAB_APP_USER}/runtime \
+    WORKSPACE=/home/${LAB_APP_USER} \
+    PATH="$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
+
+# Ensure Desktop doesn't auto-group containers into a stack by default
+LABEL com.docker.compose.project="" \
+      com.docker.compose.service="" \
+      com.docker.compose.oneoff=""
+
+# Ensure login shells inherit the same PATH/custom variables
+USER root
+# Copy only the required project folders into the image (preserving folder names)
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/app /home/${LAB_APP_USER}/app
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/airflow /home/${LAB_APP_USER}/airflow
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/dbt /home/${LAB_APP_USER}/dbt
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/delta /home/${LAB_APP_USER}/delta
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hadoop /home/${LAB_APP_USER}/hadoop
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hive /home/${LAB_APP_USER}/hive
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hudi /home/${LAB_APP_USER}/hudi
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/iceberg /home/${LAB_APP_USER}/iceberg
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/java /home/${LAB_APP_USER}/java
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/kafka /home/${LAB_APP_USER}/kafka
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/mongodb /home/${LAB_APP_USER}/mongodb
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/postgres /home/${LAB_APP_USER}/postgres
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/python /home/${LAB_APP_USER}/python
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/redis /home/${LAB_APP_USER}/redis
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/scala /home/${LAB_APP_USER}/scala
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/spark /home/${LAB_APP_USER}/spark
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/terraform /home/${LAB_APP_USER}/terraform
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/runtime /home/${LAB_APP_USER}/runtime
+
+RUN install -d /etc/profile.d
+
+RUN cat <<'EOF' >/etc/profile.d/datalab-path.sh
+# Data Lab environment and PATH additions (applied to all users)
+export SPARK_HOME=/opt/spark
+export HADOOP_HOME=/opt/hadoop
+export HIVE_HOME=/opt/hive
+export KAFKA_HOME=/opt/kafka
+export MONGO_HOME=/opt/mongodb
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+# Force a shared workspace path so root and datalab use the same mounts
+export WORKSPACE="/home/datalab"
+export RUNTIME_ROOT="${WORKSPACE}/runtime"
+export AIRFLOW_HOME="${RUNTIME_ROOT}/airflow"
+export AIRFLOW__CORE__DAGS_FOLDER="${WORKSPACE}/airflow/dags"
+export DBT_PROFILES_DIR="${WORKSPACE}/dbt"
+export DBT_PACKAGE_INSTALL_PATH="${RUNTIME_ROOT}/dbt/dbt_packages"
+export TF_DATA_DIR="${RUNTIME_ROOT}/terraform/.terraform"
+export PATH="$JAVA_HOME/bin:$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
+EOF
+
+RUN chmod 0644 /etc/profile.d/datalab-path.sh \
+    && sed -i 's/\r$//' /etc/profile.d/datalab-path.sh \
+    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /etc/bash.bashrc \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /etc/bash.bashrc \
+    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.bashrc \
+    && printf '\n# Data Lab PATH additions\nif [ -f /etc/profile.d/datalab-path.sh ]; then\n  . /etc/profile.d/datalab-path.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
+    && printf '\n# Hive CLI shortcuts\nif [ -f /etc/profile.d/hive-cli.sh ]; then\n  . /etc/profile.d/hive-cli.sh\nfi\n' >> /home/${LAB_APP_USER}/.profile \
+    && chown ${LAB_APP_USER}:${LAB_APP_USER} /home/${LAB_APP_USER}/.bashrc /home/${LAB_APP_USER}/.profile
+
+RUN cat <<'EOF' >/etc/profile.d/hive-cli.sh
+alias beeline='/opt/hive/bin/beeline'
+# Default hive command connects to local HS2 (HTTP on 10001/cliservice)
+alias hive='bash /home/datalab/app/scripts/hive/cli.sh'
+alias hivehs2='/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab'
+EOF
+RUN sed -i 's/\r$//' /etc/profile.d/hive-cli.sh
+
+# Entrypoint: fix permissions on host-mounted paths, then exec the given command
+COPY datalabcontainer/dev/base/entrypoint.sh /usr/local/bin/datalab-entrypoint.sh
+RUN chmod +x /usr/local/bin/datalab-entrypoint.sh
+
+RUN cat <<'EOF' >/usr/local/bin/datalab_app
+#!/usr/bin/env bash
+set -e
+
+exec bash /home/datalab/app/start "$@"
+EOF
+RUN chmod +x /usr/local/bin/datalab_app
+
+RUN cat <<'EOF' >/usr/local/bin/ui_services
+#!/usr/bin/env bash
+set -e
+
+exec bash /home/datalab/app/ui_services "$@"
+EOF
+RUN chmod +x /usr/local/bin/ui_services
+ENTRYPOINT ["/usr/local/bin/datalab-entrypoint.sh"]
+
+USER ${LAB_APP_USER}
+
+# Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
+# Advertise the common service ports (map them on `docker run` as needed)
+EXPOSE 4040 5432 6379 8080 8082 8083 8084 8088 8181 9002 9090 9092 9870 10000 10001 18080 27017
+CMD ["sleep", "infinity"]

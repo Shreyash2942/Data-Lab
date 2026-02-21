@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
+source "${APP_DIR}/scripts/host_exec.sh"
+
+UI_HOST="${UI_HOST:-localhost}"
+: "${UI_ACTION:=${1:-}}"
+: "${DATALAB_UI_HOST:=}"
+: "${DATALAB_HOST_PORT_MAP:=}"
+UI_MAP_FILE="${UI_MAP_FILE:-/home/datalab/runtime/ui-port-map.env}"
+
+if [[ -f "${UI_MAP_FILE}" ]]; then
+  # Read persisted mapping for copied containers so values survive `su - datalab`.
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      DATALAB_UI_HOST) [[ -n "${value}" ]] && DATALAB_UI_HOST="${value}" ;;
+      DATALAB_HOST_PORT_MAP) [[ -n "${value}" ]] && DATALAB_HOST_PORT_MAP="${value}" ;;
+    esac
+  done < "${UI_MAP_FILE}"
+fi
+
+if [[ -n "${DATALAB_UI_HOST}" ]]; then
+  UI_HOST="${DATALAB_UI_HOST}"
+fi
+
+print_header() {
+  echo "=== Data Lab UI Services ==="
+}
+
+print_row() {
+  local name="$1"
+  local url="$2"
+  printf '%-20s %s\n' "${name}:" "${url}"
+}
+
+port_open_local() {
+  local host="$1" port="$2"
+  UI_WAIT_HOST="${host}" UI_WAIT_PORT="${port}" python3 - <<'PY'
+import os, socket, sys
+host = os.environ["UI_WAIT_HOST"]
+port = int(os.environ["UI_WAIT_PORT"])
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect((host, port))
+except OSError:
+    sys.exit(1)
+else:
+    s.close()
+    sys.exit(0)
+PY
+}
+
+ui_login_helper() {
+  local selection service_name container_port start_flag service_url
+  local airflow_user="${CONTAINER_NAME:-datalab}"
+
+  while true; do
+    echo "=== Data Lab UI Login Helper ==="
+    echo "1) Airflow"
+    echo "2) Spark Master"
+    echo "3) Spark History"
+    echo "4) Spark App UI"
+    echo "5) HDFS NameNode"
+    echo "6) YARN ResourceManager"
+    echo "7) HiveServer2 HTTP"
+    echo "8) Kafka UI"
+    echo "9) Adminer UI"
+    echo "10) Mongo Express UI"
+    echo "11) Redis Commander UI"
+    echo "12) pgAdmin UI"
+    echo "0) Exit"
+    read -r -p "Select service: " selection
+
+    case "${selection}" in
+      1) service_name="Airflow"; container_port=8080; start_flag="--start-airflow" ;;
+      2) service_name="Spark Master"; container_port=9090; start_flag="--start-core" ;;
+      3) service_name="Spark History"; container_port=18080; start_flag="--start-core" ;;
+      4) service_name="Spark App UI"; container_port=4040; start_flag="--start-core" ;;
+      5) service_name="HDFS NameNode"; container_port=9870; start_flag="--start-core" ;;
+      6) service_name="YARN ResourceManager"; container_port=8088; start_flag="--start-core" ;;
+      7) service_name="HiveServer2 HTTP"; container_port=10001; start_flag="--start-core" ;;
+      8) service_name="Kafka UI"; container_port=9002; start_flag="--start-core" ;;
+      9) service_name="Adminer UI"; container_port=8082; start_flag="--start-db-uis" ;;
+      10) service_name="Mongo Express UI"; container_port=8083; start_flag="--start-db-uis" ;;
+      11) service_name="Redis Commander UI"; container_port=8084; start_flag="--start-db-uis" ;;
+      12) service_name="pgAdmin UI"; container_port=8181; start_flag="--start-db-uis" ;;
+      0) echo "Bye."; return 0 ;;
+      *) echo "Invalid selection."; echo; continue ;;
+    esac
+
+    service_url="$(container_effective_url "${container_port}" "/")"
+    if ! port_open_local localhost "${container_port}"; then
+      echo "[!] ${service_name} is not running on port ${container_port}."
+      echo "Start it with: datalab_app ${start_flag}"
+      read -r -p "Start now? [y/N]: " start_now
+      if [[ "${start_now}" =~ ^[Yy]$ ]]; then
+        bash /home/datalab/app/start "${start_flag}" >/dev/null || true
+      fi
+    fi
+
+    if ! port_open_local localhost "${container_port}"; then
+      echo "[!] ${service_name} is still not reachable. Check logs and try again."
+      echo
+      continue
+    fi
+
+    echo
+    echo "Service: ${service_name}"
+    echo "URL: ${service_url}"
+    case "${selection}" in
+      1)
+        echo "Login: username=${airflow_user} password=admin"
+        ;;
+      9)
+        echo "Adminer login:"
+        echo "  System=PostgreSQL Server=localhost Username=admin Password=admin Database=datalab"
+        ;;
+      10)
+        echo "Mongo Express: no UI login (default)."
+        echo "MongoDB credentials: username=admin password=admin authDb=admin"
+        ;;
+      11)
+        echo "Redis Commander: no UI login (default)."
+        echo "Redis credentials: username=default password=admin"
+        ;;
+      12)
+        echo "pgAdmin login: email=admin@admin.com password=admin"
+        echo "pgAdmin server name: ${CONTAINER_NAME:-datalab}"
+        echo "PostgreSQL in pgAdmin: host=localhost port=5432 username=admin password=admin db=datalab"
+        ;;
+      *)
+        echo "Login: no credentials required for this UI."
+        ;;
+    esac
+    echo
+  done
+}
+
+resolve_target_container() {
+  if datalab::container_running "${CONTAINER_NAME}"; then
+    printf '%s' "${CONTAINER_NAME}"
+    return 0
+  fi
+  if datalab::container_running "${SERVICE_NAME}"; then
+    printf '%s' "${SERVICE_NAME}"
+    return 0
+  fi
+  return 1
+}
+
+extract_host_port() {
+  local mapping="$1"
+  local candidate
+  candidate="$(printf '%s\n' "${mapping}" | awk -F: '{print $NF}' | tr -d '\r' | head -n1)"
+  if [[ "${candidate}" =~ ^[0-9]+$ ]]; then
+    printf '%s' "${candidate}"
+    return 0
+  fi
+  return 1
+}
+
+mapped_url() {
+  local container="$1"
+  local container_port="$2"
+  local service_path="${3:-/}"
+  local mapping host_port
+
+  mapping="$(docker port "${container}" "${container_port}/tcp" 2>/dev/null || true)"
+  if [[ -z "${mapping}" ]]; then
+    printf '%s' "(not published)"
+    return 0
+  fi
+
+  host_port="$(extract_host_port "${mapping}" || true)"
+  if [[ -z "${host_port}" ]]; then
+    printf '%s' "(published, unable to parse: ${mapping})"
+    return 0
+  fi
+
+  printf 'http://%s:%s%s' "${UI_HOST}" "${host_port}" "${service_path}"
+}
+
+mapped_host_port() {
+  local container="$1"
+  local container_port="$2"
+  local mapping host_port
+
+  mapping="$(docker port "${container}" "${container_port}/tcp" 2>/dev/null || true)"
+  if [[ -z "${mapping}" ]]; then
+    printf '%s' "(not published)"
+    return 0
+  fi
+
+  host_port="$(extract_host_port "${mapping}" || true)"
+  if [[ -z "${host_port}" ]]; then
+    printf '%s' "(published, unable to parse: ${mapping})"
+    return 0
+  fi
+
+  printf '%s' "${host_port}"
+}
+
+mapped_endpoint() {
+  local container="$1"
+  local container_port="$2"
+  local scheme="$3"
+  local host_port
+
+  host_port="$(mapped_host_port "${container}" "${container_port}")"
+  if [[ "${host_port}" =~ ^[0-9]+$ ]]; then
+    printf '%s://%s:%s' "${scheme}" "${UI_HOST}" "${host_port}"
+    return 0
+  fi
+  printf '%s' "${host_port}"
+}
+
+container_local_url() {
+  local container_port="$1"
+  local service_path="${2:-/}"
+  printf 'http://%s:%s%s' "${UI_HOST}" "${container_port}" "${service_path}"
+}
+
+mapped_port_from_env() {
+  local container_port="$1"
+  local entry cport hport
+  [[ -n "${DATALAB_HOST_PORT_MAP}" ]] || return 1
+  IFS=',' read -ra _entries <<< "${DATALAB_HOST_PORT_MAP}"
+  for entry in "${_entries[@]}"; do
+    cport="${entry%%=*}"
+    hport="${entry#*=}"
+    if [[ "${cport}" == "${container_port}" ]] && [[ "${hport}" =~ ^[0-9]+$ ]]; then
+      printf '%s' "${hport}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+container_effective_url() {
+  local container_port="$1"
+  local service_path="${2:-/}"
+  local mapped
+  mapped="$(mapped_port_from_env "${container_port}" || true)"
+  if [[ -n "${mapped}" ]]; then
+    printf 'http://%s:%s%s' "${UI_HOST}" "${mapped}" "${service_path}"
+    return 0
+  fi
+  container_local_url "${container_port}" "${service_path}"
+}
+
+container_effective_endpoint() {
+  local container_port="$1"
+  local scheme="$2"
+  local mapped
+  mapped="$(mapped_port_from_env "${container_port}" || true)"
+  if [[ -n "${mapped}" ]]; then
+    printf '%s://%s:%s' "${scheme}" "${UI_HOST}" "${mapped}"
+    return 0
+  fi
+  printf '%s://%s:%s' "${scheme}" "${UI_HOST}" "${container_port}"
+}
+
+print_ui_block_host() {
+  local container="$1"
+  print_row "Airflow" "$(mapped_url "${container}" 8080 "/")"
+  print_row "Spark Master" "$(mapped_url "${container}" 9090 "/")"
+  print_row "Spark History" "$(mapped_url "${container}" 18080 "/")"
+  print_row "Spark App UI" "$(mapped_url "${container}" 4040 "/")"
+  print_row "HDFS NameNode" "$(mapped_url "${container}" 9870 "/")"
+  print_row "YARN ResourceMgr" "$(mapped_url "${container}" 8088 "/")"
+  print_row "HiveServer2 HTTP" "$(mapped_url "${container}" 10001 "/cliservice")"
+  print_row "Kafka UI" "$(mapped_url "${container}" 9002 "/")"
+  print_row "Adminer UI" "$(mapped_url "${container}" 8082 "/")"
+  print_row "Mongo Express UI" "$(mapped_url "${container}" 8083 "/")"
+  print_row "Redis Commander UI" "$(mapped_url "${container}" 8084 "/")"
+  print_row "pgAdmin UI" "$(mapped_url "${container}" 8181 "/")"
+  print_row "PostgreSQL (DB)" "$(mapped_endpoint "${container}" 5432 "postgresql")"
+  print_row "MongoDB (DB)" "$(mapped_endpoint "${container}" 27017 "mongodb")"
+  print_row "Redis (DB)" "$(mapped_endpoint "${container}" 6379 "redis")"
+}
+
+print_ui_block_container() {
+  print_row "Airflow" "$(container_effective_url 8080 "/")"
+  print_row "Spark Master" "$(container_effective_url 9090 "/")"
+  print_row "Spark History" "$(container_effective_url 18080 "/")"
+  print_row "Spark App UI" "$(container_effective_url 4040 "/")"
+  print_row "HDFS NameNode" "$(container_effective_url 9870 "/")"
+  print_row "YARN ResourceMgr" "$(container_effective_url 8088 "/")"
+  print_row "HiveServer2 HTTP" "$(container_effective_url 10001 "/cliservice")"
+  print_row "Kafka UI" "$(container_effective_url 9002 "/")"
+  print_row "Adminer UI" "$(container_effective_url 8082 "/")"
+  print_row "Mongo Express UI" "$(container_effective_url 8083 "/")"
+  print_row "Redis Commander UI" "$(container_effective_url 8084 "/")"
+  print_row "pgAdmin UI" "$(container_effective_url 8181 "/")"
+  print_row "PostgreSQL (DB)" "$(container_effective_endpoint 5432 "postgresql")"
+  print_row "MongoDB (DB)" "$(container_effective_endpoint 27017 "mongodb")"
+  print_row "Redis (DB)" "$(container_effective_endpoint 6379 "redis")"
+}
+
+if datalab::inside_container; then
+  if [[ "${UI_ACTION}" == "--list" || "${UI_ACTION}" == "--all" || "${UI_ACTION}" == "--urls" ]]; then
+    print_header
+    print_ui_block_container
+    echo
+    echo "Note: PostgreSQL/MongoDB/Redis entries are DB endpoints, not HTTP web UIs."
+    echo
+    if [[ -n "${DATALAB_HOST_PORT_MAP}" ]]; then
+      echo "Showing host-mapped ports from container env."
+    else
+      echo "Tip: Run this from host for mapped host ports."
+    fi
+    exit 0
+  fi
+  ui_login_helper
+  exit 0
+fi
+
+if [[ "${UI_ACTION}" != "--list" && "${UI_ACTION}" != "--all" && "${UI_ACTION}" != "--urls" ]]; then
+  datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/ui_services" "--login-helper"
+  exit 0
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker CLI not found. Install Docker or run inside container." >&2
+  exit 1
+fi
+
+target_container="$(resolve_target_container || true)"
+if [[ -z "${target_container}" ]]; then
+  cat >&2 <<EOF
+No running Data Lab container found.
+Tried container names '${CONTAINER_NAME}' and '${SERVICE_NAME}'.
+EOF
+  exit 1
+fi
+
+print_header
+echo "Container: ${target_container}"
+print_ui_block_host "${target_container}"
+echo
+echo "Note: PostgreSQL/MongoDB/Redis entries are DB endpoints, not HTTP web UIs."

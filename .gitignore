@@ -9,10 +9,12 @@ Thumbs.db
 
 # Environment overrides
 .env
+datalabcontainer/.env
 
 # Python
 __pycache__/
 *.pyc
+.python-version
 .venv/
 venv/
 .eggs/
@@ -22,24 +24,38 @@ build/
 .pytest_cache/
 .mypy_cache/
 .tox/
+.nox/
+.ruff_cache/
+.hypothesis/
+.cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 
 # Runtime state (logs, metadata, warehouses)
-runtime/*
-!runtime/README.md
-!runtime/*/.gitkeep
+datalabcontainer/runtime/**
+!datalabcontainer/runtime/
+!datalabcontainer/runtime/README.md
+!datalabcontainer/runtime/**/
+!datalabcontainer/runtime/**/.gitkeep
+datalabcontainer/runtime-copies/
+datalabcontainer/runtime/**/logs/
+datalabcontainer/runtime/**/pids/
+datalabcontainer/runtime/**/metastore_db/
+datalabcontainer/runtime/**/warehouse/
+datalabcontainer/runtime/**/kafdrop/
+datalabcontainer/runtime/**/ui-port-map.env
 
 # Airflow state (host/compose mounts)
-airflow/logs/
-airflow/pids/
-airflow/airflow.db
+stacks/airflow/logs/
+stacks/airflow/pids/
+stacks/airflow/airflow.db
 
 # dbt build artifacts
-dbt/logs/
-dbt/target/
-dbt/.user.yml
+stacks/dbt/logs/
+stacks/dbt/target/
+stacks/dbt/.user.yml
 
 # Terraform state
 .terraform/
@@ -66,3 +82,14 @@ target/
 # Misc generated files
 *.log
 *.pid
+*.out
+*.lck
+*.tmp
+*.temp
+
+# Local overrides
+docker-compose.override.yml
+.env.local
+.env.*.local
+datalabcontainer/.env.*
+!datalabcontainer/.env.example

@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+set -e
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
+SERVICE_NAME="${SERVICE_NAME:-data-lab}"
+CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "${APP_DIR}/scripts/host_exec.sh"
+
+datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+
+source "${APP_DIR}/scripts/common.sh"
+source "${APP_DIR}/scripts/logs/manage.sh"
+source "${APP_DIR}/scripts/hadoop/manage.sh"
+source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/scripts/airflow/manage.sh"
+source "${APP_DIR}/scripts/kafka/manage.sh"
+source "${APP_DIR}/scripts/postgres/manage.sh"
+source "${APP_DIR}/scripts/mongodb/manage.sh"
+source "${APP_DIR}/scripts/redis/manage.sh"
+source "${APP_DIR}/scripts/dbui/manage.sh"
+source "${APP_DIR}/scripts/pgadmin/manage.sh"
+source "${APP_DIR}/scripts/spark/manage.sh"
+
+show_ui_services() {
+  local ui_cmd="/home/datalab/app/ui_services"
+  if [[ -x "${ui_cmd}" ]]; then
+    echo
+    echo "=== UI Links ==="
+    bash "${ui_cmd}" --list || true
+  fi
+}
+
+show_db_access_summary() {
+  local server_label="${CONTAINER_NAME:-datalab}"
+  local pg_host pg_port mongo_host mongo_port redis_host redis_port
+  local adminer_url mongo_express_url redis_commander_url pgadmin_url
+  local pg_db pg_user pg_password mongo_db mongo_user mongo_password redis_password
+
+  pg_host="${DATALAB_UI_HOST:-localhost}"
+  mongo_host="${DATALAB_UI_HOST:-localhost}"
+  redis_host="${DATALAB_UI_HOST:-localhost}"
+  pg_port="$(common::mapped_host_port "${POSTGRES_PORT:-5432}")"
+  mongo_port="$(common::mapped_host_port "${MONGO_PORT:-27017}")"
+  redis_port="$(common::mapped_host_port "${REDIS_PORT:-6379}")"
+  adminer_url="$(common::ui_url "${ADMINER_PORT:-8082}" "/")"
+  mongo_express_url="$(common::ui_url "${MONGO_EXPRESS_PORT:-8083}" "/")"
+  redis_commander_url="$(common::ui_url "${REDIS_COMMANDER_PORT:-8084}" "/")"
+  pgadmin_url="$(common::ui_url "${PGADMIN_PORT:-8181}" "/")"
+
+  pg_db="${POSTGRES_DB:-datalab}"
+  pg_user="${POSTGRES_USER:-admin}"
+  pg_password="${POSTGRES_PASSWORD:-admin}"
+  mongo_db="${MONGO_DB:-datalab}"
+  mongo_user="${MONGO_ROOT_USERNAME:-admin}"
+  mongo_password="${MONGO_ROOT_PASSWORD:-admin}"
+  redis_password="${REDIS_PASSWORD:-admin}"
+
+  echo
+  echo "=== DB Access Summary ==="
+  echo "Server Name (all tools): ${server_label}"
+  echo "PostgreSQL: host=${pg_host} port=${pg_port} db=${pg_db} username=${pg_user} password=${pg_password}"
+  echo "MongoDB:    host=${mongo_host} port=${mongo_port} db=${mongo_db} username=${mongo_user} password=${mongo_password} authDb=admin"
+  echo "Redis:      host=${redis_host} port=${redis_port} username=default password=${redis_password}"
+  echo "Adminer UI: ${adminer_url}"
+  echo "Mongo UI:   ${mongo_express_url}"
+  echo "Redis UI:   ${redis_commander_url}"
+  echo "pgAdmin UI: ${pgadmin_url} (login: ${PGADMIN_EMAIL:-admin@admin.com} / ${PGADMIN_PASSWORD:-admin})"
+}
+
+handle_cli_flag() {
+  case "$1" in
+    --prune-logs) logs::prune_if_needed; exit 0 ;;
+    --start-spark) spark::start; exit 0 ;;
+    --start-hadoop) hadoop::start; exit 0 ;;
+    --start-hive) hive::prepare_cli; exit 0 ;;
+    --start-kafka) kafka::start; exit 0 ;;
+    --start-airflow) airflow::start; exit 0 ;;
+    --start-postgres) postgres::start; show_db_access_summary; exit 0 ;;
+    --start-mongodb) mongodb::start; show_db_access_summary; exit 0 ;;
+    --start-redis) redis::start; show_db_access_summary; exit 0 ;;
+    --start-databases)
+      postgres::start
+      mongodb::start
+      redis::start
+      echo "[+] PostgreSQL, MongoDB, and Redis services started."
+      show_db_access_summary
+      exit 0
+      ;;
+    --start-db-uis)
+      dbui::start
+      pgadmin::start
+      show_db_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --start-pgadmin)
+      pgadmin::start
+      show_db_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --start-core)
+      hadoop::ensure_running
+      spark::start
+      hive::prepare_cli
+      kafka::start
+      echo "[+] Spark, Hadoop, Hive, and Kafka services started."
+      show_ui_services
+      exit 0
+      ;;
+  esac
+}
+
+if [[ "${1:-}" == "--prune-logs" ]]; then
+  handle_cli_flag "${1}"
+fi
+
+logs::prune_if_needed
+
+handle_cli_flag "${1:-}" || true
+
+echo "=== Data Lab :: START MENU ==="
+echo "1) Start Spark services"
+echo "2) Start Hadoop services"
+echo "3) Prepare Hive CLI (Hadoop + metastore + HS2)"
+echo "4) Start Kafka services"
+echo "5) Start Airflow webserver & scheduler"
+echo "6) Start ALL core services (Spark/Hadoop/Hive/Kafka)"
+echo "7) Start PostgreSQL service"
+echo "8) Start MongoDB service"
+echo "9) Start Redis service"
+echo "10) Start all databases (PostgreSQL/MongoDB/Redis)"
+echo "11) Start database browser UIs (Adminer/Mongo Express/Redis Commander/pgAdmin)"
+echo "12) Start pgAdmin UI"
+echo "0) Exit"
+read -p "Select option: " opt
+
+case "$opt" in
+  1)
+    spark::start
+    echo "[+] Spark services started."
+    ;;
+  2)
+    hadoop::start
+    echo "[+] Hadoop services started."
+    ;;
+  3)
+    hive::prepare_cli
+    ;;
+  4)
+    kafka::start
+    echo "[+] Kafka services started."
+    ;;
+  5)
+    airflow::start
+    echo "[+] Airflow services started."
+    ;;
+  6)
+    hadoop::ensure_running
+    spark::start
+    hive::prepare_cli
+    kafka::start
+    echo "[+] Spark, Hadoop, Hive, and Kafka services started."
+    show_ui_services
+    ;;
+  7)
+    postgres::start
+    echo "[+] PostgreSQL service started."
+    show_db_access_summary
+    ;;
+  8)
+    mongodb::start
+    echo "[+] MongoDB service started."
+    show_db_access_summary
+    ;;
+  9)
+    redis::start
+    echo "[+] Redis service started."
+    show_db_access_summary
+    ;;
+  10)
+    postgres::start
+    mongodb::start
+    redis::start
+    echo "[+] PostgreSQL, MongoDB, and Redis services started."
+    show_db_access_summary
+    ;;
+  11)
+    dbui::start
+    pgadmin::start
+    show_db_access_summary
+    show_ui_services
+    ;;
+  12)
+    pgadmin::start
+    show_db_access_summary
+    show_ui_services
+    ;;
+  0)
+    echo "Bye."
+    ;;
+  *)
+    echo "Invalid option."
+    exit 1
+    ;;
+esac
