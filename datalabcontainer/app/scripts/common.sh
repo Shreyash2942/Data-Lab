@@ -169,6 +169,8 @@ common::load_ui_map() {
   fi
 
   while IFS='=' read -r key value; do
+    key="$(strip_cr "${key}")"
+    value="$(strip_cr "${value}")"
     case "${key}" in
       DATALAB_UI_HOST) [[ -n "${value}" ]] && DATALAB_UI_HOST="${value}" ;;
       DATALAB_HOST_PORT_MAP) [[ -n "${value}" ]] && DATALAB_HOST_PORT_MAP="${value}" ;;
@@ -185,6 +187,7 @@ common::mapped_host_port() {
   if [[ -n "${DATALAB_HOST_PORT_MAP}" ]]; then
     IFS=',' read -ra _entries <<< "${DATALAB_HOST_PORT_MAP}"
     for entry in "${_entries[@]}"; do
+      entry="$(strip_cr "${entry}")"
       cport="${entry%%=*}"
       hport="${entry#*=}"
       if [[ "${cport}" == "${container_port}" ]] && [[ "${hport}" =~ ^[0-9]+$ ]]; then

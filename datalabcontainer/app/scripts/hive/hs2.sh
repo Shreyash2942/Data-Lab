@@ -23,6 +23,7 @@ case "${command}" in
     hadoop::ensure_running
     hive::ensure_dirs
     hive::init_metastore_if_needed
+    hive::start_metastore
     hive::start_hs2
     hive::verify_query
     ;;
@@ -34,6 +35,7 @@ case "${command}" in
     hadoop::ensure_running
     hive::ensure_dirs
     hive::init_metastore_if_needed
+    hive::start_metastore
     hive::start_hs2
     hive::verify_query
     ;;

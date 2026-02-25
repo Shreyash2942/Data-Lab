@@ -51,7 +51,7 @@ On Windows use `copy datalabcontainer\.env.example datalabcontainer\.env`. The g
 
 ## Hive Metastore + HiveServer2
 
-- `datalabcontainer/dev/hive/conf/hive-site.xml` configures an embedded Derby metastore stored in `~/runtime/hive/metastore_db` with a warehouse path at `~/runtime/hive/warehouse`.
+- `datalabcontainer/dev/hive/conf/hive-site.xml` configures an embedded Derby metastore stored in `~/runtime/hive/metastore_db`, exposes metastore thrift at `thrift://localhost:9083`, and keeps the warehouse path at `hdfs:///hive/warehouse`.
 - From the helper script choose option 3 to start the metastore + HiveServer2 (it auto-starts Hadoop if needed). Use option 6 for the broader Spark/Hadoop/Hive/Kafka bundle. Stop services with `~/app/stop` and run the CLI via the `hive` alias once HiveServer2 is up (enable the current-db prompt with `hive --hiveconf hive.cli.print.current.db=true`).
 - Quick verification: `bash ~/hive/bootstrap_demo.sh` uses the Hive CLI to create the `sales_demo`, `analytics_demo`, and `staging_demo` databases from `~/hive/init_demo_databases.sql`, and displays sample tables so you can confirm Hive is working.
 

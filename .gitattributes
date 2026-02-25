@@ -10,7 +10,14 @@ app/start text eol=lf
 app/stop text eol=lf
 app/restart text eol=lf
 app/datalab-check text eol=lf
+app/ui_services text eol=lf
 app/bin/* text eol=lf
+datalabcontainer/app/start text eol=lf
+datalabcontainer/app/stop text eol=lf
+datalabcontainer/app/restart text eol=lf
+datalabcontainer/app/datalab-check text eol=lf
+datalabcontainer/app/ui_services text eol=lf
+datalabcontainer/app/bin/* text eol=lf
 
 # PowerShell scripts use CRLF for Windows PowerShell compatibility.
 *.ps1 text eol=crlf

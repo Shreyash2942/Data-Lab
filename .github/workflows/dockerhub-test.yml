@@ -12,6 +12,13 @@ on:
 permissions:
   contents: read
 
+<<<<<<< HEAD
+=======
+concurrency:
+  group: dockerhub-test-${{ github.ref }}
+  cancel-in-progress: true
+
+>>>>>>> dev
 jobs:
   test-dockerhub:
     runs-on: ubuntu-latest
@@ -56,11 +63,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+<<<<<<< HEAD
       - name: Build test image (no push)
+=======
+      - name: Build test image (optionally push)
+>>>>>>> dev
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.resolve.outputs.context }}
           file: ${{ steps.resolve.outputs.dockerfile }}
+<<<<<<< HEAD
           push: false
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/data-lab:ci-local-test
           cache-from: type=gha
@@ -76,3 +88,14 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/data-lab:ci-test-${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+=======
+          push: ${{ inputs.push_test_tag }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/data-lab:ci-test-${{ github.run_number }}
+          cache-from: |
+            type=gha,scope=dockerhub-test
+            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=dockerhub-test
+            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache,mode=max
+          provenance: false
+>>>>>>> dev

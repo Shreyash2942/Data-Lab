@@ -4,11 +4,32 @@ on:
   push:
     branches:
       - main
+<<<<<<< HEAD
+=======
+    paths:
+      - ".github/workflows/dockerhub-main.yml"
+      - ".dockerignore"
+      - "datalabcontainer/dev/base/**"
+      - "datalabcontainer/dev/hadoop/conf/**"
+      - "datalabcontainer/dev/hive/conf/**"
+      - "datalabcontainer/dev/kafka/conf/**"
+      - "datalabcontainer/dev/spark/conf/**"
+      - "datalabcontainer/app/**"
+      - "datalabcontainer/runtime/README.md"
+      - "stacks/**"
+>>>>>>> dev
   workflow_dispatch:
 
 permissions:
   contents: read
 
+<<<<<<< HEAD
+=======
+concurrency:
+  group: dockerhub-main-${{ github.ref }}
+  cancel-in-progress: true
+
+>>>>>>> dev
 jobs:
   dockerhub:
     runs-on: ubuntu-latest
@@ -58,5 +79,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+<<<<<<< HEAD
           cache-from: type=gha
           cache-to: type=gha,mode=max
+=======
+          cache-from: |
+            type=gha,scope=dockerhub-main
+            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache
+          cache-to: |
+            type=gha,mode=max,scope=dockerhub-main
+            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache,mode=max
+          provenance: false
+>>>>>>> dev

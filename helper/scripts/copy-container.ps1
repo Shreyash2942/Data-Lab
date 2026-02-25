@@ -1,8 +1,11 @@
 Param(
   [string]$SourceName = "datalab",
   [string]$NewName = "",
+  [string]$Image = "shreyash42/data-lab:latest",
+  [switch]$UseSourceImage,
   [string[]]$ExtraPorts = @(),
-  [string]$UiHost = "localhost"
+  [string]$UiHost = "localhost",
+  [switch]$BindProjectFiles
 )
 
 Set-StrictMode -Version Latest
@@ -11,6 +14,7 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
   $PSNativeCommandUseErrorActionPreference = $false
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$lineEndingFixScript = Join-Path $repoRoot "helper\scripts\fix-line-endings.ps1"
 
 function Test-ContainerExists {
   Param([string]$Name)
@@ -81,6 +85,20 @@ function Get-FreeHostPort {
   throw "Could not find a free host port for preferred base $PreferredPort."
 }
 
+function Invoke-LinuxLineEndingFix {
+  Param([string]$RootPath)
+  if (-not (Test-Path $lineEndingFixScript)) {
+    Write-Warning "Line-ending fixer not found at '$lineEndingFixScript'. Skipping normalization."
+    return
+  }
+
+  Write-Host "Normalizing LF line endings for Linux scripts under '$RootPath'..."
+  & powershell -ExecutionPolicy Bypass -File $lineEndingFixScript -Root $RootPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to normalize line endings at '$RootPath'."
+  }
+}
+
 if (-not $NewName) {
   $NewName = Read-Host "New container name"
 }
@@ -88,22 +106,34 @@ if (-not $NewName) {
   throw "Container name is required."
 }
 
-$exists = docker container inspect $SourceName 2>$null
-if ($LASTEXITCODE -ne 0) {
-  throw "Source container '$SourceName' not found."
-}
+$resolvedImage = $Image
+if ($UseSourceImage) {
+  $exists = docker container inspect $SourceName 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Source container '$SourceName' not found."
+  }
 
-$image = (docker inspect -f "{{.Config.Image}}" $SourceName).Trim()
-if (-not $image) {
-  throw "Could not detect image from source container '$SourceName'."
+  $resolvedImage = (docker inspect -f "{{.Config.Image}}" $SourceName).Trim()
+  if (-not $resolvedImage) {
+    throw "Could not detect image from source container '$SourceName'."
+  }
+  Write-Host "Source container: $SourceName"
+  Write-Host "Using source image: $resolvedImage"
+} else {
+  if (-not $resolvedImage) {
+    throw "Image is required. Pass -Image <repo/image:tag>."
+  }
+  Write-Host "Pulling image: $resolvedImage"
+  docker pull $resolvedImage
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker pull failed for image '$resolvedImage'."
+  }
+  Write-Host "Using pulled image: $resolvedImage"
 }
-
-Write-Host "Source container: $SourceName"
-Write-Host "Using image: $image"
 
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
-  "9092:9092", "9870:9870", "8088:8088", "10000:10000",
+  "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
   "10001:10001", "9002:9002", "8082:8082", "8083:8083", "8084:8084", "8181:8181",
   "5432:5432", "27017:27017", "6379:6379"
 )
@@ -133,25 +163,29 @@ foreach ($mapping in $ExtraPorts) {
 
 $datalabDir = Join-Path $repoRoot "datalabcontainer"
 $stacksDir = Join-Path $repoRoot "stacks"
-$defaultVolumes = @(
-  "$datalabDir\app:/home/datalab/app",
-  "$stacksDir\python:/home/datalab/python",
-  "$stacksDir\spark:/home/datalab/spark",
-  "$stacksDir\airflow:/home/datalab/airflow",
-  "$stacksDir\dbt:/home/datalab/dbt",
-  "$stacksDir\terraform:/home/datalab/terraform",
-  "$stacksDir\scala:/home/datalab/scala",
-  "$stacksDir\java:/home/datalab/java",
-  "$stacksDir\hive:/home/datalab/hive",
-  "$stacksDir\hadoop:/home/datalab/hadoop",
-  "$stacksDir\kafka:/home/datalab/kafka",
-  "$stacksDir\mongodb:/home/datalab/mongodb",
-  "$stacksDir\postgres:/home/datalab/postgres",
-  "$stacksDir\redis:/home/datalab/redis",
-  "$stacksDir\hudi:/home/datalab/hudi",
-  "$stacksDir\iceberg:/home/datalab/iceberg",
-  "$stacksDir\delta:/home/datalab/delta"
-)
+$defaultVolumes = @()
+if ($BindProjectFiles) {
+  Invoke-LinuxLineEndingFix -RootPath $datalabDir
+  $defaultVolumes = @(
+    "$datalabDir\app:/home/datalab/app",
+    "$stacksDir\python:/home/datalab/python",
+    "$stacksDir\spark:/home/datalab/spark",
+    "$stacksDir\airflow:/home/datalab/airflow",
+    "$stacksDir\dbt:/home/datalab/dbt",
+    "$stacksDir\terraform:/home/datalab/terraform",
+    "$stacksDir\scala:/home/datalab/scala",
+    "$stacksDir\java:/home/datalab/java",
+    "$stacksDir\hive:/home/datalab/hive",
+    "$stacksDir\hadoop:/home/datalab/hadoop",
+    "$stacksDir\kafka:/home/datalab/kafka",
+    "$stacksDir\mongodb:/home/datalab/mongodb",
+    "$stacksDir\postgres:/home/datalab/postgres",
+    "$stacksDir\redis:/home/datalab/redis",
+    "$stacksDir\hudi:/home/datalab/hudi",
+    "$stacksDir\iceberg:/home/datalab/iceberg",
+    "$stacksDir\delta:/home/datalab/delta"
+  )
+}
 
 $collectedVolumes = @()
 while ($true) {
@@ -196,10 +230,13 @@ while (Test-ContainerExists $NewName) {
   }
 }
 
-$runtimeCopiesRoot = Join-Path $datalabDir "runtime-copies"
-$runtimeCopyDir = Join-Path $runtimeCopiesRoot $NewName
-New-Item -ItemType Directory -Force -Path $runtimeCopyDir | Out-Null
-$defaultVolumes += "${runtimeCopyDir}:/home/datalab/runtime"
+$runtimeCopyDir = $null
+if ($BindProjectFiles) {
+  $runtimeCopiesRoot = Join-Path $datalabDir "runtime-copies"
+  $runtimeCopyDir = Join-Path $runtimeCopiesRoot $NewName
+  New-Item -ItemType Directory -Force -Path $runtimeCopyDir | Out-Null
+  $defaultVolumes += "${runtimeCopyDir}:/home/datalab/runtime"
+}
 
 $portArgs = @()
 foreach ($p in $resolvedDefaultPorts) { $portArgs += @("-p", $p) }
@@ -230,7 +267,7 @@ $dockerArgs = @(
   "--label", "com.docker.compose.project=",
   "--label", "com.docker.compose.service=",
   "--label", "com.docker.compose.oneoff="
-) + $portArgs + $volumeArgs + $envArgs + @($image, "sleep", "infinity")
+) + $portArgs + $volumeArgs + $envArgs + @($resolvedImage, "sleep", "infinity")
 
 Write-Host "Starting copied container '$NewName'..."
 & docker @dockerArgs
@@ -244,11 +281,12 @@ cat > $uiMapFile <<'EOF'
 DATALAB_UI_HOST=$UiHost
 DATALAB_HOST_PORT_MAP=$hostPortMap
 EOF
+sed -i 's/\r$//' $uiMapFile 2>/dev/null || true
 chmod 644 $uiMapFile || true
 "@
 docker exec $NewName sh -lc $uiMapScript 2>$null | Out-Null
 
-Write-Output "Container $NewName started from image $image."
+Write-Output "Container $NewName started from image $resolvedImage."
 Write-Output "Published ports:"
 foreach ($p in $resolvedDefaultPorts) {
   Write-Output "  - $p"
@@ -261,7 +299,11 @@ if ($normalizedExtraPorts.Count -gt 0) {
 if ($collectedVolumes.Count -gt 0) {
   Write-Output "Mounted: $($collectedVolumes -join ', ')"
 }
-Write-Output "Runtime mount: ${runtimeCopyDir}:/home/datalab/runtime"
+if ($BindProjectFiles -and $runtimeCopyDir) {
+  Write-Output "Runtime mount: ${runtimeCopyDir}:/home/datalab/runtime"
+} else {
+  Write-Output "Mode: isolated (no auto bind mounts from this project)."
+}
 
 $serviceMap = @{
   8080  = @{ Name = "Airflow";         Path = "/" }
@@ -272,7 +314,6 @@ $serviceMap = @{
   8088  = @{ Name = "YARN ResourceMgr";Path = "/" }
   10001 = @{ Name = "HiveServer2 HTTP";Path = "/cliservice" }
   9002  = @{ Name = "Kafka UI";        Path = "/" }
-  8082  = @{ Name = "Adminer UI";      Path = "/" }
   8083  = @{ Name = "Mongo Express UI";Path = "/" }
   8084  = @{ Name = "Redis Commander UI"; Path = "/" }
   8181  = @{ Name = "pgAdmin UI"; Path = "/" }
@@ -288,6 +329,14 @@ foreach ($mapping in $resolvedDefaultPorts) {
     Write-Output ("  - {0}: http://{1}:{2}{3}" -f $entry.Name, $UiHost, $hostPort, $entry.Path)
   }
 }
+foreach ($mapping in $resolvedDefaultPorts) {
+  $parts = $mapping.Split(":")
+  $hostPort = [int]$parts[0]
+  $containerPort = [int]$parts[1]
+  if ($containerPort -eq 9083) {
+    Write-Output ("  - Hive Metastore: thrift://{0}:{1}" -f $UiHost, $hostPort)
+    break
+  }
+}
 
-Write-Output "Tip: powershell -ExecutionPolicy Bypass -File .\helper\scripts\ui-services.ps1 -Name $NewName -UiHost $UiHost"
 Write-Output "Enter with: docker exec -it -w / $NewName bash"

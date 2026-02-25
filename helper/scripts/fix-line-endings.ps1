@@ -10,7 +10,7 @@ $rootPath = (Resolve-Path $Root).Path
 $targetFiles = @()
 $targetFiles += Get-ChildItem -Path $rootPath -Recurse -File -Include *.sh -ErrorAction SilentlyContinue
 $targetFiles += Get-ChildItem -Path (Join-Path $rootPath "app") -File |
-  Where-Object { $_.Name -in @("start", "stop", "restart", "datalab-check") }
+  Where-Object { $_.Name -in @("start", "stop", "restart", "datalab-check", "ui_services") }
 $targetFiles += Get-ChildItem -Path (Join-Path $rootPath "app\\bin") -File -ErrorAction SilentlyContinue
 
 $targetFiles = $targetFiles | Sort-Object -Property FullName -Unique
