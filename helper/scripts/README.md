@@ -34,13 +34,9 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
   ```powershell
   powershell -File .\helper\scripts\build-and-run.ps1 -Name datalab -Image data-lab:latest
   ```
-- PowerShell copy container (asks new name and bind mounts, reuses source image):
+- PowerShell copy container (asks new name and bind mounts, pulls Docker Hub image by default):
   ```powershell
-  powershell -File .\helper\scripts\copy-container.ps1 -SourceName datalab
-  ```
-- PowerShell UI links (dynamic mapped host ports):
-  ```powershell
-  powershell -File .\helper\scripts\ui-services.ps1 -Name datalab -UiHost localhost
+  powershell -File .\helper\scripts\copy-container.ps1 -Image shreyash42/data-lab:latest
   ```
 - PowerShell DB access guide (dynamic ports + prompted credentials + IDE values):
   ```powershell
@@ -67,17 +63,16 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
 - `run-standalone-interactive.sh` (bash): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Uses `shreyash42/data-lab:latest` unless `IMAGE` is set. Pass `EXTRA_PORTS` if you want additional ports.
 - `run-standalone-interactive.ps1` (PowerShell): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Uses `shreyash42/data-lab:latest` unless `-Image` is provided. Pass `-ExtraPorts` if you want additional ports. Uses the repo root (two levels up from `helper/scripts/`) for default mounts.
 - `build-and-run.ps1` (PowerShell): Builds the image (unless `-SkipBuild`), then runs a non-stackable container with standard ports and default repo mounts. Supports `-ExtraPorts` and `-ExtraVolumes`, and validates host port conflicts before run.
-- `copy-container.ps1` (PowerShell): Uses the image from an existing container (default `datalab`), asks for a new container name and bind mounts, and starts another non-stackable container. Default UI ports auto-shift to the next free host port when needed to avoid conflicts.
+- `copy-container.ps1` (PowerShell): Pulls and uses `shreyash42/data-lab:latest` by default, asks for a new container name and bind mounts, and starts another non-stackable container. Use `-UseSourceImage -SourceName <name>` if you want to copy from an existing container image instead. Default UI ports auto-shift to the next free host port when needed to avoid conflicts.
 - `run-default.sh` (bash): Quick run with standard port bindings; accepts extra args after the image name.
 - `run-default.ps1` (PowerShell): Quick run equivalent for Windows; first arg is container name, remaining args are passed to `docker run`.
-- `ui-services.ps1` (PowerShell): Prints all UI URLs using Docker port mappings for the selected running container.
 - `db-access-guide.ps1` (PowerShell): Prompts for DB usernames/passwords and prints exact browser + IDE connection values (PostgreSQL, MongoDB, Redis) using real mapped host ports.
 - `start-pgadmin.ps1` (PowerShell): Starts an official `dpage/pgadmin4` container, preconfigures a server entry that points to the mapped PostgreSQL port of your target Data Lab container, and prints login details.
 
 ## Notes
 
 - Default image: `data-lab:latest` (or the published `shreyash42/data-lab:latest`).
-- Default ports published: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 10000, 10001, 9002, 8082, 8083, 8084, 8181, 5432, 27017, 6379.
+- Default ports published: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 9083, 10000, 10001, 9002, 8082, 8083, 8084, 8181, 5432, 27017, 6379.
 - Default mounts map repo folders (`datalabcontainer/app`, `datalabcontainer/runtime`, and all `stacks/*`) into `/home/datalab/...`.
 - On macOS/Linux: run the `chmod +x` commands once to make the bash scripts executable.
 

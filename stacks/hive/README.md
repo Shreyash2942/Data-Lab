@@ -1,6 +1,6 @@
 # Hive Layer
 
-Hive ships with an embedded Derby metastore and warehouse path (`~/runtime/hive/warehouse`). Prepare the CLI from inside the container with:
+Hive ships with an embedded Derby metastore (thrift endpoint `thrift://localhost:9083`) and an HDFS warehouse path (`hdfs:///hive/warehouse`). Prepare the CLI from inside the container with:
 
 ## In-container Hive access helper
 
@@ -21,7 +21,7 @@ bash ~/app/start   # choose option 3 to prep the metastore
 bash ~/app/stop    # stop Spark/Hadoop/Hive/Kafka when finished
 ```
 
-Use option 6 (or `~/app/start --start-core`) if you want the entire Spark/Hadoop/Hive/Kafka stack in one go. That command ensures Hadoop is running, creates any missing metastore tables, and drops you back into the shell so you can run Hive directly. From any directory in the container you can now type:
+Use option 6 (or `~/app/start --start-core`) if you want the entire Spark/Hadoop/Hive/Kafka stack in one go. That command ensures Hadoop is running, creates any missing metastore tables, starts the Hive metastore service on port `9083`, and drops you back into the shell so you can run Hive directly. From any directory in the container you can now type:
 
 - `hivelegacy` - wraps `~/app/scripts/hive/legacy_cli.sh`, auto-connects to HS2, and shows prompts like `hive (default)>`.
 - `hivecli` - wraps `~/app/scripts/hive/cli.sh`, launching Beeline against the HTTP HS2 endpoint (default `localhost:10001/cliservice`, `auth=noSasl`, user `datalab`).

@@ -31,6 +31,44 @@ spark.read.format("delta").load("~/runtime/lakehouse/delta_tables/customers").sh
 PY
 ```
 
+## Catalog + registration (multi-language, multi-engine)
+
+Delta data files can be written directly by path, or registered as catalog tables.
+
+Data Lab defaults:
+
+- Storage path root: `~/runtime/lakehouse/delta_tables`
+- Demo table path: `~/runtime/lakehouse/delta_tables/customers`
+- Delta Spark runtime is bundled in this image.
+
+### Do I need to create database/table first?
+
+- Path-based Delta write (`.save(path)`): no database or table pre-creation required.
+- Named table write (`saveAsTable` / `CREATE TABLE ... USING DELTA`):
+  - Database/schema: create first if it does not exist.
+  - Table: no pre-create needed if you use `CREATE TABLE IF NOT EXISTS ... USING DELTA LOCATION ...` or writer APIs that create it.
+
+Example registration from Spark SQL:
+
+```sql
+CREATE DATABASE IF NOT EXISTS lakehouse;
+CREATE TABLE IF NOT EXISTS lakehouse.customers
+USING DELTA
+LOCATION '/home/datalab/runtime/lakehouse/delta_tables/customers';
+```
+
+### Spark languages (Python, Scala, Java)
+
+Delta format usage is the same across Spark languages:
+
+- Write by path: `df.write.format("delta").mode("append").save(path)`
+- Read by path: `spark.read.format("delta").load(path)`
+- Register table: `CREATE TABLE ... USING DELTA LOCATION ...`
+
+### Other engines
+
+Delta can also be queried from engines like Flink/Trino, but those connectors/catalogs are not preconfigured in this repo. If you add one, keep the same Delta table path and configure that engine's catalog against it.
+
 ## Notes
 
 - Spark should be running (option 1/6) so the session picks up the Delta jars already placed under `/opt/spark/jars`.

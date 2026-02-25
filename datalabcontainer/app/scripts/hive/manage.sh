@@ -10,6 +10,9 @@ HIVE_HS2_LOG_FILE="${HIVE_LOG_DIR}/hiveserver2-http.log"
 # Hive writes both http and legacy PID files; manage both to avoid stale blocks.
 HIVE_HS2_HTTP_PID_FILE="${HIVE_PID_DIR}/hiveserver2-http.pid"
 HIVE_HS2_LEGACY_PID_FILE="${HIVE_PID_DIR}/hiveserver2.pid"
+HIVE_METASTORE_PORT="${HIVE_METASTORE_PORT:-9083}"
+HIVE_METASTORE_LOG_FILE="${HIVE_LOG_DIR}/metastore.log"
+HIVE_METASTORE_PID_FILE="${HIVE_PID_DIR}/metastore.pid"
 HIVE_SCRIPTS_DIR="${WORKSPACE}/app/scripts/hive"
 HIVE_BEELINE_CLI="${HIVE_SCRIPTS_DIR}/cli.sh"
 
@@ -53,7 +56,7 @@ while time.time() < deadline:
     else:
         s.close()
         sys.exit(0)
-print(f"[!] HiveServer2 did not open {host}:{port} within 60s", file=sys.stderr)
+print(f"[!] {os.environ.get('HS2_WAIT_SERVICE', 'service')} did not open {host}:{port} within 120s", file=sys.stderr)
 sys.exit(1)
 PY
 }
@@ -94,6 +97,65 @@ hive::cleanup_stale_hs2() {
   fi
 }
 
+hive::cleanup_stale_metastore() {
+  if [[ -f "${HIVE_METASTORE_PID_FILE}" ]] && ! kill -0 "$(cat "${HIVE_METASTORE_PID_FILE}")" 2>/dev/null; then
+    rm -f "${HIVE_METASTORE_PID_FILE}"
+  fi
+
+  if pgrep -f "HiveMetaStore" >/dev/null 2>&1; then
+    if ! hive::port_open localhost "${HIVE_METASTORE_PORT}"; then
+      echo "[*] Removing stale Hive metastore processes..."
+      pkill -f "HiveMetaStore" || true
+      sleep 1
+      rm -f "${HIVE_METASTORE_PID_FILE}"
+    fi
+  fi
+}
+
+hive::metastore_running() {
+  if hive::port_open localhost "${HIVE_METASTORE_PORT}"; then
+    return 0
+  fi
+  if [[ -f "${HIVE_METASTORE_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_METASTORE_PID_FILE}")" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+hive::start_metastore() {
+  hive::cleanup_stale_metastore
+
+  if hive::metastore_running; then
+    if hive::port_open localhost "${HIVE_METASTORE_PORT}"; then
+      local running_pid="<unknown>"
+      if [[ -f "${HIVE_METASTORE_PID_FILE}" ]]; then
+        running_pid="$(cat "${HIVE_METASTORE_PID_FILE}")"
+      fi
+      echo "[*] Hive metastore already running (PID ${running_pid})."
+      return
+    fi
+    echo "[*] Hive metastore PID detected but port ${HIVE_METASTORE_PORT} is closed; restarting..."
+    hive::stop_metastore || true
+  fi
+
+  echo "[*] Starting Hive metastore (Thrift) on 0.0.0.0:${HIVE_METASTORE_PORT}..."
+  HIVE_CONF_DIR="${HIVE_HOME}/conf" \
+  HADOOP_CONF_DIR="${HADOOP_HOME}/etc/hadoop" \
+  HIVE_LOG_DIR="${HIVE_LOG_DIR}" \
+  METASTORE_PID_DIR="${HIVE_PID_DIR}" \
+  JAVA_HOME="${JAVA_HOME}" \
+    nohup "${HIVE_HOME}/bin/hive" --service metastore -p "${HIVE_METASTORE_PORT}" \
+      > "${HIVE_METASTORE_LOG_FILE}" 2>&1 &
+  echo $! > "${HIVE_METASTORE_PID_FILE}"
+
+  HS2_WAIT_SERVICE="Hive metastore" hive::wait_for_port localhost "${HIVE_METASTORE_PORT}" "Hive metastore" || {
+    echo "[!] Hive metastore failed to open port ${HIVE_METASTORE_PORT}. Recent log lines:" >&2
+    tail -n 40 "${HIVE_METASTORE_LOG_FILE}" >&2 || true
+    return 1
+  }
+  echo "[+] Hive metastore listening (log: ${HIVE_METASTORE_LOG_FILE})."
+}
+
 hive::hs2_running() {
   if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_HTTP_PID_FILE}")" 2>/dev/null; then
     return 0
@@ -103,6 +165,9 @@ hive::hs2_running() {
 
 hive::start_hs2() {
   hive::cleanup_stale_hs2
+  if ! hive::port_open localhost "${HIVE_METASTORE_PORT}"; then
+    hive::start_metastore
+  fi
 
   if hive::hs2_running; then
     if hive::port_open localhost "${HIVE_SERVER2_HTTP_PORT}"; then
@@ -130,10 +195,11 @@ hive::start_hs2() {
       --hiveconf hive.server2.transport.mode=http \
       --hiveconf hive.server2.thrift.http.port="${HIVE_SERVER2_HTTP_PORT}" \
       --hiveconf hive.server2.thrift.http.path="${HIVE_SERVER2_HTTP_PATH}" \
+      --hiveconf hive.notification.event.poll.interval=0 \
       --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
       > "${HIVE_HS2_LOG_FILE}" 2>&1 &
   echo $! > "${HIVE_HS2_HTTP_PID_FILE}"
-  if ! hive::wait_for_port localhost "${HIVE_SERVER2_HTTP_PORT}"; then
+  if ! HS2_WAIT_SERVICE="HiveServer2" hive::wait_for_port localhost "${HIVE_SERVER2_HTTP_PORT}" "HiveServer2"; then
     echo "[!] HiveServer2 failed to open port ${HIVE_SERVER2_HTTP_PORT}. Recent log lines:" >&2
     tail -n 40 "${HIVE_HS2_LOG_FILE}" >&2 || true
     return 1
@@ -165,8 +231,26 @@ hive::stop_hs2() {
   rm -f "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"
 }
 
+hive::stop_metastore() {
+  if ! hive::metastore_running; then
+    echo "[*] Hive metastore is not running."
+    return
+  fi
+  echo "[*] Stopping Hive metastore..."
+  local pid=""
+  if [[ -f "${HIVE_METASTORE_PID_FILE}" ]]; then
+    pid="$(cat "${HIVE_METASTORE_PID_FILE}")"
+  fi
+  if [[ -n "${pid}" ]]; then
+    kill "${pid}" 2>/dev/null || true
+  fi
+  pkill -f "HiveMetaStore" 2>/dev/null || true
+  rm -f "${HIVE_METASTORE_PID_FILE}"
+}
+
 hive::stop() {
   hive::stop_hs2
+  hive::stop_metastore
 }
 
 hive::verify_query() {
@@ -180,6 +264,7 @@ hive::prepare_cli() {
   hadoop::ensure_running
   hive::ensure_dirs
   hive::init_metastore_if_needed
+  hive::start_metastore
   hive::start_hs2
   hive::verify_query || true
   cat <<'EOF'

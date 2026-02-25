@@ -28,6 +28,7 @@ $ports = @(
   "9090:9090",   # Spark master UI
   "9092:9092",   # Kafka broker
   "9870:9870",   # HDFS UI
+  "9083:9083",   # Hive metastore thrift
   "10000:10000", # HiveServer2
   "10001:10001", # HiveServer2 HTTP
   "5432:5432",   # PostgreSQL

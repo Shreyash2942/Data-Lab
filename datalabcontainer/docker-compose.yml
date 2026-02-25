@@ -65,6 +65,10 @@ services:
         published: 10001
         protocol: tcp
         name: hiveserver2-http
+      - target: 9083    # Hive metastore thrift
+        published: 9083
+        protocol: tcp
+        name: hive-metastore
       - target: 5432    # PostgreSQL
         published: 5432
         protocol: tcp
