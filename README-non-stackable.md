@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\ui-services.ps1 -Name 
 ```
 
 ## Notes
-- Default ports: 8080 (Airflow), 4040/9090/18080 (Spark), 9092 (Kafka), 9870/8088 (Hadoop), 10000/10001 (Hive), 9002 (Kafdrop), 8082 (Adminer), 8083 (Mongo Express), 8084 (Redis Commander), 8181 (pgAdmin), 5432 (PostgreSQL), 27017 (MongoDB), 6379 (Redis).
+- Default ports: 8080 (Airflow), 4040/9090/18080 (Spark), 9092 (Kafka), 9870/8088 (Hadoop), 10000/10001 (Hive), 9002 (Kafdrop), 8083 (Mongo Express), 8084 (Redis Commander), 8181 (pgAdmin), 5432 (PostgreSQL), 27017 (MongoDB), 6379 (Redis).
 - Default mounts map the repo folders into `/home/datalab/...` plus `runtime` for state. Add more with `EXTRA_VOLUMES` (bash) or `-ExtraVolumes` (PowerShell).
 - Enter the container: `docker exec -it -w / datalab bash` then `su - datalab` for the dev user.
 - Start services from anywhere inside the container with `datalab_app` (equivalent to `bash /home/datalab/app/start`).
@@ -67,15 +67,15 @@ Per-database guides:
 
 Default `datalab` browser links:
 
-- Adminer (PostgreSQL): `http://localhost:8082/`
 - Mongo Express (MongoDB): `http://localhost:8083/`
 - Redis Commander (Redis): `http://localhost:8084/`
+- pgAdmin (PostgreSQL): `http://localhost:8181/`
 
 Copied container example (dynamic mapped ports):
 
-- Adminer: `http://localhost:8085/`
-- Mongo Express: `http://localhost:8086/`
-- Redis Commander: `http://localhost:8087/`
+- Mongo Express: `http://localhost:8085/`
+- Redis Commander: `http://localhost:8086/`
+- pgAdmin: `http://localhost:8087/`
 
 Use dynamic command any time:
 
@@ -124,7 +124,7 @@ docker run -d --name datalab \
   --label com.docker.compose.oneoff= \
   -p 8080:8080 -p 4040:4040 -p 9090:9090 -p 18080:18080 \
   -p 9092:9092 -p 9870:9870 -p 8088:8088 -p 10000:10000 -p 10001:10001 -p 9002:9002 \
-  -p 8082:8082 -p 8083:8083 -p 8084:8084 \
+  -p 8083:8083 -p 8084:8084 -p 8181:8181 \
   -p 5432:5432 -p 27017:27017 -p 6379:6379 \
   shreyash42/data-lab:latest \
   sleep infinity
@@ -141,7 +141,7 @@ docker run -d --name datalab `
   --label com.docker.compose.oneoff= `
   -p 8080:8080 -p 4040:4040 -p 9090:9090 -p 18080:18080 `
   -p 9092:9092 -p 9870:9870 -p 8088:8088 -p 10000:10000 -p 10001:10001 -p 9002:9002 `
-  -p 8082:8082 -p 8083:8083 -p 8084:8084 `
+  -p 8083:8083 -p 8084:8084 -p 8181:8181 `
   -p 5432:5432 -p 27017:27017 -p 6379:6379 `
   shreyash42/data-lab:latest `
   sleep infinity

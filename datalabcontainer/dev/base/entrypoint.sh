@@ -15,4 +15,13 @@ mkdir -p \
 # Fix ownership for the shared mounts and Airflow home.
 chown -R datalab:datalab "${RUNTIME_ROOT}" "${AIRFLOW_HOME}" 2>/dev/null || true
 
+# Normalize CRLF for host-mounted scripts (Windows checkouts) to avoid
+# `/usr/bin/env: 'bash\r': No such file or directory` at runtime.
+if [ -d "/home/datalab/app" ]; then
+  find /home/datalab/app -type f \( -name "*.sh" -o -name "start" -o -name "stop" -o -name "restart" -o -name "ui_services" -o -name "datalab-check" -o -name "hive" -o -name "hivecli" -o -name "hivelegacy" -o -name "spark-submit" -o -name "spark-sql" \) \
+    -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+  find /home/datalab/app/bin -type f -exec chmod +x {} \; 2>/dev/null || true
+  find /home/datalab/app/scripts -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+fi
+
 exec "$@"

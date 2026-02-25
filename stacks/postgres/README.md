@@ -31,13 +31,10 @@ This prompts for username/password and prints:
    ```
 4. In that output, find:
    - `PostgreSQL (DB): postgresql://localhost:<port>`
-   - `Adminer UI: http://localhost:<port>/`
-5. Open the `Adminer UI` URL in browser, then login with:
-   - System: `PostgreSQL`
-   - Server: `localhost`
-   - Username: `admin`
+   - `pgAdmin UI: http://localhost:<port>/`
+5. Open the `pgAdmin UI` URL in browser and login with:
+   - Email: `admin@admin.com`
    - Password: `admin`
-   - Database: `datalab`
 
 ## pgAdmin UI (inside the same `datalab` container)
 
@@ -66,7 +63,7 @@ Use this if you want pgAdmin without any extra container.
 
 ## pgAdmin UI (separate container, optional)
 
-Use this when you want the full pgAdmin experience instead of Adminer.
+Use this when you want the full pgAdmin experience.
 
 1. Start PostgreSQL in your target container:
    ```bash

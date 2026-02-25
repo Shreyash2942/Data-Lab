@@ -62,7 +62,6 @@ $container = Resolve-RunningContainer -Primary $Name -Secondary $FallbackName
 $pgPort = Get-MappedPort -Container $container -ContainerPort 5432
 $mongoPort = Get-MappedPort -Container $container -ContainerPort 27017
 $redisPort = Get-MappedPort -Container $container -ContainerPort 6379
-$adminerPort = Get-MappedPort -Container $container -ContainerPort 8082
 $mongoExpressLegacyPort = Get-MappedPort -Container $container -ContainerPort 8083
 $redisCommanderPort = Get-MappedPort -Container $container -ContainerPort 8084
 $pgAdminInContainerPort = Get-MappedPort -Container $container -ContainerPort 8181
@@ -91,12 +90,11 @@ $redisPassword = Prompt-WithDefault -Label "Redis password" -DefaultValue "admin
 Write-Output ""
 
 Write-Output "=== Browser UIs ==="
-if ($adminerPort) { Write-Output ("Adminer:                http://{0}:{1}/" -f $UiHost, $adminerPort) }
 if ($mongoExpressLegacyPort) { Write-Output ("Mongo Express (legacy): http://{0}:{1}/" -f $UiHost, $mongoExpressLegacyPort) }
 if ($mongoExpressModernPort) { Write-Output ("Mongo Express (modern): http://{0}:{1}/" -f $UiHost, $mongoExpressModernPort) }
 if ($redisCommanderPort) { Write-Output ("Redis Commander:        http://{0}:{1}/" -f $UiHost, $redisCommanderPort) }
 if ($pgAdminPort) { Write-Output ("pgAdmin:                http://{0}:{1}/" -f $UiHost, $pgAdminPort) }
-if (-not $adminerPort -and -not $mongoExpressLegacyPort -and -not $mongoExpressModernPort -and -not $redisCommanderPort -and -not $pgAdminPort) {
+if (-not $mongoExpressLegacyPort -and -not $mongoExpressModernPort -and -not $redisCommanderPort -and -not $pgAdminPort) {
   Write-Output "No DB UI ports are currently published."
 }
 

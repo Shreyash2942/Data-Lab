@@ -15,6 +15,13 @@ BEELINE_VERBOSE="${HIVE_CLI_VERBOSE:-false}"
 
 JDBC_URL="jdbc:hive2://${HS2_HOST}:${HS2_PORT}/${HS2_DB};transportMode=http;httpPath=${HS2_HTTP_PATH};auth=${HS2_AUTH}"
 
+if [[ -z "${USER:-}" ]]; then
+  USER="$(id -un 2>/dev/null || echo datalab)"
+fi
+export USER
+export TMPDIR="${TMPDIR:-/tmp/${USER}}"
+mkdir -p "${TMPDIR}" 2>/dev/null || true
+
 if ! HS2_PROBE_HOST="${HS2_HOST}" HS2_PROBE_PORT="${HS2_PORT}" python3 - <<'PY' >/dev/null 2>&1; then
 import os, socket, sys
 host = os.environ["HS2_PROBE_HOST"]

@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
-exec bash "${HOME}/app/scripts/hive/cli.sh" "$@"
+set -euo pipefail
+APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "${1:-}" == "--version" || "${1:-}" == "-version" ]]; then
+  exec /opt/hive/bin/hive --version
+fi
+exec bash "${APP_ROOT}/scripts/hive/cli.sh" "$@"

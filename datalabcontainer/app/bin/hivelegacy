@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-exec bash "${HOME}/app/scripts/hive/legacy_cli.sh" "$@"
+set -euo pipefail
+APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec bash "${APP_ROOT}/scripts/hive/legacy_cli.sh" "$@"

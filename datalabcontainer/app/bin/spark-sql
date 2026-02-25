@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+has_master=0
+for arg in "$@"; do
+  if [[ "${arg}" == "--master" ]]; then
+    has_master=1
+    break
+  fi
+done
+
+master_args=()
+if [[ "${has_master}" -eq 0 ]]; then
+  master_args=(--master "local[*]")
+fi
+
+exec bash /home/datalab/app/bin/spark-submit \
+  "${master_args[@]}" \
+  --class org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver \
+  "$@"

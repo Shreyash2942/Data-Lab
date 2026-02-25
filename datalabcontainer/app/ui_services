@@ -178,6 +178,28 @@ hive_http_endpoint() {
   container_effective_endpoint 10001 "jdbc:hive2"
 }
 
+hive_binary_endpoint() {
+  container_effective_endpoint 10000 "jdbc:hive2"
+}
+
+default_bronze_path() {
+  printf '%s' "${DATALAB_BRONZE_BASE_PATH:-/medilake/bronze}"
+}
+
+default_silver_path() {
+  printf '%s' "${DATALAB_SILVER_BASE_PATH:-/medilake/silver}"
+}
+
+read_hive_warehouse_dir() {
+  local warehouse
+  warehouse="$(read_hive_site_property "hive.metastore.warehouse.dir" || true)"
+  if [[ -n "${warehouse}" ]]; then
+    printf '%s' "${warehouse}"
+    return 0
+  fi
+  printf '%s' "/user/hive/warehouse"
+}
+
 effective_host_port() {
   local container_port="$1"
   local mapped
@@ -264,13 +286,14 @@ show_redis_connect_info() {
 }
 
 show_hive_connect_info() {
-  local hive_db hive_user hive_pass jdbc_endpoint hive_hostport hive_host hive_port jdbc_url
+  local hive_db hive_user hive_pass jdbc_endpoint jdbc_binary_endpoint hive_hostport hive_host hive_port jdbc_url
   local metastore_uri_default metastore_uri hive_site_path warehouse_default warehouse_dir
   local metastore_uri_internal metastore_endpoint_effective
 
   print_section "Hive Connect"
   echo "Press Enter to keep defaults."
   jdbc_endpoint="$(hive_http_endpoint)"
+  jdbc_binary_endpoint="$(hive_binary_endpoint)"
   hive_hostport="${jdbc_endpoint#jdbc:hive2://}"
   if [[ "${hive_hostport}" == "${jdbc_endpoint}" ]] || [[ "${hive_hostport}" != *:* ]]; then
     hive_host="${UI_HOST}"
@@ -302,6 +325,10 @@ show_hive_connect_info() {
   print_kv "Hive metastore URI" "${metastore_uri}"
   print_kv "Metastore URI (hive-site.xml)" "${metastore_uri_internal}"
   print_kv "Metastore endpoint (mapped)" "${metastore_endpoint_effective}"
+  print_kv "HiveServer2 Thrift (binary)" "$(container_effective_endpoint 10000 "thrift")"
+  print_kv "Hive JDBC (binary)" "${jdbc_binary_endpoint}"
+  print_kv "Hive JDBC (HTTP)" "${jdbc_endpoint}"
+  print_kv "HiveServer2 HTTP URL" "$(container_effective_url 10001 "/cliservice")"
   print_kv "hive-site.xml path" "${hive_site_path}"
   print_kv "Hive warehouse dir" "${warehouse_dir}"
   print_kv "Host" "${hive_host}"
@@ -315,7 +342,7 @@ show_hive_connect_info() {
   fi
   print_kv "Auth" "noSasl"
   print_kv "HTTP Path" "cliservice"
-  print_kv "JDBC URL" "${jdbc_url}"
+  print_kv "JDBC URL (HTTP)" "${jdbc_url}"
   print_section "Beeline Examples"
   echo "  beeline -u \"${jdbc_url}\" -n \"${hive_user}\""
   echo "  beeline -u \"${jdbc_url}\" -n \"${hive_user}\" -p \"${hive_pass}\""
@@ -629,10 +656,16 @@ container_effective_endpoint() {
 print_ui_block_host() {
   local container="$1"
   print_row "HDFS FS URI" "$(read_fs_defaultfs)"
+  print_row "Bronze Base Path" "$(default_bronze_path)"
+  print_row "Silver Base Path" "$(default_silver_path)"
   print_row "Spark RPC" "$(mapped_endpoint "${container}" 7077 "spark")"
   print_row "Kafka Broker" "$(mapped_endpoint "${container}" 9092 "kafka")"
-  print_row "Hive JDBC" "$(hive_http_endpoint)"
+  print_row "Hive JDBC HTTP" "$(container_effective_endpoint 10001 "jdbc:hive2")"
+  print_row "Hive JDBC Binary" "$(container_effective_endpoint 10000 "jdbc:hive2")"
+  print_row "HiveServer2 Thrift" "$(mapped_endpoint "${container}" 10000 "thrift")"
   print_row "Hive Metastore" "$(mapped_endpoint "${container}" 9083 "thrift")"
+  print_row "Hive Config Path" "$(read_hive_site_path)"
+  print_row "Hive Warehouse Dir" "$(read_hive_warehouse_dir)"
   print_row "Airflow" "$(mapped_url "${container}" 8080 "/")"
   print_row "Spark Master" "$(mapped_url "${container}" 9090 "/")"
   print_row "Spark History" "$(mapped_url "${container}" 18080 "/")"
@@ -651,10 +684,16 @@ print_ui_block_host() {
 
 print_ui_block_container() {
   print_row "HDFS FS URI" "$(read_fs_defaultfs)"
+  print_row "Bronze Base Path" "$(default_bronze_path)"
+  print_row "Silver Base Path" "$(default_silver_path)"
   print_row "Spark RPC" "$(container_effective_endpoint 7077 "spark")"
   print_row "Kafka Broker" "$(container_effective_endpoint 9092 "kafka")"
-  print_row "Hive JDBC" "$(hive_http_endpoint)"
+  print_row "Hive JDBC HTTP" "$(hive_http_endpoint)"
+  print_row "Hive JDBC Binary" "$(hive_binary_endpoint)"
+  print_row "HiveServer2 Thrift" "$(container_effective_endpoint 10000 "thrift")"
   print_row "Hive Metastore" "$(container_effective_endpoint 9083 "thrift")"
+  print_row "Hive Config Path" "$(read_hive_site_path)"
+  print_row "Hive Warehouse Dir" "$(read_hive_warehouse_dir)"
   print_row "Airflow" "$(container_effective_url 8080 "/")"
   print_row "Spark Master" "$(container_effective_url 9090 "/")"
   print_row "Spark History" "$(container_effective_url 18080 "/")"
@@ -678,6 +717,7 @@ if datalab::inside_container; then
     echo
     echo "Note: Hive Metastore/PostgreSQL/MongoDB/Redis entries are service endpoints, not HTTP web UIs."
     echo "Hive defaults: auth=noSasl user=datalab password=(blank) db=default httpPath=cliservice."
+    echo "Hive ports: metastore=9083, hs2-thrift=10000, hs2-http=10001/cliservice."
     echo
     if [[ -n "${DATALAB_HOST_PORT_MAP}" ]]; then
       echo "Showing host-mapped ports from container env."
@@ -715,3 +755,4 @@ print_ui_block_host "${target_container}"
 echo
 echo "Note: Hive Metastore/PostgreSQL/MongoDB/Redis entries are service endpoints, not HTTP web UIs."
 echo "Hive defaults: auth=noSasl user=datalab password=(blank) db=default httpPath=cliservice."
+echo "Hive ports: metastore=9083, hs2-thrift=10000, hs2-http=10001/cliservice."
