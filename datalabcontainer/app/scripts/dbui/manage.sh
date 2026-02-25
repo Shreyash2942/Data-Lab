@@ -9,14 +9,8 @@ DBUI_BASE="${RUNTIME_ROOT}/dbui"
 DBUI_PID_DIR="${DBUI_BASE}/pids"
 DBUI_LOG_DIR="${DBUI_BASE}/logs"
 
-ADMINER_PORT="${ADMINER_PORT:-8082}"
 MONGO_EXPRESS_PORT="${MONGO_EXPRESS_PORT:-8083}"
 REDIS_COMMANDER_PORT="${REDIS_COMMANDER_PORT:-8084}"
-
-DBUI_ADMINER_DIR="${DBUI_BASE}/adminer"
-DBUI_ADMINER_FILE="${DBUI_ADMINER_DIR}/index.php"
-DBUI_ADMINER_PID_FILE="${DBUI_PID_DIR}/adminer.pid"
-DBUI_ADMINER_LOG_FILE="${DBUI_LOG_DIR}/adminer.log"
 
 DBUI_MONGO_EXPRESS_PID_FILE="${DBUI_PID_DIR}/mongo-express.pid"
 DBUI_MONGO_EXPRESS_LOG_FILE="${DBUI_LOG_DIR}/mongo-express.log"
@@ -25,13 +19,12 @@ DBUI_REDIS_COMMANDER_PID_FILE="${DBUI_PID_DIR}/redis-commander.pid"
 DBUI_REDIS_COMMANDER_LOG_FILE="${DBUI_LOG_DIR}/redis-commander.log"
 
 dbui::ensure_dirs() {
-  mkdir -p "${DBUI_BASE}" "${DBUI_PID_DIR}" "${DBUI_LOG_DIR}" "${DBUI_ADMINER_DIR}"
+  mkdir -p "${DBUI_BASE}" "${DBUI_PID_DIR}" "${DBUI_LOG_DIR}"
   if [[ "$(id -u)" -eq 0 ]]; then
     local app_user="${LAB_APP_USER:-datalab}"
     chown -R "${app_user}:${app_user}" "${DBUI_BASE}" 2>/dev/null || true
     # On Windows bind mounts chown may be ignored; keep directories writable for datalab.
-    chmod 777 "${DBUI_BASE}" "${DBUI_PID_DIR}" "${DBUI_LOG_DIR}" "${DBUI_ADMINER_DIR}" 2>/dev/null || true
-    [[ -f "${DBUI_ADMINER_PID_FILE}" ]] && chmod 666 "${DBUI_ADMINER_PID_FILE}" 2>/dev/null || true
+    chmod 777 "${DBUI_BASE}" "${DBUI_PID_DIR}" "${DBUI_LOG_DIR}" 2>/dev/null || true
     [[ -f "${DBUI_MONGO_EXPRESS_PID_FILE}" ]] && chmod 666 "${DBUI_MONGO_EXPRESS_PID_FILE}" 2>/dev/null || true
     [[ -f "${DBUI_REDIS_COMMANDER_PID_FILE}" ]] && chmod 666 "${DBUI_REDIS_COMMANDER_PID_FILE}" 2>/dev/null || true
   fi
@@ -77,37 +70,6 @@ dbui::wait_for_port() {
     sleep 1
   done
   return 1
-}
-
-dbui::download_adminer() {
-  if [[ -f "${DBUI_ADMINER_FILE}" ]]; then
-    return 0
-  fi
-  echo "[*] Downloading Adminer..."
-  curl -fsSL "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php" -o "${DBUI_ADMINER_FILE}"
-}
-
-dbui::start_adminer() {
-  dbui::cleanup_stale_pid "${DBUI_ADMINER_PID_FILE}"
-  if dbui::pid_alive "${DBUI_ADMINER_PID_FILE}" && dbui::port_open localhost "${ADMINER_PORT}"; then
-    echo "[*] Adminer already running (PID $(cat "${DBUI_ADMINER_PID_FILE}"))."
-    return 0
-  fi
-
-  if ! command -v php >/dev/null 2>&1; then
-    echo "[!] php is not installed; cannot start Adminer." >&2
-    return 1
-  fi
-
-  dbui::download_adminer
-  echo "[*] Starting Adminer on $(common::ui_url "${ADMINER_PORT}" "/")..."
-  nohup php -S 0.0.0.0:"${ADMINER_PORT}" -t "${DBUI_ADMINER_DIR}" > "${DBUI_ADMINER_LOG_FILE}" 2>&1 &
-  echo $! > "${DBUI_ADMINER_PID_FILE}"
-  if ! dbui::wait_for_port localhost "${ADMINER_PORT}"; then
-    echo "[!] Adminer failed to open port ${ADMINER_PORT}; see ${DBUI_ADMINER_LOG_FILE}" >&2
-    return 1
-  fi
-  echo "[+] Adminer started (PID $(cat "${DBUI_ADMINER_PID_FILE}"))."
 }
 
 dbui::start_mongo_express() {
@@ -197,7 +159,6 @@ dbui::start() {
   if ! dbui::port_open localhost "${REDIS_PORT:-6379}"; then
     echo "[*] Redis is not running on ${REDIS_PORT:-6379}. Start it with option 9 or 10."
   fi
-  dbui::start_adminer
   dbui::start_mongo_express
   dbui::start_redis_commander
   echo "[+] Database UIs started."
@@ -212,7 +173,6 @@ dbui::stop_one() {
 }
 
 dbui::stop() {
-  dbui::stop_one "${DBUI_ADMINER_PID_FILE}"
   dbui::stop_one "${DBUI_MONGO_EXPRESS_PID_FILE}"
   dbui::stop_one "${DBUI_REDIS_COMMANDER_PID_FILE}"
   echo "[+] Database UIs stopped."
@@ -230,7 +190,6 @@ dbui::status_line() {
 }
 
 dbui::status() {
-  dbui::status_line "Adminer" "${DBUI_ADMINER_PID_FILE}" "${ADMINER_PORT}"
   dbui::status_line "Mongo Express" "${DBUI_MONGO_EXPRESS_PID_FILE}" "${MONGO_EXPRESS_PORT}"
   dbui::status_line "Redis Commander" "${DBUI_REDIS_COMMANDER_PID_FILE}" "${REDIS_COMMANDER_PORT}"
 }

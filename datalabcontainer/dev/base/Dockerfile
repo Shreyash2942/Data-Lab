@@ -57,11 +57,11 @@ RUN echo "${HADOOP_TGZ_SHA512}  /tmp/hadoop.tgz" | sha512sum -c - \
     && mv /opt/hadoop-${HADOOP_VERSION_FULL} ${HADOOP_HOME} \
     && rm /tmp/hadoop.tgz
 
-# Hive
-ENV HIVE_VERSION=4.0.1 \
+# Hive (Spark 3.5.x compatibility)
+ENV HIVE_VERSION=2.3.9 \
     HIVE_HOME=/opt/hive
 
-ARG HIVE_TGZ_SHA256=2bf988a1ed17437b1103e367939c25a13f64d36cf6d1c3bef8c3f319f0067619
+ARG HIVE_TGZ_SHA256=1996327c96672e7ea8eaa8fc63972c75bc095287a32612e545e0e51c1622cb5c
 # Use the Apache archive to avoid 404s when the mirror rotates
 ADD https://archive.apache.org/dist/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz /tmp/hive.tgz
 RUN echo "${HIVE_TGZ_SHA256}  /tmp/hive.tgz" | sha256sum -c - \
@@ -185,6 +185,8 @@ COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/scala /home/${LAB_APP_USER}/
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/spark /home/${LAB_APP_USER}/spark
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/terraform /home/${LAB_APP_USER}/terraform
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/runtime /home/${LAB_APP_USER}/runtime
+RUN find /home/${LAB_APP_USER}/app/bin -type f -exec chmod +x {} \; \
+    && find /home/${LAB_APP_USER}/app/scripts -type f -name "*.sh" -exec chmod +x {} \;
 
 RUN install -d /etc/profile.d
 
@@ -220,7 +222,7 @@ RUN chmod 0644 /etc/profile.d/datalab-path.sh \
 RUN cat <<'EOF' >/etc/profile.d/hive-cli.sh
 alias beeline='/opt/hive/bin/beeline'
 # Default hive command connects to local HS2 (HTTP on 10001/cliservice)
-alias hive='bash /home/datalab/app/scripts/hive/cli.sh'
+alias hive='bash /home/datalab/app/bin/hive'
 alias hivehs2='/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab'
 EOF
 RUN sed -i 's/\r$//' /etc/profile.d/hive-cli.sh
@@ -250,5 +252,5 @@ USER ${LAB_APP_USER}
 
 # Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
 # Advertise the common service ports (map them on `docker run` as needed)
-EXPOSE 4040 5432 6379 8080 8082 8083 8084 8088 8181 9002 9083 9090 9092 9870 10000 10001 18080 27017
+EXPOSE 4040 5432 6379 8080 8083 8084 8088 8181 9002 9083 9090 9092 9870 10000 10001 18080 27017
 CMD ["sleep", "infinity"]

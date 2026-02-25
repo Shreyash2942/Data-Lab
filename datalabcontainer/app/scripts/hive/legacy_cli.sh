@@ -11,10 +11,7 @@ HS2_AUTH="${HIVE_CLI_AUTH:-noSasl}"
 HS2_DB="${HIVE_CLI_DB:-default}"
 HS2_USER="${HIVE_CLI_USER:-datalab}"
 HS2_PASS="${HIVE_CLI_PASS:-}"
-HS2_PROMPT="${HIVE_CLI_PROMPT:-hive (!d)> }"
 HIVE_RC_FILE="${HIVE_RC_FILE:-${HOME}/.hiverc}"
-
-JDBC_URL="jdbc:hive2://${HS2_HOST}:${HS2_PORT}/${HS2_DB};transportMode=http;httpPath=${HS2_HTTP_PATH};auth=${HS2_AUTH}"
 
 if ! command -v "${HIVE_BIN}" >/dev/null 2>&1; then
   echo "[!] Hive binary not found at ${HIVE_BIN}." >&2
@@ -25,6 +22,14 @@ if ! command -v "${HADOOP_BIN}" >/dev/null 2>&1; then
   echo "[!] Hadoop binary not found at ${HADOOP_BIN}." >&2
   exit 1
 fi
+
+# Avoid /tmp/stderr ownership collisions across root/datalab sessions.
+if [[ -z "${USER:-}" ]]; then
+  USER="$(id -un 2>/dev/null || echo datalab)"
+fi
+export USER
+export TMPDIR="${TMPDIR:-/tmp/${USER}}"
+mkdir -p "${TMPDIR}" 2>/dev/null || true
 
 if ! "${HADOOP_BIN}" dfsadmin -safemode get >/dev/null 2>&1; then
   cat <<'EOF' >&2
@@ -71,9 +76,13 @@ if [ -z "${HIVE_CLI_SKIP_RC:-}" ]; then
   INIT_ARGS+=(-i "${HIVE_RC_FILE}")
 fi
 
-echo "[*] Launching Hive CLI session (auto-connects to ${JDBC_URL})."
+# Keep classic CLI behavior for users who prefer `hive` prompt semantics.
+if [[ "${1:-}" == "--version" || "${1:-}" == "-version" ]]; then
+  exec "${HIVE_BIN}" --version
+fi
+
+echo "[*] Launching classic Hive CLI session."
 exec "${HIVE_BIN}" --service cli \
   "${INIT_ARGS[@]}" \
   --hiveconf hive.cli.print.current.db=true \
-  --hiveconf beeline.prompt="${HS2_PROMPT}" \
-  -u "${JDBC_URL}" -n "${HS2_USER}" -p "${HS2_PASS}" "$@"
+  "$@"

@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_ROOT="${RUNTIME_ROOT:-${HOME}/runtime}"
 SPARK_CONF_DIR_DEFAULT="${RUNTIME_ROOT}/spark/conf"
-LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
 SPARK_BIN="${SPARK_HOME:-/opt/spark}/bin/spark-submit"
+LOG_LEVEL="${DATALAB_SPARK_LOG_LEVEL:-ERROR}"
+LOG_LEVEL="$(printf '%s' "${LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+
+LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
+if ! mkdir -p "${SPARK_CONF_DIR_DEFAULT}" 2>/dev/null; then
+  SPARK_CONF_DIR_DEFAULT="${HOME}/.datalab/spark/conf"
+  LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
+  mkdir -p "${SPARK_CONF_DIR_DEFAULT}"
+fi
 
 ensure_log4j() {
-  mkdir -p "${SPARK_CONF_DIR_DEFAULT}"
   if [ -f "${LOG4J_FILE}" ]; then
     return
   fi
@@ -21,23 +27,68 @@ ensure_log4j() {
   if [ -f "${template}" ]; then
     tr -d '\r' < "${template}" > "${LOG4J_FILE}"
   else
-    printf 'rootLogger.level = INFO\n' > "${LOG4J_FILE}"
+    printf 'rootLogger.level = %s\n' "${LOG_LEVEL}" > "${LOG4J_FILE}"
+  fi
+}
+
+set_log_level() {
+  local file="$1"
+  local file_dir
+  file_dir="$(dirname "${file}")"
+  if [[ ! -w "${file_dir}" ]] || [[ -f "${file}" && ! -w "${file}" ]]; then
+    return 0
   fi
 
-  if ! grep -q "rootLogger.level" "${LOG4J_FILE}"; then
-    printf 'rootLogger.level = WARN\n' >> "${LOG4J_FILE}"
+  if grep -q "rootLogger.level" "${file}" 2>/dev/null; then
+    sed -E "s/rootLogger\\.level[[:space:]]*=[[:space:]]*[A-Za-z]+/rootLogger.level = ${LOG_LEVEL}/" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
   else
-    perl -0pi -e 's/rootLogger\.level\s*=\s*\w+/rootLogger.level = WARN/' "${LOG4J_FILE}"
+    printf 'rootLogger.level = %s\n' "${LOG_LEVEL}" >> "${file}" 2>/dev/null || true
   fi
 
-  if ! grep -q "logger.spark.level" "${LOG4J_FILE}"; then
-    printf 'logger.spark.name = org.apache.spark\nlogger.spark.level = WARN\n' >> "${LOG4J_FILE}"
+  if grep -q "logger.spark.level" "${file}" 2>/dev/null; then
+    sed -E "s/logger\\.spark\\.level[[:space:]]*=[[:space:]]*[A-Za-z]+/logger.spark.level = ${LOG_LEVEL}/" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
+  else
+    printf 'logger.spark.name = org.apache.spark\nlogger.spark.level = %s\n' "${LOG_LEVEL}" >> "${file}" 2>/dev/null || true
   fi
 }
 
 ensure_log4j
+set_log_level "${LOG4J_FILE}" || true
 
 export SPARK_CONF_DIR="${SPARK_CONF_DIR:-${SPARK_CONF_DIR_DEFAULT}}"
-export SPARK_SUBMIT_OPTS="-Dlog4j.configurationFile=${LOG4J_FILE} ${SPARK_SUBMIT_OPTS:-}"
 
-exec "${SPARK_BIN}" "$@"
+DEFAULT_SUBMIT_OPTS=(
+  "-Dlog4j.configurationFile=${LOG4J_FILE}"
+  "-Divy.message.logger.level=1"
+)
+export SPARK_SUBMIT_OPTS="${DEFAULT_SUBMIT_OPTS[*]} ${SPARK_SUBMIT_OPTS:-}"
+
+QUIET_ARGS=(
+  "--conf" "spark.ui.showConsoleProgress=false"
+)
+
+# If shared runtime paths are root-owned, fall back to user-writable paths so
+# `spark-submit` still works for the `datalab` user.
+EVENT_DIR="${RUNTIME_ROOT}/spark/events"
+WAREHOUSE_DIR="${RUNTIME_ROOT}/spark/warehouse"
+USER_EVENT_DIR="${HOME}/.datalab/spark/events"
+USER_WAREHOUSE_DIR="${HOME}/.datalab/spark/warehouse"
+EXTRA_CONF_ARGS=()
+
+if ! mkdir -p "${EVENT_DIR}" 2>/dev/null || [[ ! -w "${EVENT_DIR}" ]]; then
+  mkdir -p "${USER_EVENT_DIR}"
+  EXTRA_CONF_ARGS+=(
+    "--conf" "spark.eventLog.enabled=true"
+    "--conf" "spark.eventLog.dir=file://${USER_EVENT_DIR}"
+    "--conf" "spark.history.fs.logDirectory=file://${USER_EVENT_DIR}"
+  )
+fi
+
+if ! mkdir -p "${WAREHOUSE_DIR}" 2>/dev/null || [[ ! -w "${WAREHOUSE_DIR}" ]]; then
+  mkdir -p "${USER_WAREHOUSE_DIR}"
+  EXTRA_CONF_ARGS+=(
+    "--conf" "spark.sql.warehouse.dir=${USER_WAREHOUSE_DIR}"
+  )
+fi
+
+exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@"

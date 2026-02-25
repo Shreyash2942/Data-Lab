@@ -52,7 +52,6 @@ prompt_default() {
 pg_port="$(mapped_port 5432)"
 mongo_port="$(mapped_port 27017)"
 redis_port="$(mapped_port 6379)"
-adminer_port="$(mapped_port 8082)"
 mongo_express_port="$(mapped_port 8083)"
 redis_commander_port="$(mapped_port 8084)"
 
@@ -68,7 +67,6 @@ redis_pass="$(prompt_default "Redis password (blank if none)" "")"
 
 echo ""
 echo "=== Browser UIs (host machine) ==="
-echo "Adminer:               http://${UI_HOST}:${adminer_port}/"
 echo "Mongo Express:         http://${UI_HOST}:${mongo_express_port}/"
 echo "Redis Commander:       http://${UI_HOST}:${redis_commander_port}/"
 echo "pgAdmin (if started):  http://${UI_HOST}:8181/"

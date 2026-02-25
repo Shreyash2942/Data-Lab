@@ -20,7 +20,6 @@ $ports = @(
   "4040:4040",   # Spark UI
   "8080:8080",   # Airflow UI
   "8088:8088",   # YARN RM
-  "8082:8082",   # Adminer UI
   "8083:8083",   # Mongo Express UI
   "8084:8084",   # Redis Commander UI
   "8181:8181",   # pgAdmin UI

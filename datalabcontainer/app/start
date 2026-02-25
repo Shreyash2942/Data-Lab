@@ -35,7 +35,7 @@ show_ui_services() {
 show_db_access_summary() {
   local server_label="${CONTAINER_NAME:-datalab}"
   local pg_host pg_port mongo_host mongo_port redis_host redis_port
-  local adminer_url mongo_express_url redis_commander_url pgadmin_url
+  local mongo_express_url redis_commander_url pgadmin_url
   local pg_db pg_user pg_password mongo_db mongo_user mongo_password redis_password
 
   pg_host="${DATALAB_UI_HOST:-localhost}"
@@ -44,7 +44,6 @@ show_db_access_summary() {
   pg_port="$(common::mapped_host_port "${POSTGRES_PORT:-5432}")"
   mongo_port="$(common::mapped_host_port "${MONGO_PORT:-27017}")"
   redis_port="$(common::mapped_host_port "${REDIS_PORT:-6379}")"
-  adminer_url="$(common::ui_url "${ADMINER_PORT:-8082}" "/")"
   mongo_express_url="$(common::ui_url "${MONGO_EXPRESS_PORT:-8083}" "/")"
   redis_commander_url="$(common::ui_url "${REDIS_COMMANDER_PORT:-8084}" "/")"
   pgadmin_url="$(common::ui_url "${PGADMIN_PORT:-8181}" "/")"
@@ -63,10 +62,14 @@ show_db_access_summary() {
   echo "PostgreSQL: host=${pg_host} port=${pg_port} db=${pg_db} username=${pg_user} password=${pg_password}"
   echo "MongoDB:    host=${mongo_host} port=${mongo_port} db=${mongo_db} username=${mongo_user} password=${mongo_password} authDb=admin"
   echo "Redis:      host=${redis_host} port=${redis_port} username=default password=${redis_password}"
-  echo "Adminer UI: ${adminer_url}"
   echo "Mongo UI:   ${mongo_express_url}"
   echo "Redis UI:   ${redis_commander_url}"
   echo "pgAdmin UI: ${pgadmin_url} (login: ${PGADMIN_EMAIL:-admin@admin.com} / ${PGADMIN_PASSWORD:-admin})"
+}
+
+start_db_uis_if_needed() {
+  dbui::start
+  pgadmin::start
 }
 
 handle_cli_flag() {
@@ -77,15 +80,35 @@ handle_cli_flag() {
     --start-hive) hive::prepare_cli; exit 0 ;;
     --start-kafka) kafka::start; exit 0 ;;
     --start-airflow) airflow::start; exit 0 ;;
-    --start-postgres) postgres::start; show_db_access_summary; exit 0 ;;
-    --start-mongodb) mongodb::start; show_db_access_summary; exit 0 ;;
-    --start-redis) redis::start; show_db_access_summary; exit 0 ;;
+    --start-postgres)
+      postgres::start
+      start_db_uis_if_needed
+      show_db_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --start-mongodb)
+      mongodb::start
+      start_db_uis_if_needed
+      show_db_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --start-redis)
+      redis::start
+      start_db_uis_if_needed
+      show_db_access_summary
+      show_ui_services
+      exit 0
+      ;;
     --start-databases)
       postgres::start
       mongodb::start
       redis::start
+      start_db_uis_if_needed
       echo "[+] PostgreSQL, MongoDB, and Redis services started."
       show_db_access_summary
+      show_ui_services
       exit 0
       ;;
     --start-db-uis)
@@ -132,7 +155,7 @@ echo "7) Start PostgreSQL service"
 echo "8) Start MongoDB service"
 echo "9) Start Redis service"
 echo "10) Start all databases (PostgreSQL/MongoDB/Redis)"
-echo "11) Start database browser UIs (Adminer/Mongo Express/Redis Commander/pgAdmin)"
+echo "11) Start database browser UIs (Mongo Express/Redis Commander/pgAdmin)"
 echo "12) Start pgAdmin UI"
 echo "0) Exit"
 read -p "Select option: " opt
@@ -167,25 +190,33 @@ case "$opt" in
     ;;
   7)
     postgres::start
+    start_db_uis_if_needed
     echo "[+] PostgreSQL service started."
     show_db_access_summary
+    show_ui_services
     ;;
   8)
     mongodb::start
+    start_db_uis_if_needed
     echo "[+] MongoDB service started."
     show_db_access_summary
+    show_ui_services
     ;;
   9)
     redis::start
+    start_db_uis_if_needed
     echo "[+] Redis service started."
     show_db_access_summary
+    show_ui_services
     ;;
   10)
     postgres::start
     mongodb::start
     redis::start
+    start_db_uis_if_needed
     echo "[+] PostgreSQL, MongoDB, and Redis services started."
     show_db_access_summary
+    show_ui_services
     ;;
   11)
     dbui::start

@@ -75,7 +75,6 @@ with DAG(
   db_ui_smoke_check = bash_task(
       "db_ui_smoke_check",
       (
-          "curl -fsS http://localhost:8082/ >/dev/null && "
           "curl -fsS http://localhost:8083/ >/dev/null && "
           "curl -fsS http://localhost:8084/ >/dev/null && "
           "curl -fsS http://localhost:8181/ >/dev/null"

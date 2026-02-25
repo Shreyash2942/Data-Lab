@@ -112,8 +112,8 @@ esac
 
 common::ensure_cli_shortcuts() {
   local rc_file="${HOME}/.bashrc"
-  local export_line='export PATH="$HOME/app/bin:$PATH"'
-  local hive_alias="alias hive='bash \"${HOME}/app/scripts/hive/cli.sh\"'"
+  local export_line='export PATH="'"${WORKSPACE}"'/app/bin:$PATH"'
+  local hive_alias="alias hive='bash \"${WORKSPACE}/app/bin/hive\"'"
   local profile_file="${HOME}/.profile"
 
   if [ ! -e "${rc_file}" ]; then
