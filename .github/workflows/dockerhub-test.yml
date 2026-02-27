@@ -12,13 +12,10 @@ on:
 permissions:
   contents: read
 
-<<<<<<< HEAD
-=======
 concurrency:
   group: dockerhub-test-${{ github.ref }}
   cancel-in-progress: true
 
->>>>>>> dev
 jobs:
   test-dockerhub:
     runs-on: ubuntu-latest
@@ -28,6 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate required secrets
+        if: ${{ inputs.push_test_tag }}
         shell: bash
         run: |
           if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
@@ -58,27 +56,26 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        if: ${{ inputs.push_test_tag }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-<<<<<<< HEAD
       - name: Build test image (no push)
-=======
-      - name: Build test image (optionally push)
->>>>>>> dev
+        if: ${{ !inputs.push_test_tag }}
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.resolve.outputs.context }}
           file: ${{ steps.resolve.outputs.dockerfile }}
-<<<<<<< HEAD
           push: false
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/data-lab:ci-local-test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=dockerhub-test
+          cache-to: |
+            type=gha,mode=max,scope=dockerhub-test
+          provenance: false
 
-      - name: Push optional test tag
+      - name: Build test image (optionally push)
         if: ${{ inputs.push_test_tag }}
         uses: docker/build-push-action@v6
         with:
@@ -86,16 +83,8 @@ jobs:
           file: ${{ steps.resolve.outputs.dockerfile }}
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/data-lab:ci-test-${{ github.run_number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-=======
-          push: ${{ inputs.push_test_tag }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/data-lab:ci-test-${{ github.run_number }}
           cache-from: |
             type=gha,scope=dockerhub-test
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache
           cache-to: |
             type=gha,mode=max,scope=dockerhub-test
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache,mode=max
           provenance: false
->>>>>>> dev

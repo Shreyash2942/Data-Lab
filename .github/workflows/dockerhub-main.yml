@@ -1,21 +1,13 @@
-name: Build and Push Data-Lab Image
+name: Docker Portfolio CI
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/dockerhub-main.yml"
-      - ".dockerignore"
-      - "datalabcontainer/dev/base/**"
-      - "datalabcontainer/dev/hadoop/conf/**"
-      - "datalabcontainer/dev/hive/conf/**"
-      - "datalabcontainer/dev/kafka/conf/**"
-      - "datalabcontainer/dev/spark/conf/**"
-      - "datalabcontainer/app/**"
-      - "datalabcontainer/runtime/README.md"
-      - "stacks/**"
   workflow_dispatch:
+    inputs:
+      push_to_dockerhub:
+        description: "Push image to Docker Hub (portfolio demo mode)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -50,13 +42,28 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate required secrets
+        if: ${{ inputs.push_to_dockerhub }}
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            echo "Missing DOCKERHUB_USERNAME secret" >&2
+            exit 1
+          fi
+          if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "Missing DOCKERHUB_TOKEN secret" >&2
+            exit 1
+          fi
+
       - name: Log in to Docker Hub
+        if: ${{ inputs.push_to_dockerhub }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata
+        if: ${{ inputs.push_to_dockerhub }}
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -65,7 +72,21 @@ jobs:
             type=raw,value=latest
             type=sha,format=short
 
-      - name: Build and push image
+      - name: Build image (no push, local CI validation)
+        if: ${{ !inputs.push_to_dockerhub }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.resolve.outputs.context }}
+          file: ${{ steps.resolve.outputs.dockerfile }}
+          push: false
+          cache-from: |
+            type=gha,scope=dockerhub-main
+          cache-to: |
+            type=gha,mode=max,scope=dockerhub-main
+          provenance: false
+
+      - name: Build and push image (optional)
+        if: ${{ inputs.push_to_dockerhub }}
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.resolve.outputs.context }}
@@ -75,8 +96,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha,scope=dockerhub-main
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache
           cache-to: |
             type=gha,mode=max,scope=dockerhub-main
-            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/data-lab:buildcache,mode=max
           provenance: false
