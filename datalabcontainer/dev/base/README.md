@@ -10,7 +10,7 @@ Includes:
 - Scala
 - Spark 3.5.1 (Hadoop 3)
 - Hadoop 3.3.6
-- Hive 4.0.1
+- Hive 2.3.9 (Spark 3.5 compatible)
 - Airflow
 - dbt Core + Postgres adapter
 - Terraform (optional)
@@ -23,6 +23,13 @@ Lakehouse tooling baked in:
 - Delta Lake 3.2.0 (Scala + Python packages)
 
 > All JVM-based components (Spark, Hadoop, Hive, Kafka, Airflow) run on this single Java 11 runtime to avoid cross-version conflicts.
+
+## Build Optimization Notes
+- Build context is trimmed via root `.dockerignore` to avoid large runtime/doc/helper payloads.
+- `PIP_NO_CACHE_DIR=1` and `PIP_DISABLE_PIP_VERSION_CHECK=1` reduce pip cache overhead.
+- npm global tools are installed once and npm cache is cleaned.
+- Python dependency installs are consolidated to reduce image layers.
+- Runtime scripts are normalized in entrypoint to avoid Windows CRLF shell failures.
 
 ## Resources
 

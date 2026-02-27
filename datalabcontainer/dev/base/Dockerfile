@@ -1,7 +1,11 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_FUND=false
 
 ARG AIRFLOW_VERSION=2.9.3
 ARG AIRFLOW_PYTHON_MAJOR_MINOR=3.10
@@ -24,7 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN ln -s /usr/bin/python3 /usr/bin/python || true
 
 # Browser-based DB UI dependencies
-RUN npm install -g mongo-express@0.54.0 redis-commander@0.8.0
+RUN npm install -g mongo-express@0.54.0 redis-commander@0.8.0 \
+    && npm cache clean --force
 
 ENV JAVA11_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
     JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
@@ -103,7 +108,8 @@ ENV HUDI_VERSION=0.15.0 \
 
 RUN curl -fsSL "https://repo1.maven.org/maven2/org/apache/hudi/${HUDI_SPARK_ARTIFACT}/${HUDI_VERSION}/${HUDI_SPARK_ARTIFACT}-${HUDI_VERSION}.jar" -o /opt/spark/jars/hudi-spark-bundle.jar \
     && curl -fsSL "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar" -o /opt/spark/jars/iceberg-spark-runtime.jar \
-    && curl -fsSL "https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/${DELTA_VERSION}/delta-spark_2.12-${DELTA_VERSION}.jar" -o /opt/spark/jars/delta-spark.jar
+    && curl -fsSL "https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/${DELTA_VERSION}/delta-spark_2.12-${DELTA_VERSION}.jar" -o /opt/spark/jars/delta-spark.jar \
+    && curl -fsSL "https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar" -o /opt/spark/jars/delta-storage.jar
 
 ENV LAB_APP_USER=datalab
 
@@ -119,11 +125,11 @@ RUN cp /tmp/hadoop-conf/* ${HADOOP_HOME}/etc/hadoop/ \
     && rm -rf /tmp/hadoop-conf
 
 # Python tooling
-RUN pip install --no-cache-dir \
+RUN pip install \
     "apache-airflow==${AIRFLOW_VERSION}" \
     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${AIRFLOW_PYTHON_MAJOR_MINOR}.txt"
 
-RUN pip install --no-cache-dir \
+RUN pip install \
     "pyspark==3.5.1" \
     "dbt-core==1.8.7" "dbt-postgres==1.8.2" "dbt-duckdb==1.8.2" \
     "confluent-kafka==2.5.0" \
@@ -134,8 +140,8 @@ RUN pip install --no-cache-dir \
 # pgAdmin is installed in an isolated venv to avoid dependency conflicts
 # with Airflow and other stack packages in the main Python environment.
 RUN python3 -m venv /opt/pgadmin4-venv \
-    && /opt/pgadmin4-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /opt/pgadmin4-venv/bin/pip install --no-cache-dir "pgadmin4==9.12"
+    && /opt/pgadmin4-venv/bin/pip install --upgrade pip setuptools wheel \
+    && /opt/pgadmin4-venv/bin/pip install "pgadmin4==9.12"
 
 # Terraform (optional)
 ARG TERRAFORM_ZIP_SHA256=3ff056b5e8259003f67fd0f0ed7229499cfb0b41f3ff55cc184088589994f7a5
@@ -229,7 +235,8 @@ RUN sed -i 's/\r$//' /etc/profile.d/hive-cli.sh
 
 # Entrypoint: fix permissions on host-mounted paths, then exec the given command
 COPY datalabcontainer/dev/base/entrypoint.sh /usr/local/bin/datalab-entrypoint.sh
-RUN chmod +x /usr/local/bin/datalab-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/datalab-entrypoint.sh \
+    && chmod +x /usr/local/bin/datalab-entrypoint.sh
 
 RUN cat <<'EOF' >/usr/local/bin/datalab_app
 #!/usr/bin/env bash
@@ -237,7 +244,8 @@ set -e
 
 exec bash /home/datalab/app/start "$@"
 EOF
-RUN chmod +x /usr/local/bin/datalab_app
+RUN sed -i 's/\r$//' /usr/local/bin/datalab_app \
+    && chmod +x /usr/local/bin/datalab_app
 
 RUN cat <<'EOF' >/usr/local/bin/ui_services
 #!/usr/bin/env bash
@@ -245,7 +253,8 @@ set -e
 
 exec bash /home/datalab/app/ui_services "$@"
 EOF
-RUN chmod +x /usr/local/bin/ui_services
+RUN sed -i 's/\r$//' /usr/local/bin/ui_services \
+    && chmod +x /usr/local/bin/ui_services
 ENTRYPOINT ["/usr/local/bin/datalab-entrypoint.sh"]
 
 USER ${LAB_APP_USER}

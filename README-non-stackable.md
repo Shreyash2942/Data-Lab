@@ -49,6 +49,14 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\ui-services.ps1 -Name 
 - Helper folder wrappers (PowerShell): `.\helper\scripts\run-standalone.ps1`, `.\helper\scripts\build-and-run.ps1`, `.\helper\scripts\copy-container.ps1`, `.\helper\scripts\ui-services.ps1`.
 - Script source of truth: `.\helper\scripts\*`.
 
+## Build/Run Optimization
+- Reuse local layers when iterating:
+  - `docker build -t data-lab:latest -f datalabcontainer/dev/base/Dockerfile .`
+- Use immutable tags for CI/push:
+  - `data-lab:sha-<commit>` and `data-lab:latest`
+- Prefer `copy-container.ps1` for dynamic host-port allocation to avoid collisions on cloned containers.
+- Keep `datalabcontainer/runtime/` outside image builds (already excluded by `.dockerignore`).
+
 ## Database Browser UIs
 
 Start DB services + browser UIs:
