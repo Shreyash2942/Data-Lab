@@ -69,6 +69,72 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
 - `db-access-guide.ps1` (PowerShell): Prompts for DB usernames/passwords and prints exact browser + IDE connection values (PostgreSQL, MongoDB, Redis) using real mapped host ports.
 - `start-pgadmin.ps1` (PowerShell): Starts an official `dpage/pgadmin4` container, preconfigures a server entry that points to the mapped PostgreSQL port of your target Data Lab container, and prints login details.
 
+## copy-container.ps1 guide
+
+Use this when you want another Data Lab container from the same image, with auto-resolved host ports to avoid collisions.
+
+### Basic usage
+
+```powershell
+powershell -File .\helper\scripts\copy-container.ps1
+```
+
+If PowerShell blocks script execution on your machine, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\helper\scripts\copy-container.ps1
+```
+
+The script will prompt for:
+- New container name
+- Optional additional bind mounts (`host_path:container_path`)
+
+### Common examples
+
+- Use default Docker Hub image and set name directly:
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy
+  ```
+
+- Pull and use a specific image tag:
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -Image shreyash42/data-lab:latest
+  ```
+
+- Reuse image from an existing local container:
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -UseSourceImage -SourceName datalab -NewName datalab-copy
+  ```
+
+- Bind this repo's project folders into the new container:
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -BindProjectFiles
+  ```
+
+- Add extra port mappings and custom UI host:
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -ExtraPorts 5555:5555,5601:5601 -UiHost localhost
+  ```
+
+### Parameters
+
+- `-NewName <string>`: New container name. If omitted, prompted interactively.
+- `-Image <repo/image:tag>`: Image to pull and run. Default: `shreyash42/data-lab:latest`.
+- `-UseSourceImage`: Use the image from an existing container instead of pulling `-Image`.
+- `-SourceName <string>`: Source container name used with `-UseSourceImage`. Default: `datalab`.
+- `-ExtraPorts <host:container,...>`: Additional published ports in `host:container` format.
+- `-UiHost <string>`: Hostname used when printing UI URLs. Default: `localhost`.
+- `-BindProjectFiles`: Mount repo folders (`datalabcontainer/app` + `stacks/*`) into `/home/datalab/...`.
+
+### What you get after start
+
+- Container starts detached with dynamic default port mappings (first free host ports).
+- Script prints published ports and UI URLs.
+- Enter shell with:
+  ```powershell
+  docker exec -it -w / <new_container_name> bash
+  ```
+
 ## Notes
 
 - Default image: `data-lab:latest` (or the published `shreyash42/data-lab:latest`).

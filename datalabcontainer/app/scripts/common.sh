@@ -50,6 +50,18 @@ common::init_workdir() {
     "${KAFKA_PID_DIR}" \
     "${AIRFLOW_PID_DIR}"
 
+  if [[ "$(id -u)" -eq 0 ]]; then
+    local app_user="${LAB_APP_USER:-datalab}"
+    chown -R "${app_user}:${app_user}" \
+      "${RUNTIME_ROOT}" \
+      "${HDFS_BASE}" \
+      "${SPARK_PID_DIR}" "${SPARK_LOG_DIR}" "${SPARK_EVENTS_DIR}" "${SPARK_WAREHOUSE_DIR}" \
+      "${HIVE_METASTORE_DB}" "${HIVE_WAREHOUSE}" "${HIVE_PID_DIR}" "${HIVE_LOG_DIR}" \
+      "${KAFKA_BASE}" "${KAFKA_PID_DIR}" "${KAFKA_LOG_DIR}" "${KAFKA_ZK_DATA_DIR}" \
+      "${HADOOP_LOG_DIR}" "${YARN_LOG_DIR}" "${MAPRED_LOG_DIR}" \
+      "${AIRFLOW_PID_DIR}" 2>/dev/null || true
+  fi
+
   APP_BIN_DIR="${WORKSPACE}/app/bin"
   mkdir -p "${APP_BIN_DIR}"
 
