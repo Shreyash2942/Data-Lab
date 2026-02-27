@@ -3,6 +3,7 @@ Param(
   [string]$NewName = "",
   [string]$Image = "shreyash42/data-lab:latest",
   [switch]$UseSourceImage,
+  [switch]$ForcePull,
   [string[]]$ExtraPorts = @(),
   [string]$UiHost = "localhost",
   [switch]$BindProjectFiles
@@ -20,6 +21,12 @@ function Test-ContainerExists {
   Param([string]$Name)
   $names = docker container ls -a --format "{{.Names}}"
   return ($names -contains $Name)
+}
+
+function Test-ImageExists {
+  Param([string]$ImageRef)
+  docker image inspect $ImageRef 1>$null 2>$null
+  return ($LASTEXITCODE -eq 0)
 }
 
 function Get-HostPortFromMapping {
@@ -123,12 +130,19 @@ if ($UseSourceImage) {
   if (-not $resolvedImage) {
     throw "Image is required. Pass -Image <repo/image:tag>."
   }
-  Write-Host "Pulling image: $resolvedImage"
-  docker pull $resolvedImage
-  if ($LASTEXITCODE -ne 0) {
-    throw "docker pull failed for image '$resolvedImage'."
+
+  $imageExistsLocally = Test-ImageExists -ImageRef $resolvedImage
+  if ($ForcePull -or -not $imageExistsLocally) {
+    Write-Host "Pulling image: $resolvedImage"
+    docker pull $resolvedImage
+    if ($LASTEXITCODE -ne 0) {
+      throw "docker pull failed for image '$resolvedImage'."
+    }
+    Write-Host "Using pulled image: $resolvedImage"
+  } else {
+    Write-Host "Using local image (skip pull): $resolvedImage"
+    Write-Host "Tip: pass -ForcePull to refresh from Docker Hub."
   }
-  Write-Host "Using pulled image: $resolvedImage"
 }
 
 $defaultPorts = @(

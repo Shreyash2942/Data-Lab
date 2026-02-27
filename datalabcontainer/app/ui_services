@@ -106,6 +106,7 @@ read_fs_defaultfs() {
 read_hive_site_path() {
   local candidates=(
     "${HIVE_CONF_DIR:-/opt/hive/conf}/hive-site.xml"
+    "${APP_REPO_ROOT}/dev/hive/conf/hive-site.xml"
     "/home/datalab/hive/conf/hive-site.xml"
     "/opt/hive/conf/hive-site.xml"
   )
@@ -197,7 +198,7 @@ read_hive_warehouse_dir() {
     printf '%s' "${warehouse}"
     return 0
   fi
-  printf '%s' "/user/hive/warehouse"
+  printf '%s' "hdfs:///hive/warehouse"
 }
 
 effective_host_port() {
@@ -316,7 +317,7 @@ show_hive_connect_info() {
   hive_site_path="$(read_hive_site_path)"
   warehouse_default="$(read_hive_site_property "hive.metastore.warehouse.dir" || true)"
   if [[ -z "${warehouse_default}" ]]; then
-    warehouse_default="/user/hive/warehouse"
+    warehouse_default="hdfs:///hive/warehouse"
   fi
   warehouse_dir="$(prompt_default "Hive warehouse directory" "${warehouse_default}")"
   jdbc_url="${jdbc_endpoint}/${hive_db};transportMode=http;httpPath=cliservice;auth=noSasl"
@@ -663,7 +664,7 @@ print_ui_block_host() {
   print_row "Hive JDBC HTTP" "$(container_effective_endpoint 10001 "jdbc:hive2")"
   print_row "Hive JDBC Binary" "$(container_effective_endpoint 10000 "jdbc:hive2")"
   print_row "HiveServer2 Thrift" "$(mapped_endpoint "${container}" 10000 "thrift")"
-  print_row "Hive Metastore" "$(mapped_endpoint "${container}" 9083 "thrift")"
+  print_row "Hive Metastore (client endpoint)" "$(mapped_endpoint "${container}" 9083 "thrift")"
   print_row "Hive Config Path" "$(read_hive_site_path)"
   print_row "Hive Warehouse Dir" "$(read_hive_warehouse_dir)"
   print_row "Airflow" "$(mapped_url "${container}" 8080 "/")"
@@ -691,7 +692,7 @@ print_ui_block_container() {
   print_row "Hive JDBC HTTP" "$(hive_http_endpoint)"
   print_row "Hive JDBC Binary" "$(hive_binary_endpoint)"
   print_row "HiveServer2 Thrift" "$(container_effective_endpoint 10000 "thrift")"
-  print_row "Hive Metastore" "$(container_effective_endpoint 9083 "thrift")"
+  print_row "Hive Metastore (client endpoint)" "$(container_effective_endpoint 9083 "thrift")"
   print_row "Hive Config Path" "$(read_hive_site_path)"
   print_row "Hive Warehouse Dir" "$(read_hive_warehouse_dir)"
   print_row "Airflow" "$(container_effective_url 8080 "/")"
@@ -716,6 +717,7 @@ if datalab::inside_container; then
     print_ui_block_container
     echo
     echo "Note: Hive Metastore/PostgreSQL/MongoDB/Redis entries are service endpoints, not HTTP web UIs."
+    echo "Hive metastore value shown above is the client endpoint (auto-mapped for copied containers)."
     echo "Hive defaults: auth=noSasl user=datalab password=(blank) db=default httpPath=cliservice."
     echo "Hive ports: metastore=9083, hs2-thrift=10000, hs2-http=10001/cliservice."
     echo
@@ -754,5 +756,6 @@ echo "Container: ${target_container}"
 print_ui_block_host "${target_container}"
 echo
 echo "Note: Hive Metastore/PostgreSQL/MongoDB/Redis entries are service endpoints, not HTTP web UIs."
+echo "Hive metastore value shown above is the client endpoint (auto-mapped for copied containers)."
 echo "Hive defaults: auth=noSasl user=datalab password=(blank) db=default httpPath=cliservice."
 echo "Hive ports: metastore=9083, hs2-thrift=10000, hs2-http=10001/cliservice."

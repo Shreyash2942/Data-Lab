@@ -34,7 +34,7 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
   ```powershell
   powershell -File .\helper\scripts\build-and-run.ps1 -Name datalab -Image data-lab:latest
   ```
-- PowerShell copy container (asks new name and bind mounts, pulls Docker Hub image by default):
+- PowerShell copy container (asks new name and bind mounts, uses local image if present; pulls only when missing):
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -Image shreyash42/data-lab:latest
   ```
@@ -63,7 +63,7 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
 - `run-standalone-interactive.sh` (bash): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Uses `shreyash42/data-lab:latest` unless `IMAGE` is set. Pass `EXTRA_PORTS` if you want additional ports.
 - `run-standalone-interactive.ps1` (PowerShell): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Uses `shreyash42/data-lab:latest` unless `-Image` is provided. Pass `-ExtraPorts` if you want additional ports. Uses the repo root (two levels up from `helper/scripts/`) for default mounts.
 - `build-and-run.ps1` (PowerShell): Builds the image (unless `-SkipBuild`), then runs a non-stackable container with standard ports and default repo mounts. Supports `-ExtraPorts` and `-ExtraVolumes`, and validates host port conflicts before run.
-- `copy-container.ps1` (PowerShell): Pulls and uses `shreyash42/data-lab:latest` by default, asks for a new container name and bind mounts, and starts another non-stackable container. Use `-UseSourceImage -SourceName <name>` if you want to copy from an existing container image instead. Default UI ports auto-shift to the next free host port when needed to avoid conflicts.
+- `copy-container.ps1` (PowerShell): Uses `shreyash42/data-lab:latest` by default and pulls only if the image is not already local (use `-ForcePull` to refresh), asks for a new container name and bind mounts, and starts another non-stackable container. Use `-UseSourceImage -SourceName <name>` if you want to copy from an existing container image instead. Default UI ports auto-shift to the next free host port when needed to avoid conflicts.
 - `run-default.sh` (bash): Quick run with standard port bindings; accepts extra args after the image name.
 - `run-default.ps1` (PowerShell): Quick run equivalent for Windows; first arg is container name, remaining args are passed to `docker run`.
 - `db-access-guide.ps1` (PowerShell): Prompts for DB usernames/passwords and prints exact browser + IDE connection values (PostgreSQL, MongoDB, Redis) using real mapped host ports.
@@ -101,6 +101,11 @@ The script will prompt for:
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -Image shreyash42/data-lab:latest
   ```
 
+- Force a fresh pull even if the image exists locally:
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -Image shreyash42/data-lab:latest -ForcePull
+  ```
+
 - Reuse image from an existing local container:
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -UseSourceImage -SourceName datalab -NewName datalab-copy
@@ -119,8 +124,9 @@ The script will prompt for:
 ### Parameters
 
 - `-NewName <string>`: New container name. If omitted, prompted interactively.
-- `-Image <repo/image:tag>`: Image to pull and run. Default: `shreyash42/data-lab:latest`.
+- `-Image <repo/image:tag>`: Image to run. If missing locally, it is pulled. Default: `shreyash42/data-lab:latest`.
 - `-UseSourceImage`: Use the image from an existing container instead of pulling `-Image`.
+- `-ForcePull`: Force pull from Docker Hub before run (ignored when `-UseSourceImage` is set).
 - `-SourceName <string>`: Source container name used with `-UseSourceImage`. Default: `datalab`.
 - `-ExtraPorts <host:container,...>`: Additional published ports in `host:container` format.
 - `-UiHost <string>`: Hostname used when printing UI URLs. Default: `localhost`.
