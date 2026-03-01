@@ -270,6 +270,7 @@ foreach ($mapping in $resolvedDefaultPorts) {
 $hostPortMap = $hostPortMapEntries -join ","
 
 $envArgs = @(
+  "-e", "CONTAINER_NAME=$NewName",
   "-e", "DATALAB_UI_HOST=$UiHost",
   "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap"
 )
@@ -299,6 +300,21 @@ sed -i 's/\r$//' $uiMapFile 2>/dev/null || true
 chmod 644 $uiMapFile || true
 "@
 docker exec $NewName sh -lc $uiMapScript 2>$null | Out-Null
+
+$bootstrapScript = @"
+set -e
+# New copied container should start from a clean Kafka metadata state.
+rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
+mkdir -p \
+  /home/datalab/runtime/kafka/data \
+  /home/datalab/runtime/kafka/logs \
+  /home/datalab/runtime/kafka/pids \
+  /home/datalab/runtime/kafka/zookeeper-data \
+  /home/datalab/runtime/java \
+  /home/datalab/runtime/scala
+bash /home/datalab/app/datalab-check > /home/datalab/runtime/bootstrap-check.log 2>&1 || true
+"@
+docker exec $NewName bash -lc $bootstrapScript 2>$null | Out-Null
 
 Write-Output "Container $NewName started from image $resolvedImage."
 Write-Output "Published ports:"

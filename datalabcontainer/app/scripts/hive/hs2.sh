@@ -21,6 +21,7 @@ command=${1:-start}
 case "${command}" in
   start)
     hadoop::ensure_running
+    hive::ensure_hdfs_paths
     hive::ensure_dirs
     hive::init_metastore_if_needed
     hive::start_metastore
@@ -33,6 +34,7 @@ case "${command}" in
   restart)
     hive::stop || true
     hadoop::ensure_running
+    hive::ensure_hdfs_paths
     hive::ensure_dirs
     hive::init_metastore_if_needed
     hive::start_metastore

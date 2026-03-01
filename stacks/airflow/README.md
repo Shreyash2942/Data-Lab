@@ -31,6 +31,21 @@ Stop services when finished:
 bash ~/app/stop --stop-airflow
 ```
 
+### Validate all stacks with one command
+
+After creating a new container, run the built-in validation DAG end-to-end:
+
+```bash
+datalab_app --validate-stack
+```
+
+This starts Airflow if needed and runs:
+
+- DAG: `data_lab_stack_validation`
+- Command used: `airflow dags test data_lab_stack_validation <today>`
+
+You can also run the same action from `datalab_app` start menu option `12`.
+
 ### DAG dependency map (`data_lab_stack_validation`)
 
 - Serial core chain: `start_core_services -> hadoop_demo -> hive_demo_databases -> spark_demo -> {kafka_demo, hudi_quickstart, iceberg_quickstart, delta_quickstart}`

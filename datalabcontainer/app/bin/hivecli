@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ "${1:-}" == "--version" || "${1:-}" == "-version" ]]; then
-  if [[ -z "${USER:-}" ]]; then
-    export USER="$(id -un 2>/dev/null || echo datalab)"
-  fi
-  export TMPDIR="${TMPDIR:-/tmp/${USER}}"
-  mkdir -p "${TMPDIR}" 2>/dev/null || true
-  exec /opt/hive/bin/hive --version
-fi
-exec bash "${APP_ROOT}/scripts/hive/cli.sh" "$@"
+exec bash "${APP_ROOT}/scripts/hive/legacy_cli.sh" "$@"

@@ -86,37 +86,41 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\copy-container.ps1
 ```
 
 The script will prompt for:
+
 - New container name
 - Optional additional bind mounts (`host_path:container_path`)
 
-### Common examples
+### Common examp
+
+### les
 
 - Use default Docker Hub image and set name directly:
+
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy
   ```
-
 - Pull and use a specific image tag:
+
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -Image shreyash42/data-lab:latest
   ```
-
 - Force a fresh pull even if the image exists locally:
+
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -Image shreyash42/data-lab:latest -ForcePull
   ```
-
 - Reuse image from an existing local container:
+
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -UseSourceImage -SourceName datalab -NewName datalab-copy
   ```
-
 - Bind this repo's project folders into the new container:
+
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -BindProjectFiles
   ```
-
 - Add extra port mappings and custom UI host:
+
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -ExtraPorts 5555:5555,5601:5601 -UiHost localhost
   ```
@@ -166,5 +170,3 @@ git commit -m "Normalize line endings for scripts"
 This repo enforces line endings with `.gitattributes` (`*.sh` as LF, `*.ps1` as CRLF) and editor defaults with `.editorconfig`.
 
 Script source of truth: `helper/scripts/*`.
-
-

@@ -148,6 +148,7 @@ $dockerArgs = @(
   "--label", "com.docker.compose.project=",
   "--label", "com.docker.compose.service=",
   "--label", "com.docker.compose.oneoff=",
+  "-e", "CONTAINER_NAME=$Name",
   "-e", "DATALAB_UI_HOST=localhost",
   "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap"
 ) + $portArgs + $volumeArgs + @($Image, "sleep", "infinity")
@@ -167,6 +168,21 @@ EOF
 chmod 644 $uiMapFile || true
 "@
 docker exec $Name sh -lc $uiMapScript 2>$null | Out-Null
+
+$bootstrapScript = @"
+set -e
+# New container should start from a clean Kafka metadata state.
+rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
+mkdir -p \
+  /home/datalab/runtime/kafka/data \
+  /home/datalab/runtime/kafka/logs \
+  /home/datalab/runtime/kafka/pids \
+  /home/datalab/runtime/kafka/zookeeper-data \
+  /home/datalab/runtime/java \
+  /home/datalab/runtime/scala
+bash /home/datalab/app/datalab-check > /home/datalab/runtime/bootstrap-check.log 2>&1 || true
+"@
+docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null
 
 Write-Output "Container $Name started from $Image."
 Write-Output "Enter with: docker exec -it -w / $Name bash"

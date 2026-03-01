@@ -4,8 +4,14 @@ set -euo pipefail
 RUNTIME_ROOT="${RUNTIME_ROOT:-${HOME}/runtime}"
 SPARK_CONF_DIR_DEFAULT="${RUNTIME_ROOT}/spark/conf"
 SPARK_BIN="${SPARK_HOME:-/opt/spark}/bin/spark-submit"
-LOG_LEVEL="${DATALAB_SPARK_LOG_LEVEL:-ERROR}"
+LOG_LEVEL="${DATALAB_SPARK_LOG_LEVEL:-WARN}"
 LOG_LEVEL="$(printf '%s' "${LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+HUDI_LOG_LEVEL="${DATALAB_HUDI_LOG_LEVEL:-WARN}"
+HUDI_LOG_LEVEL="$(printf '%s' "${HUDI_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+JETTY_LOG_LEVEL="${DATALAB_JETTY_LOG_LEVEL:-ERROR}"
+JETTY_LOG_LEVEL="$(printf '%s' "${JETTY_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+JAVALIN_LOG_LEVEL="${DATALAB_JAVALIN_LOG_LEVEL:-ERROR}"
+JAVALIN_LOG_LEVEL="$(printf '%s' "${JAVALIN_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
 
 LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
 if ! mkdir -p "${SPARK_CONF_DIR_DEFAULT}" 2>/dev/null; then
@@ -45,11 +51,29 @@ set_log_level() {
     printf 'rootLogger.level = %s\n' "${LOG_LEVEL}" >> "${file}" 2>/dev/null || true
   fi
 
-  if grep -q "logger.spark.level" "${file}" 2>/dev/null; then
-    sed -E "s/logger\\.spark\\.level[[:space:]]*=[[:space:]]*[A-Za-z]+/logger.spark.level = ${LOG_LEVEL}/" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
-  else
-    printf 'logger.spark.name = org.apache.spark\nlogger.spark.level = %s\n' "${LOG_LEVEL}" >> "${file}" 2>/dev/null || true
-  fi
+  upsert_logger() {
+    local key="$1"
+    local name="$2"
+    local level="$3"
+
+    if grep -q "logger\\.${key}\\.name" "${file}" 2>/dev/null; then
+      sed -E "s|logger\\.${key}\\.name[[:space:]]*=[[:space:]]*.*$|logger.${key}.name = ${name}|" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
+    else
+      printf 'logger.%s.name = %s\n' "${key}" "${name}" >> "${file}" 2>/dev/null || true
+    fi
+
+    if grep -q "logger\\.${key}\\.level" "${file}" 2>/dev/null; then
+      sed -E "s/logger\\.${key}\\.level[[:space:]]*=[[:space:]]*[A-Za-z]+/logger.${key}.level = ${level}/" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
+    else
+      printf 'logger.%s.level = %s\n' "${key}" "${level}" >> "${file}" 2>/dev/null || true
+    fi
+  }
+
+  upsert_logger "spark" "org.apache.spark" "${LOG_LEVEL}"
+  upsert_logger "hudi" "org.apache.hudi" "${HUDI_LOG_LEVEL}"
+  upsert_logger "hadoop" "org.apache.hadoop" "${LOG_LEVEL}"
+  upsert_logger "jetty" "org.eclipse.jetty" "${JETTY_LOG_LEVEL}"
+  upsert_logger "javalin" "io.javalin" "${JAVALIN_LOG_LEVEL}"
 }
 
 ensure_log4j

@@ -37,6 +37,7 @@ common::init_workdir() {
   KAFKA_BASE="${RUNTIME_ROOT}/kafka"
   KAFKA_PID_DIR="${KAFKA_BASE}/pids"
   KAFKA_LOG_DIR="${KAFKA_BASE}/logs"
+  KAFKA_DATA_DIR="${KAFKA_BASE}/data"
   KAFKA_ZK_DATA_DIR="${KAFKA_BASE}/zookeeper-data"
   HADOOP_LOG_DIR="${RUNTIME_ROOT}/hadoop/logs"
   YARN_LOG_DIR="${RUNTIME_ROOT}/hadoop/logs/yarn"
@@ -46,6 +47,7 @@ common::init_workdir() {
   mkdir -p \
     "${HIVE_LOG_DIR}" \
     "${HIVE_PID_DIR}" \
+    "${KAFKA_DATA_DIR}" \
     "${KAFKA_LOG_DIR}" \
     "${KAFKA_PID_DIR}" \
     "${AIRFLOW_PID_DIR}"
@@ -57,7 +59,7 @@ common::init_workdir() {
       "${HDFS_BASE}" \
       "${SPARK_PID_DIR}" "${SPARK_LOG_DIR}" "${SPARK_EVENTS_DIR}" "${SPARK_WAREHOUSE_DIR}" \
       "${HIVE_METASTORE_DB}" "${HIVE_WAREHOUSE}" "${HIVE_PID_DIR}" "${HIVE_LOG_DIR}" \
-      "${KAFKA_BASE}" "${KAFKA_PID_DIR}" "${KAFKA_LOG_DIR}" "${KAFKA_ZK_DATA_DIR}" \
+      "${KAFKA_BASE}" "${KAFKA_PID_DIR}" "${KAFKA_LOG_DIR}" "${KAFKA_DATA_DIR}" "${KAFKA_ZK_DATA_DIR}" \
       "${HADOOP_LOG_DIR}" "${YARN_LOG_DIR}" "${MAPRED_LOG_DIR}" \
       "${AIRFLOW_PID_DIR}" 2>/dev/null || true
   fi
@@ -68,7 +70,7 @@ common::init_workdir() {
   export APP_BIN_DIR HDFS_BASE HDFS_NAME_DIR HDFS_DATA_DIR \
     SPARK_PID_DIR SPARK_LOG_DIR SPARK_EVENTS_DIR SPARK_WAREHOUSE_DIR \
     HIVE_METASTORE_DB HIVE_WAREHOUSE HIVE_PID_DIR HIVE_LOG_DIR \
-    KAFKA_BASE KAFKA_PID_DIR KAFKA_LOG_DIR KAFKA_ZK_DATA_DIR \
+    KAFKA_BASE KAFKA_PID_DIR KAFKA_LOG_DIR KAFKA_DATA_DIR KAFKA_ZK_DATA_DIR \
     HADOOP_LOG_DIR YARN_LOG_DIR MAPRED_LOG_DIR AIRFLOW_PID_DIR
 }
 

@@ -220,7 +220,11 @@ mongodb::start() {
 
   # First-time bootstrap: start without auth, create user, restart with auth.
   if [[ "${MONGO_AUTH_ENABLED}" == "true" && ! -f "${MONGODB_AUTH_BOOTSTRAP_MARKER}" ]]; then
-    "${MONGOD_BIN}" "${base_args[@]}"
+    if ! "${MONGOD_BIN}" "${base_args[@]}"; then
+      echo "[!] MongoDB bootstrap start failed. Recent log lines:" >&2
+      tail -n 80 "${MONGODB_LOG_FILE}" >&2 || true
+      return 1
+    fi
     if ! mongodb::wait_for_port; then
       echo "[!] MongoDB bootstrap instance failed to open port ${MONGO_PORT}." >&2
       tail -n 40 "${MONGODB_LOG_FILE}" >&2 || true
@@ -236,7 +240,11 @@ mongodb::start() {
     run_args+=(--auth)
   fi
 
-  "${MONGOD_BIN}" "${run_args[@]}"
+  if ! "${MONGOD_BIN}" "${run_args[@]}"; then
+    echo "[!] MongoDB start failed. Recent log lines:" >&2
+    tail -n 120 "${MONGODB_LOG_FILE}" >&2 || true
+    return 1
+  fi
   if ! mongodb::wait_for_port; then
     echo "[!] MongoDB failed to open port ${MONGO_PORT}. Recent log lines:" >&2
     tail -n 40 "${MONGODB_LOG_FILE}" >&2 || true

@@ -69,6 +69,10 @@ if [ "${BEELINE_VERBOSE}" = "false" ]; then
   BEELINE_OPTS+=(--verbose=false)
 fi
 
+if [[ $# -eq 0 ]]; then
+  echo "[*] Launching Hive Beeline. Exit with !quit (or !q, Ctrl-D)."
+fi
+
 exec beeline \
   "${INIT_ARGS[@]}" \
   "${BEELINE_OPTS[@]}" \

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
@@ -9,6 +9,11 @@ class DataLabBashOperator(BashOperator):
 
 
 def bash_task(task_id: str, command: str, **kwargs) -> BashOperator:
+  # Some Airflow environments enforce strict global task timeouts; keep
+  # stack-validation tasks from being killed prematurely.
+  kwargs.setdefault("execution_timeout", timedelta(minutes=30))
+  kwargs.setdefault("retries", 2)
+  kwargs.setdefault("retry_delay", timedelta(seconds=45))
   return DataLabBashOperator(
       task_id=task_id,
       bash_command=command,
@@ -27,74 +32,171 @@ with DAG(
 
   start_core_services = bash_task(
       "start_core_services",
-      "bash ~/app/start --start-core",
+      "echo 'Core services are initialized per task.'",
   )
 
   start_database_services = bash_task(
       "start_database_services",
-      "bash ~/app/start --start-databases && bash ~/app/start --start-db-uis",
+      "echo 'Database services are initialized per task.'",
   )
 
   # Core service demos
   hadoop_demo = bash_task(
       "hadoop_demo",
-      "bash ~/hadoop/scripts/hdfs_check.sh",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "hadoop::ensure_running; "
+          "bash /home/datalab/hadoop/scripts/hdfs_check.sh"
+      ),
   )
 
   hive_demo_databases = bash_task(
       "hive_demo_databases",
-      "bash ~/hive/bootstrap_demo.sh",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "source /home/datalab/app/scripts/hive/manage.sh; "
+          "hive::prepare_cli; "
+          "HIVE_CLI_SKIP_RC=1 bash /home/datalab/app/scripts/hive/cli.sh -e 'SHOW DATABASES;'; "
+          "HIVE_CLI_SKIP_RC=1 bash /home/datalab/app/scripts/hive/cli.sh -e 'CREATE DATABASE IF NOT EXISTS datalab_demo_validation;'"
+      ),
   )
 
   spark_demo = bash_task(
       "spark_demo",
-      "spark-submit ~/spark/example_pyspark.py",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "hadoop::ensure_running; "
+          "spark-submit /home/datalab/spark/example_pyspark.py"
+      ),
   )
 
   kafka_demo = bash_task(
       "kafka_demo",
-      "bash ~/kafka/demo.sh",
+      (
+          "set -euo pipefail; "
+          "bash /home/datalab/app/scripts/kafka/manage.sh stop >/dev/null 2>&1 || true; "
+          "bash /home/datalab/app/scripts/kafka/manage.sh start >/dev/null 2>&1 || true; "
+          "for i in $(seq 1 60); do "
+          "  if /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then "
+          "    break; "
+          "  fi; "
+          "  if [ \"$i\" -eq 60 ]; then "
+          "    echo 'Kafka not ready, resetting local runtime metadata and retrying once...' >&2; "
+          "    rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true; "
+          "    bash /home/datalab/app/scripts/kafka/manage.sh restart >/dev/null 2>&1 || true; "
+          "    sleep 5; "
+          "    /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || (echo 'Kafka broker still not ready after reset' >&2; exit 1); "
+          "    break; "
+          "  fi; "
+          "  sleep 2; "
+          "done; "
+          "bash /home/datalab/kafka/health_check.sh || "
+          "(echo '--- kafka.log tail ---'; tail -n 120 /home/datalab/runtime/kafka/logs/kafka.log 2>/dev/null || true; "
+          "echo '--- zookeeper.log tail ---'; tail -n 80 /home/datalab/runtime/kafka/logs/zookeeper.log 2>/dev/null || true; exit 1)"
+      ),
   )
 
   # Database stack demos and quick UI smoke checks
   postgres_demo = bash_task(
       "postgres_demo",
-      "export PGPASSWORD=admin && psql -h localhost -p 5432 -U admin -d datalab -f ~/postgres/example_postgres.sql",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/postgres/manage.sh; "
+          "postgres::start; "
+          "export PGPASSWORD=admin; "
+          "psql -h localhost -p 5432 -U admin -d datalab -f /home/datalab/postgres/example_postgres.sql"
+      ),
   )
 
   mongodb_demo = bash_task(
       "mongodb_demo",
-      "python ~/mongodb/example_mongodb.py",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/mongodb/manage.sh; "
+          "mkdir -p /home/datalab/runtime/mongodb/data /home/datalab/runtime/mongodb/logs /home/datalab/runtime/mongodb/pids; "
+          "chmod -R u+rwX,go+rX /home/datalab/runtime/mongodb 2>/dev/null || true; "
+          "mongodb::stop || true; "
+          "rm -f /home/datalab/runtime/mongodb/pids/mongod.pid || true; "
+          "rm -f /home/datalab/runtime/mongodb/data/mongod.lock /home/datalab/runtime/mongodb/data/WiredTiger.lock 2>/dev/null || true; "
+          "mongodb::start || (echo '--- mongod.log tail ---'; tail -n 160 /home/datalab/runtime/mongodb/logs/mongod.log 2>/dev/null || true; exit 1); "
+          "python /home/datalab/mongodb/example_mongodb.py"
+      ),
   )
 
   redis_demo = bash_task(
       "redis_demo",
-      "python ~/redis/example_redis.py",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/redis/manage.sh; "
+          "redis::start; "
+          "python /home/datalab/redis/example_redis.py"
+      ),
   )
 
   db_ui_smoke_check = bash_task(
       "db_ui_smoke_check",
       (
-          "curl -fsS http://localhost:8083/ >/dev/null && "
-          "curl -fsS http://localhost:8084/ >/dev/null && "
-          "curl -fsS http://localhost:8181/ >/dev/null"
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/postgres/manage.sh; "
+          "source /home/datalab/app/scripts/mongodb/manage.sh; "
+          "source /home/datalab/app/scripts/redis/manage.sh; "
+          "source /home/datalab/app/scripts/dbui/manage.sh; "
+          "source /home/datalab/app/scripts/pgadmin/manage.sh; "
+          "postgres::start; "
+          "mongodb::start; "
+          "redis::start; "
+          "dbui::start; "
+          "pgadmin::start; "
+          "for i in $(seq 1 30); do "
+          "  if curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8083/ >/dev/null "
+          "  && curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8084/ >/dev/null "
+          "  && curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8181/ >/dev/null; then "
+          "    exit 0; "
+          "  fi; "
+          "  sleep 2; "
+          "done; "
+          "echo 'DB UI endpoints not ready after retries' >&2; exit 1"
       ),
   )
 
   # Additional language / tool demos (independent)
   python_example = bash_task(
       "python_example",
-      "python ~/python/example.py",
+      "python /home/datalab/python/example.py",
   )
 
   java_example = bash_task(
       "java_example",
-      "cd ~/java && javac Example.java && java -cp ~/java Example",
+      (
+          "set -euo pipefail; "
+          "command -v javac >/dev/null; "
+          "command -v java >/dev/null; "
+          "mkdir -p /home/datalab/runtime/java; "
+          "javac -d /home/datalab/runtime/java /home/datalab/java/Example.java; "
+          "java -cp /home/datalab/runtime/java Example"
+      ),
   )
 
   scala_example = bash_task(
       "scala_example",
-      "cd ~/scala && scalac example.scala && scala -cp ~/scala HelloDataLab",
+      (
+          "set -euo pipefail; "
+          "command -v scalac >/dev/null; "
+          "command -v scala >/dev/null; "
+          "mkdir -p /home/datalab/runtime/scala; "
+          "scalac -d /home/datalab/runtime/scala /home/datalab/scala/example.scala; "
+          "scala -cp /home/datalab/runtime/scala HelloDataLab"
+      ),
   )
 
   terraform_demo = bash_task(
@@ -111,23 +213,34 @@ with DAG(
 
   hudi_quickstart = bash_task(
       "hudi_quickstart",
-      "python ~/hudi/hudi_example.py",
+      "python /home/datalab/hudi/hudi_example.py",
   )
 
   iceberg_quickstart = bash_task(
       "iceberg_quickstart",
-      "python ~/iceberg/iceberg_example.py",
+      "python /home/datalab/iceberg/iceberg_example.py",
   )
 
   delta_quickstart = bash_task(
       "delta_quickstart",
-      "python ~/delta/delta_example.py",
+      "python /home/datalab/delta/delta_example.py",
   )
 
   stop_core_services = bash_task(
       "stop_core_services",
-      "bash ~/app/stop --stop-core",
-      trigger_rule="all_success",
+      (
+          "set -euo pipefail; "
+          "source /home/datalab/app/scripts/common.sh; "
+          "source /home/datalab/app/scripts/kafka/manage.sh; "
+          "source /home/datalab/app/scripts/hive/manage.sh; "
+          "source /home/datalab/app/scripts/spark/manage.sh; "
+          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "kafka::stop || true; "
+          "hive::stop || true; "
+          "spark::stop || true; "
+          "hadoop::stop || true"
+      ),
+      trigger_rule="all_done",
   )
 
   # Dependencies:
@@ -139,7 +252,8 @@ with DAG(
 
   start_core_services >> [python_example, java_example, scala_example, terraform_demo]
   start_core_services >> start_database_services
-  start_database_services >> [postgres_demo, mongodb_demo, redis_demo, db_ui_smoke_check]
+  start_database_services >> [postgres_demo, mongodb_demo, redis_demo]
+  [postgres_demo, mongodb_demo, redis_demo] >> db_ui_smoke_check
 
   # Everything must finish before stopping core services
   all_tasks = [

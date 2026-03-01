@@ -25,6 +25,14 @@ hive::ensure_dirs() {
     "${RUNTIME_ROOT}/hive/tmp"
 }
 
+hive::ensure_hdfs_paths() {
+  # Keep Hive paths aligned with hive-site.xml defaults.
+  "${HDFS_BIN}" dfs -mkdir -p /tmp /tmp/hive /hive /hive/warehouse
+  "${HDFS_BIN}" dfs -chmod 1777 /tmp /tmp/hive
+  "${HDFS_BIN}" dfs -chmod 775 /hive /hive/warehouse
+  "${HDFS_BIN}" dfs -chown -R datalab:supergroup /hive /tmp/hive || true
+}
+
 hive::init_metastore_if_needed() {
   if [ ! -f "${HIVE_METASTORE_DB}/service.properties" ]; then
     echo "[*] Initializing Hive metastore (Derby)..."
@@ -262,6 +270,7 @@ hive::verify_query() {
 
 hive::prepare_cli() {
   hadoop::ensure_running
+  hive::ensure_hdfs_paths
   hive::ensure_dirs
   hive::init_metastore_if_needed
   hive::start_metastore
@@ -270,8 +279,9 @@ hive::prepare_cli() {
   cat <<'EOF'
 [+] Hive CLI ready.
 Run either helper:
-  bash ~/app/scripts/hive/legacy_cli.sh   # classic CLI prompt
-  bash ~/app/scripts/hive/cli.sh          # beeline wrapper
+  hive        # classic Hive CLI prompt
+  hivecli     # classic Hive CLI prompt
+  hivebeeline # Beeline wrapper (HS2 HTTP)
 
 Spark SQL entrypoint:
   spark-sql -e 'SHOW DATABASES;'

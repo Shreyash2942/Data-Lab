@@ -72,6 +72,20 @@ start_db_uis_if_needed() {
   pgadmin::start
 }
 
+run_stack_validation_dag() {
+  local dag_id="data_lab_stack_validation"
+  local exec_date
+  airflow::start
+  exec_date="$(date +%F)"
+  echo "[*] Running Airflow DAG '${dag_id}' for date ${exec_date}..."
+  if airflow dags test "${dag_id}" "${exec_date}"; then
+    echo "[+] Airflow DAG '${dag_id}' completed successfully."
+  else
+    echo "[!] Airflow DAG '${dag_id}' failed. Check Airflow task logs for details." >&2
+    return 1
+  fi
+}
+
 handle_cli_flag() {
   case "$1" in
     --prune-logs) logs::prune_if_needed; exit 0 ;;
@@ -124,6 +138,11 @@ handle_cli_flag() {
       show_ui_services
       exit 0
       ;;
+    --validate-stack)
+      run_stack_validation_dag
+      show_ui_services
+      exit 0
+      ;;
     --start-core)
       hadoop::ensure_running
       spark::start
@@ -145,40 +164,40 @@ logs::prune_if_needed
 handle_cli_flag "${1:-}" || true
 
 echo "=== Data Lab :: START MENU ==="
-echo "1) Start Spark services"
-echo "2) Start Hadoop services"
-echo "3) Prepare Hive CLI (Hadoop + metastore + HS2)"
-echo "4) Start Kafka services"
-echo "5) Start Airflow webserver & scheduler"
+echo "1) Start Airflow"
+echo "2) Start Spark services"
+echo "3) Start Hadoop services"
+echo "4) Start Hive services (Hadoop + metastore + HS2)"
+echo "5) Start Kafka services"
 echo "6) Start ALL core services (Spark/Hadoop/Hive/Kafka)"
 echo "7) Start PostgreSQL service"
 echo "8) Start MongoDB service"
 echo "9) Start Redis service"
 echo "10) Start all databases (PostgreSQL/MongoDB/Redis)"
 echo "11) Start database browser UIs (Mongo Express/Redis Commander/pgAdmin)"
-echo "12) Start pgAdmin UI"
+echo "12) Validate all stacks via Airflow DAG"
 echo "0) Exit"
 read -p "Select option: " opt
 
 case "$opt" in
   1)
+    airflow::start
+    echo "[+] Airflow services started."
+    ;;
+  2)
     spark::start
     echo "[+] Spark services started."
     ;;
-  2)
+  3)
     hadoop::start
     echo "[+] Hadoop services started."
     ;;
-  3)
+  4)
     hive::prepare_cli
     ;;
-  4)
+  5)
     kafka::start
     echo "[+] Kafka services started."
-    ;;
-  5)
-    airflow::start
-    echo "[+] Airflow services started."
     ;;
   6)
     hadoop::ensure_running
@@ -225,8 +244,7 @@ case "$opt" in
     show_ui_services
     ;;
   12)
-    pgadmin::start
-    show_db_access_summary
+    run_stack_validation_dag
     show_ui_services
     ;;
   0)

@@ -33,6 +33,20 @@ print_header() {
   echo "=== Data Lab UI Services ==="
 }
 
+UI_CACHE_FS_DEFAULTFS=""
+UI_CACHE_HIVE_SITE_PATH=""
+UI_CACHE_HIVE_PROPS=""
+UI_CACHE_HIVE_PROPS_LOADED=0
+
+json_escape() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/}"
+  printf '%s' "${s}"
+}
+
 print_row() {
   local name="$1"
   local url="$2"
@@ -73,6 +87,11 @@ prompt_default() {
 }
 
 read_fs_defaultfs() {
+  if [[ -n "${UI_CACHE_FS_DEFAULTFS}" ]]; then
+    printf '%s' "${UI_CACHE_FS_DEFAULTFS}"
+    return 0
+  fi
+
   local core_site_paths=(
     "${HADOOP_CONF_DIR:-/opt/hadoop/etc/hadoop}/core-site.xml"
     "/home/datalab/hadoop/conf/core-site.xml"
@@ -94,16 +113,23 @@ read_fs_defaultfs() {
       ' "${core_site}" 2>/dev/null || true)"
       fs_uri="${fs_uri//$'\r'/}"
       if [[ -n "${fs_uri}" ]]; then
+        UI_CACHE_FS_DEFAULTFS="${fs_uri}"
         printf '%s' "${fs_uri}"
         return 0
       fi
     fi
   done
 
-  printf '%s' "(not found)"
+  UI_CACHE_FS_DEFAULTFS="(not found)"
+  printf '%s' "${UI_CACHE_FS_DEFAULTFS}"
 }
 
 read_hive_site_path() {
+  if [[ -n "${UI_CACHE_HIVE_SITE_PATH}" ]]; then
+    printf '%s' "${UI_CACHE_HIVE_SITE_PATH}"
+    return 0
+  fi
+
   local candidates=(
     "${HIVE_CONF_DIR:-/opt/hive/conf}/hive-site.xml"
     "${APP_REPO_ROOT}/dev/hive/conf/hive-site.xml"
@@ -114,40 +140,64 @@ read_hive_site_path() {
 
   for candidate in "${candidates[@]}"; do
     if [[ -f "${candidate}" ]]; then
+      UI_CACHE_HIVE_SITE_PATH="${candidate}"
       printf '%s' "${candidate}"
       return 0
     fi
   done
 
-  printf '%s' "(not found)"
+  UI_CACHE_HIVE_SITE_PATH="(not found)"
+  printf '%s' "${UI_CACHE_HIVE_SITE_PATH}"
 }
 
-read_hive_site_property() {
-  local property_name="$1"
-  local hive_site property_value
+load_hive_site_properties_cache() {
+  if [[ "${UI_CACHE_HIVE_PROPS_LOADED}" -eq 1 ]]; then
+    return 0
+  fi
 
+  local hive_site
   hive_site="$(read_hive_site_path)"
   if [[ "${hive_site}" == "(not found)" ]]; then
+    UI_CACHE_HIVE_PROPS=""
+    UI_CACHE_HIVE_PROPS_LOADED=1
     return 1
   fi
 
-  property_value="$(awk -v p="${property_name}" '
-    /<name>/ {
+  UI_CACHE_HIVE_PROPS="$(awk '
+    /<property>/ { in_prop=1; name=""; value=""; next }
+    in_prop && /<name>/ {
       line=$0
       gsub(/.*<name>[[:space:]]*/, "", line)
       gsub(/[[:space:]]*<\/name>.*/, "", line)
-      in_prop = (line == p)
+      name=line
       next
     }
     in_prop && /<value>/ {
       line=$0
       gsub(/.*<value>[[:space:]]*/, "", line)
       gsub(/[[:space:]]*<\/value>.*/, "", line)
-      print line
-      exit
+      value=line
+      next
     }
-    /<\/property>/ { in_prop=0 }
+    /<\/property>/ {
+      if (in_prop && name != "") {
+        print name "\t" value
+      }
+      in_prop=0
+    }
   ' "${hive_site}" 2>/dev/null || true)"
+  UI_CACHE_HIVE_PROPS_LOADED=1
+}
+
+read_hive_site_property() {
+  local property_name="$1"
+  local property_value
+
+  if ! load_hive_site_properties_cache; then
+    return 1
+  fi
+
+  property_value="$(printf '%s\n' "${UI_CACHE_HIVE_PROPS}" | awk -F '\t' -v p="${property_name}" '$1 == p { print $2; exit }')"
   property_value="${property_value//$'\r'/}"
   if [[ -n "${property_value}" ]]; then
     printf '%s' "${property_value}"
@@ -189,6 +239,26 @@ default_bronze_path() {
 
 default_silver_path() {
   printf '%s' "${DATALAB_SILVER_BASE_PATH:-/medilake/silver}"
+}
+
+default_postgres_db() {
+  printf '%s' "${POSTGRES_DB:-datalab}"
+}
+
+default_postgres_user() {
+  printf '%s' "${POSTGRES_USER:-admin}"
+}
+
+default_mongo_db() {
+  printf '%s' "${MONGO_DB:-datalab}"
+}
+
+default_mongo_user() {
+  printf '%s' "${MONGO_ROOT_USERNAME:-admin}"
+}
+
+default_redis_user() {
+  printf '%s' "default"
 }
 
 read_hive_warehouse_dir() {
@@ -238,14 +308,18 @@ show_kafka_connect_info() {
 }
 
 show_postgres_connect_info() {
-  local hostport pg_host pg_port pg_db pg_user pg_pass
+  local hostport pg_host pg_port pg_db pg_user pg_pass server_name
   hostport="$(effective_host_port 5432)"
   pg_host="${hostport%:*}"
   pg_port="${hostport##*:}"
   pg_db="${POSTGRES_DB:-datalab}"
   pg_user="${POSTGRES_USER:-admin}"
   pg_pass="${POSTGRES_PASSWORD:-admin}"
+  server_name="${CONTAINER_NAME:-datalab}"
   print_section "PostgreSQL Connection Info"
+  print_kv "Server name" "${server_name}"
+  print_kv "Inside container" "host=localhost port=5432 db=${pg_db} user=${pg_user}"
+  print_kv "Outside container" "host=${pg_host} port=${pg_port} db=${pg_db} user=${pg_user}"
   print_kv "Host" "${pg_host}"
   print_kv "Port" "${pg_port}"
   print_kv "Database" "${pg_db}"
@@ -255,14 +329,18 @@ show_postgres_connect_info() {
 }
 
 show_mongodb_connect_info() {
-  local hostport mongo_host mongo_port mongo_db mongo_user mongo_pass
+  local hostport mongo_host mongo_port mongo_db mongo_user mongo_pass server_name
   hostport="$(effective_host_port 27017)"
   mongo_host="${hostport%:*}"
   mongo_port="${hostport##*:}"
   mongo_db="${MONGO_DB:-datalab}"
   mongo_user="${MONGO_ROOT_USERNAME:-admin}"
   mongo_pass="${MONGO_ROOT_PASSWORD:-admin}"
+  server_name="${CONTAINER_NAME:-datalab}"
   print_section "MongoDB Connection Info"
+  print_kv "Server name" "${server_name}"
+  print_kv "Inside container" "host=localhost port=27017 db=${mongo_db} user=${mongo_user} authDb=admin"
+  print_kv "Outside container" "host=${mongo_host} port=${mongo_port} db=${mongo_db} user=${mongo_user} authDb=admin"
   print_kv "Host" "${mongo_host}"
   print_kv "Port" "${mongo_port}"
   print_kv "Database" "${mongo_db}"
@@ -273,12 +351,16 @@ show_mongodb_connect_info() {
 }
 
 show_redis_connect_info() {
-  local hostport redis_host redis_port redis_pass
+  local hostport redis_host redis_port redis_pass server_name
   hostport="$(effective_host_port 6379)"
   redis_host="${hostport%:*}"
   redis_port="${hostport##*:}"
   redis_pass="${REDIS_PASSWORD:-admin}"
+  server_name="${CONTAINER_NAME:-datalab}"
   print_section "Redis Connection Info"
+  print_kv "Server name" "${server_name}"
+  print_kv "Inside container" "host=localhost port=6379 user=default"
+  print_kv "Outside container" "host=${redis_host} port=${redis_port} user=default"
   print_kv "Host" "${redis_host}"
   print_kv "Port" "${redis_port}"
   print_kv "Username" "default"
@@ -374,27 +456,16 @@ ui_login_helper() {
   while true; do
     echo
     echo "=== Data Lab UI Login Helper ==="
-    echo "Web UIs:"
     echo "1) Airflow"
-    echo "2) Spark Master"
-    echo "3) Spark History"
-    echo "4) Spark App UI"
-    echo "5) HDFS NameNode"
-    echo "6) YARN ResourceManager"
-    echo "7) HiveServer2 HTTP"
-    echo "8) Kafka UI"
-    echo "9) Mongo Express UI"
-    echo "10) Redis Commander UI"
-    echo "11) pgAdmin UI"
-    echo
-    echo "Connection Details:"
-    echo "12) HDFS Connect (FS URI + Bronze/Silver)"
-    echo "13) Hive Metastore (Thrift)"
-    echo "14) PostgreSQL (DB)"
-    echo "15) MongoDB (DB)"
-    echo "16) Redis (DB)"
+    echo "2) Spark (Master/History/App + Connect)"
+    echo "3) HDFS (NameNode + Connect)"
+    echo "4) Hive (HS2 + Metastore + Connect)"
+    echo "5) Kafka (UI + Connect)"
+    echo "6) PostgreSQL (DB + pgAdmin)"
+    echo "7) MongoDB (DB + Mongo Express)"
+    echo "8) Redis (DB + Redis Commander)"
     echo "0) Exit"
-    read -r -p "Select option [0-16]: " selection
+    read -r -p "Select option [0-8]: " selection
     selection="${selection//$'\r'/}"
 
     service_is_endpoint=0
@@ -402,42 +473,24 @@ ui_login_helper() {
     case "${selection}" in
       1) service_name="Airflow"; container_port=8080; start_flag="--start-airflow" ;;
       2) service_name="Spark Master"; container_port=9090; start_flag="--start-core" ;;
-      3) service_name="Spark History"; container_port=18080; start_flag="--start-core" ;;
-      4) service_name="Spark App UI"; container_port=4040; start_flag="--start-core" ;;
-      5) service_name="HDFS NameNode"; container_port=9870; start_flag="--start-core" ;;
-      6) service_name="YARN ResourceManager"; container_port=8088; start_flag="--start-core" ;;
-      7) service_name="HiveServer2 HTTP"; container_port=10001; start_flag="--start-core" ;;
-      8) service_name="Kafka UI"; container_port=9002; start_flag="--start-core" ;;
-      9) service_name="Mongo Express UI"; container_port=8083; start_flag="--start-db-uis" ;;
-      10) service_name="Redis Commander UI"; container_port=8084; start_flag="--start-db-uis" ;;
-      11) service_name="pgAdmin UI"; container_port=8181; start_flag="--start-db-uis" ;;
-      12)
-        show_hdfs_connect_info
-        echo
-        continue
-        ;;
-      13)
-        service_name="Hive Metastore (Thrift)"
-        container_port=9083
-        start_flag="--start-hive"
-        service_is_endpoint=1
-        endpoint_scheme="thrift"
-        ;;
-      14)
+      3) service_name="HDFS NameNode"; container_port=9870; start_flag="--start-core" ;;
+      4) service_name="HiveServer2 HTTP"; container_port=10001; start_flag="--start-core" ;;
+      5) service_name="Kafka UI"; container_port=9002; start_flag="--start-core" ;;
+      6)
         service_name="PostgreSQL (DB)"
         container_port=5432
         start_flag="--start-postgres"
         service_is_endpoint=1
         endpoint_scheme="postgresql"
         ;;
-      15)
+      7)
         service_name="MongoDB (DB)"
         container_port=27017
         start_flag="--start-mongodb"
         service_is_endpoint=1
         endpoint_scheme="mongodb"
         ;;
-      16)
+      8)
         service_name="Redis (DB)"
         container_port=6379
         start_flag="--start-redis"
@@ -475,50 +528,43 @@ ui_login_helper() {
       1)
         echo "Login: username=${airflow_user} password=admin"
         ;;
-      9)
-        echo "Mongo Express: no UI login (default)."
-        echo "MongoDB credentials: username=admin password=admin authDb=admin"
-        ;;
-      10)
-        echo "Redis Commander: no UI login (default)."
-        echo "Redis credentials: username=default password=admin"
-        ;;
-      11)
-        echo "pgAdmin login: email=admin@admin.com password=admin"
-        echo "pgAdmin server name: ${CONTAINER_NAME:-datalab}"
-        echo "PostgreSQL in pgAdmin: host=localhost port=5432 username=admin password=admin db=datalab"
-        ;;
-      7)
-        show_hive_connect_info
-        ;;
       2)
         show_spark_connect_info
         ;;
-      5)
+      3)
         echo "HDFS: no UI login required."
-        echo "Tip: choose option 12 for FS URI + Bronze/Silver paths."
+        show_hdfs_connect_info
         ;;
-      6)
-        echo "YARN: no UI login required."
-        echo "ResourceManager endpoint: $(container_effective_url 8088 "/")"
-        ;;
-      8)
-        echo "Kafka UI: no login required (default)."
-        show_kafka_connect_info
-        ;;
-      13)
+      4)
+        show_hive_connect_info
         echo "Hive metastore thrift endpoint details:"
         echo "  Endpoint: $(container_effective_endpoint 9083 "thrift")"
         echo "  Auth: none (default)"
         echo "  hive-site.xml: $(read_hive_site_path)"
         ;;
-      14)
+      5)
+        echo "Kafka UI: no login required (default)."
+        show_kafka_connect_info
+        ;;
+      6)
+        local pg_hostport pg_host pg_port
+        pg_hostport="$(effective_host_port 5432)"
+        pg_host="${pg_hostport%:*}"
+        pg_port="${pg_hostport##*:}"
+        echo "pgAdmin: $(container_effective_url 8181 "/")"
+        echo "pgAdmin login: email=admin@admin.com password=admin"
+        echo "pgAdmin server name: ${CONTAINER_NAME:-datalab}"
+        echo "PostgreSQL in pgAdmin: host=${pg_host} port=${pg_port} username=${POSTGRES_USER:-admin} password=${POSTGRES_PASSWORD:-admin} db=${POSTGRES_DB:-datalab}"
         show_postgres_connect_info
         ;;
-      15)
+      7)
+        echo "Mongo Express: $(container_effective_url 8083 "/")"
+        echo "Mongo Express: no UI login (default)."
         show_mongodb_connect_info
         ;;
-      16)
+      8)
+        echo "Redis Commander: $(container_effective_url 8084 "/")"
+        echo "Redis Commander: no UI login (default)."
         show_redis_connect_info
         ;;
       *)
@@ -654,15 +700,41 @@ container_effective_endpoint() {
   printf '%s://%s:%s' "${scheme}" "${UI_HOST}" "${container_port}"
 }
 
+print_db_rows() {
+  local server_name="$1"
+  local pg_host="$2" pg_port="$3" pg_db="$4" pg_user="$5"
+  local mongo_host="$6" mongo_port="$7" mongo_db="$8" mongo_user="$9"
+  local redis_host="${10}" redis_port="${11}" redis_user="${12}"
+
+  print_row "PostgreSQL Server" "${server_name}"
+  print_row "PostgreSQL Config" "host=${pg_host} port=${pg_port} db=${pg_db} user=${pg_user}"
+  print_row "MongoDB Server" "${server_name}"
+  print_row "MongoDB Config" "host=${mongo_host} port=${mongo_port} db=${mongo_db} user=${mongo_user} authDb=admin"
+  print_row "Redis Server" "${server_name}"
+  print_row "Redis Config" "host=${redis_host} port=${redis_port} user=${redis_user}"
+}
+
 print_ui_block_host() {
   local container="$1"
+  local pg_port mongo_port redis_port
+  local pg_db pg_user mongo_db mongo_user redis_user
+
+  pg_port="$(mapped_host_port "${container}" 5432)"
+  mongo_port="$(mapped_host_port "${container}" 27017)"
+  redis_port="$(mapped_host_port "${container}" 6379)"
+  pg_db="$(default_postgres_db)"
+  pg_user="$(default_postgres_user)"
+  mongo_db="$(default_mongo_db)"
+  mongo_user="$(default_mongo_user)"
+  redis_user="$(default_redis_user)"
+
   print_row "HDFS FS URI" "$(read_fs_defaultfs)"
   print_row "Bronze Base Path" "$(default_bronze_path)"
   print_row "Silver Base Path" "$(default_silver_path)"
   print_row "Spark RPC" "$(mapped_endpoint "${container}" 7077 "spark")"
   print_row "Kafka Broker" "$(mapped_endpoint "${container}" 9092 "kafka")"
-  print_row "Hive JDBC HTTP" "$(container_effective_endpoint 10001 "jdbc:hive2")"
-  print_row "Hive JDBC Binary" "$(container_effective_endpoint 10000 "jdbc:hive2")"
+  print_row "Hive JDBC HTTP" "$(mapped_endpoint "${container}" 10001 "jdbc:hive2")"
+  print_row "Hive JDBC Binary" "$(mapped_endpoint "${container}" 10000 "jdbc:hive2")"
   print_row "HiveServer2 Thrift" "$(mapped_endpoint "${container}" 10000 "thrift")"
   print_row "Hive Metastore (client endpoint)" "$(mapped_endpoint "${container}" 9083 "thrift")"
   print_row "Hive Config Path" "$(read_hive_site_path)"
@@ -678,12 +750,33 @@ print_ui_block_host() {
   print_row "Mongo Express UI" "$(mapped_url "${container}" 8083 "/")"
   print_row "Redis Commander UI" "$(mapped_url "${container}" 8084 "/")"
   print_row "pgAdmin UI" "$(mapped_url "${container}" 8181 "/")"
+  print_db_rows "${container}" "${UI_HOST}" "${pg_port}" "${pg_db}" "${pg_user}" "${UI_HOST}" "${mongo_port}" "${mongo_db}" "${mongo_user}" "${UI_HOST}" "${redis_port}" "${redis_user}"
   print_row "PostgreSQL (DB)" "$(mapped_endpoint "${container}" 5432 "postgresql")"
   print_row "MongoDB (DB)" "$(mapped_endpoint "${container}" 27017 "mongodb")"
   print_row "Redis (DB)" "$(mapped_endpoint "${container}" 6379 "redis")"
 }
 
 print_ui_block_container() {
+  local target_name pg_hostport mongo_hostport redis_hostport
+  local pg_host pg_port mongo_host mongo_port redis_host redis_port
+  local pg_db pg_user mongo_db mongo_user redis_user
+
+  target_name="${CONTAINER_NAME:-datalab}"
+  pg_hostport="$(effective_host_port 5432)"
+  mongo_hostport="$(effective_host_port 27017)"
+  redis_hostport="$(effective_host_port 6379)"
+  pg_host="${pg_hostport%:*}"
+  pg_port="${pg_hostport##*:}"
+  mongo_host="${mongo_hostport%:*}"
+  mongo_port="${mongo_hostport##*:}"
+  redis_host="${redis_hostport%:*}"
+  redis_port="${redis_hostport##*:}"
+  pg_db="$(default_postgres_db)"
+  pg_user="$(default_postgres_user)"
+  mongo_db="$(default_mongo_db)"
+  mongo_user="$(default_mongo_user)"
+  redis_user="$(default_redis_user)"
+
   print_row "HDFS FS URI" "$(read_fs_defaultfs)"
   print_row "Bronze Base Path" "$(default_bronze_path)"
   print_row "Silver Base Path" "$(default_silver_path)"
@@ -706,12 +799,83 @@ print_ui_block_container() {
   print_row "Mongo Express UI" "$(container_effective_url 8083 "/")"
   print_row "Redis Commander UI" "$(container_effective_url 8084 "/")"
   print_row "pgAdmin UI" "$(container_effective_url 8181 "/")"
+  print_db_rows "${target_name}" "${pg_host}" "${pg_port}" "${pg_db}" "${pg_user}" "${mongo_host}" "${mongo_port}" "${mongo_db}" "${mongo_user}" "${redis_host}" "${redis_port}" "${redis_user}"
   print_row "PostgreSQL (DB)" "$(container_effective_endpoint 5432 "postgresql")"
   print_row "MongoDB (DB)" "$(container_effective_endpoint 27017 "mongodb")"
   print_row "Redis (DB)" "$(container_effective_endpoint 6379 "redis")"
 }
 
+print_ui_json_host() {
+  local container="$1"
+  local pg_port mongo_port redis_port
+  pg_port="$(mapped_host_port "${container}" 5432)"
+  mongo_port="$(mapped_host_port "${container}" 27017)"
+  redis_port="$(mapped_host_port "${container}" 6379)"
+  cat <<EOF
+{
+  "container": "$(json_escape "${container}")",
+  "hdfs_fs_uri": "$(json_escape "$(read_fs_defaultfs)")",
+  "hive_warehouse_dir": "$(json_escape "$(read_hive_warehouse_dir)")",
+  "hive_metastore_endpoint": "$(json_escape "$(mapped_endpoint "${container}" 9083 "thrift")")",
+  "spark_rpc": "$(json_escape "$(mapped_endpoint "${container}" 7077 "spark")")",
+  "kafka_broker": "$(json_escape "$(mapped_endpoint "${container}" 9092 "kafka")")",
+  "postgresql": {
+    "server_name": "$(json_escape "${container}")",
+    "inside": "postgresql://localhost:5432",
+    "outside": "postgresql://$(json_escape "${UI_HOST}"):${pg_port}"
+  },
+  "mongodb": {
+    "server_name": "$(json_escape "${container}")",
+    "inside": "mongodb://localhost:27017",
+    "outside": "mongodb://$(json_escape "${UI_HOST}"):${mongo_port}"
+  },
+  "redis": {
+    "server_name": "$(json_escape "${container}")",
+    "inside": "redis://localhost:6379",
+    "outside": "redis://$(json_escape "${UI_HOST}"):${redis_port}"
+  }
+}
+EOF
+}
+
+print_ui_json_container() {
+  local target_name pg_hostport mongo_hostport redis_hostport
+  target_name="${CONTAINER_NAME:-datalab}"
+  pg_hostport="$(effective_host_port 5432)"
+  mongo_hostport="$(effective_host_port 27017)"
+  redis_hostport="$(effective_host_port 6379)"
+  cat <<EOF
+{
+  "container": "$(json_escape "${target_name}")",
+  "hdfs_fs_uri": "$(json_escape "$(read_fs_defaultfs)")",
+  "hive_warehouse_dir": "$(json_escape "$(read_hive_warehouse_dir)")",
+  "hive_metastore_endpoint": "$(json_escape "$(container_effective_endpoint 9083 "thrift")")",
+  "spark_rpc": "$(json_escape "$(container_effective_endpoint 7077 "spark")")",
+  "kafka_broker": "$(json_escape "$(container_effective_endpoint 9092 "kafka")")",
+  "postgresql": {
+    "server_name": "$(json_escape "${target_name}")",
+    "inside": "postgresql://localhost:5432",
+    "outside": "postgresql://$(json_escape "${pg_hostport}")"
+  },
+  "mongodb": {
+    "server_name": "$(json_escape "${target_name}")",
+    "inside": "mongodb://localhost:27017",
+    "outside": "mongodb://$(json_escape "${mongo_hostport}")"
+  },
+  "redis": {
+    "server_name": "$(json_escape "${target_name}")",
+    "inside": "redis://localhost:6379",
+    "outside": "redis://$(json_escape "${redis_hostport}")"
+  }
+}
+EOF
+}
+
 if datalab::inside_container; then
+  if [[ "${UI_ACTION}" == "--json" ]]; then
+    print_ui_json_container
+    exit 0
+  fi
   if [[ "${UI_ACTION}" == "--list" || "${UI_ACTION}" == "--all" || "${UI_ACTION}" == "--urls" ]]; then
     print_header
     print_ui_block_container
@@ -732,7 +896,7 @@ if datalab::inside_container; then
   exit 0
 fi
 
-if [[ "${UI_ACTION}" != "--list" && "${UI_ACTION}" != "--all" && "${UI_ACTION}" != "--urls" ]]; then
+if [[ "${UI_ACTION}" != "--list" && "${UI_ACTION}" != "--all" && "${UI_ACTION}" != "--urls" && "${UI_ACTION}" != "--json" ]]; then
   datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/ui_services" "--login-helper"
   exit 0
 fi
@@ -751,6 +915,10 @@ EOF
   exit 1
 fi
 
+if [[ "${UI_ACTION}" == "--json" ]]; then
+  print_ui_json_host "${target_container}"
+  exit 0
+fi
 print_header
 echo "Container: ${target_container}"
 print_ui_block_host "${target_container}"

@@ -10,7 +10,14 @@ mkdir -p \
   "${RUNTIME_ROOT}/airflow" "${AIRFLOW_HOME}/logs" "${AIRFLOW_HOME}/pids" \
   "${RUNTIME_ROOT}/hadoop" "${RUNTIME_ROOT}/kafka" "${RUNTIME_ROOT}/spark" \
   "${RUNTIME_ROOT}/hive" "${RUNTIME_ROOT}/dbt" "${RUNTIME_ROOT}/terraform" \
-  "${RUNTIME_ROOT}/lakehouse"
+  "${RUNTIME_ROOT}/lakehouse" "${RUNTIME_ROOT}/java" "${RUNTIME_ROOT}/scala" \
+  "${RUNTIME_ROOT}/postgres" "${RUNTIME_ROOT}/mongodb" "${RUNTIME_ROOT}/redis" \
+  "${RUNTIME_ROOT}/kafka/data" "${RUNTIME_ROOT}/kafka/logs" \
+  "${RUNTIME_ROOT}/kafka/pids" "${RUNTIME_ROOT}/kafka/zookeeper-data" \
+  "${RUNTIME_ROOT}/hive/logs" "${RUNTIME_ROOT}/hive/pids" \
+  "${RUNTIME_ROOT}/spark/logs" "${RUNTIME_ROOT}/spark/pids" \
+  "${RUNTIME_ROOT}/spark/events" "${RUNTIME_ROOT}/spark/warehouse" \
+  "${RUNTIME_ROOT}/airflow/logs" "${RUNTIME_ROOT}/airflow/pids"
 
 # Fix ownership for the shared mounts and Airflow home.
 chown -R datalab:datalab "${RUNTIME_ROOT}" "${AIRFLOW_HOME}" 2>/dev/null || true
