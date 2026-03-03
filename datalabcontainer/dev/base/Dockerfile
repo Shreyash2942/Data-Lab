@@ -14,6 +14,7 @@ ARG AIRFLOW_PYTHON_MAJOR_MINOR=3.10
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     openjdk-11-jdk \
+    libsnappy1v5 libzstd1 libsasl2-2 \
     curl wget git ca-certificates \
     nodejs npm php-cli php-pgsql \
     scala \
@@ -158,12 +159,14 @@ RUN mkdir -p /home/${LAB_APP_USER}/runtime
 # Final PATHs for non-login shells (login shells also source profile.d)
 ENV SPARK_HOME=/opt/spark \
     HADOOP_HOME=/opt/hadoop \
+    HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native \
     HIVE_HOME=/opt/hive \
     KAFKA_HOME=/opt/kafka \
     MONGO_HOME=/opt/mongodb \
     RUNTIME_ROOT=/home/${LAB_APP_USER}/runtime \
     WORKSPACE=/home/${LAB_APP_USER} \
-    PATH="$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
+    LD_LIBRARY_PATH="/opt/hadoop/lib/native:${LD_LIBRARY_PATH}" \
+    PATH="/home/${LAB_APP_USER}/app/bin:${PATH}:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
 
 # Ensure Desktop doesn't auto-group containers into a stack by default
 LABEL com.docker.compose.project="" \
@@ -200,10 +203,13 @@ RUN cat <<'EOF' >/etc/profile.d/datalab-path.sh
 # Data Lab environment and PATH additions (applied to all users)
 export SPARK_HOME=/opt/spark
 export HADOOP_HOME=/opt/hadoop
+export HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native
 export HIVE_HOME=/opt/hive
 export KAFKA_HOME=/opt/kafka
 export MONGO_HOME=/opt/mongodb
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export LD_LIBRARY_PATH="/opt/hadoop/lib/native:${LD_LIBRARY_PATH}"
+export PATH="/home/datalab/app/bin:${PATH}"
 # Force a shared workspace path so root and datalab use the same mounts
 export WORKSPACE="/home/datalab"
 export RUNTIME_ROOT="${WORKSPACE}/runtime"

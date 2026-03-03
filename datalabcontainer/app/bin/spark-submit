@@ -4,14 +4,19 @@ set -euo pipefail
 RUNTIME_ROOT="${RUNTIME_ROOT:-${HOME}/runtime}"
 SPARK_CONF_DIR_DEFAULT="${RUNTIME_ROOT}/spark/conf"
 SPARK_BIN="${SPARK_HOME:-/opt/spark}/bin/spark-submit"
-LOG_LEVEL="${DATALAB_SPARK_LOG_LEVEL:-WARN}"
+HADOOP_HOME="${HADOOP_HOME:-/opt/hadoop}"
+HADOOP_COMMON_LIB_NATIVE_DIR="${HADOOP_COMMON_LIB_NATIVE_DIR:-${HADOOP_HOME}/lib/native}"
+LOG_LEVEL="${DATALAB_SPARK_LOG_LEVEL:-ERROR}"
 LOG_LEVEL="$(printf '%s' "${LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
-HUDI_LOG_LEVEL="${DATALAB_HUDI_LOG_LEVEL:-WARN}"
+HUDI_LOG_LEVEL="${DATALAB_HUDI_LOG_LEVEL:-ERROR}"
 HUDI_LOG_LEVEL="$(printf '%s' "${HUDI_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
 JETTY_LOG_LEVEL="${DATALAB_JETTY_LOG_LEVEL:-ERROR}"
 JETTY_LOG_LEVEL="$(printf '%s' "${JETTY_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
 JAVALIN_LOG_LEVEL="${DATALAB_JAVALIN_LOG_LEVEL:-ERROR}"
 JAVALIN_LOG_LEVEL="$(printf '%s' "${JAVALIN_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+VERBOSE_MODE="${DATALAB_SPARK_VERBOSE:-0}"
+MAX_TO_STRING_FIELDS="${DATALAB_SPARK_MAX_TO_STRING_FIELDS:-1000}"
+FILTER_JOL_WARNINGS="${DATALAB_FILTER_JOL_WARNINGS:-1}"
 
 LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
 if ! mkdir -p "${SPARK_CONF_DIR_DEFAULT}" 2>/dev/null; then
@@ -80,16 +85,38 @@ ensure_log4j
 set_log_level "${LOG4J_FILE}" || true
 
 export SPARK_CONF_DIR="${SPARK_CONF_DIR:-${SPARK_CONF_DIR_DEFAULT}}"
+export HADOOP_HOME HADOOP_COMMON_LIB_NATIVE_DIR
+export LD_LIBRARY_PATH="${HADOOP_COMMON_LIB_NATIVE_DIR}:${LD_LIBRARY_PATH:-}"
 
 DEFAULT_SUBMIT_OPTS=(
   "-Dlog4j.configurationFile=${LOG4J_FILE}"
+  "-Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
   "-Divy.message.logger.level=1"
 )
 export SPARK_SUBMIT_OPTS="${DEFAULT_SUBMIT_OPTS[*]} ${SPARK_SUBMIT_OPTS:-}"
 
-QUIET_ARGS=(
-  "--conf" "spark.ui.showConsoleProgress=false"
-)
+DRIVER_EXTRA_JAVA_OPTS="-Dlog4j.configurationFile=${LOG4J_FILE} -Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
+EXECUTOR_EXTRA_JAVA_OPTS="-Dlog4j.configurationFile=${LOG4J_FILE} -Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
+
+# Allow self-attach so JOL/agent probing won't emit warning noise in most container runs.
+DRIVER_EXTRA_JAVA_OPTS="${DRIVER_EXTRA_JAVA_OPTS} -Djdk.attach.allowAttachSelf=true"
+EXECUTOR_EXTRA_JAVA_OPTS="${EXECUTOR_EXTRA_JAVA_OPTS} -Djdk.attach.allowAttachSelf=true"
+
+QUIET_ARGS=()
+if [[ "${VERBOSE_MODE}" != "1" ]]; then
+  QUIET_ARGS+=(
+    "--conf" "spark.ui.showConsoleProgress=false"
+    "--conf" "spark.driver.extraJavaOptions=${DRIVER_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.executor.extraJavaOptions=${EXECUTOR_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.sql.debug.maxToStringFields=${MAX_TO_STRING_FIELDS}"
+  )
+else
+  QUIET_ARGS+=(
+    "--conf" "spark.driver.extraJavaOptions=${DRIVER_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.executor.extraJavaOptions=${EXECUTOR_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.sql.debug.maxToStringFields=${MAX_TO_STRING_FIELDS}"
+  )
+fi
 
 # If shared runtime paths are root-owned, fall back to user-writable paths so
 # `spark-submit` still works for the `datalab` user.
@@ -99,7 +126,16 @@ USER_EVENT_DIR="${HOME}/.datalab/spark/events"
 USER_WAREHOUSE_DIR="${HOME}/.datalab/spark/warehouse"
 EXTRA_CONF_ARGS=()
 
-if ! mkdir -p "${EVENT_DIR}" 2>/dev/null || [[ ! -w "${EVENT_DIR}" ]]; then
+can_write_dir() {
+  local dir="$1"
+  local probe="${dir}/.write_test_$$"
+  mkdir -p "${dir}" 2>/dev/null || return 1
+  : > "${probe}" 2>/dev/null || return 1
+  rm -f "${probe}" 2>/dev/null || true
+  return 0
+}
+
+if ! can_write_dir "${EVENT_DIR}"; then
   mkdir -p "${USER_EVENT_DIR}"
   EXTRA_CONF_ARGS+=(
     "--conf" "spark.eventLog.enabled=true"
@@ -108,11 +144,16 @@ if ! mkdir -p "${EVENT_DIR}" 2>/dev/null || [[ ! -w "${EVENT_DIR}" ]]; then
   )
 fi
 
-if ! mkdir -p "${WAREHOUSE_DIR}" 2>/dev/null || [[ ! -w "${WAREHOUSE_DIR}" ]]; then
+if ! can_write_dir "${WAREHOUSE_DIR}"; then
   mkdir -p "${USER_WAREHOUSE_DIR}"
   EXTRA_CONF_ARGS+=(
     "--conf" "spark.sql.warehouse.dir=${USER_WAREHOUSE_DIR}"
   )
 fi
 
-exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@"
+if [[ "${FILTER_JOL_WARNINGS}" == "1" ]]; then
+  exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@" \
+    2> >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)' >&2)
+else
+  exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@"
+fi

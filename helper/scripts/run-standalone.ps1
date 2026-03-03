@@ -36,7 +36,7 @@ if ($existingNames -contains $Name) {
 
 docker run -d --name $Name `
   --user root `
-  --workdir / `
+  --workdir /home/datalab `
   --label com.docker.compose.project= `
   --label com.docker.compose.service= `
   --label com.docker.compose.oneoff= `
@@ -85,13 +85,18 @@ set -e
 # New container should start from a clean Kafka metadata state.
 rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
 mkdir -p \
+  /home/datalab/runtime/spark/events \
+  /home/datalab/runtime/spark/warehouse \
+  /home/datalab/runtime/spark/logs \
+  /home/datalab/runtime/spark/pids \
   /home/datalab/runtime/kafka/data \
   /home/datalab/runtime/kafka/logs \
   /home/datalab/runtime/kafka/pids \
   /home/datalab/runtime/kafka/zookeeper-data \
   /home/datalab/runtime/java \
   /home/datalab/runtime/scala
-bash /home/datalab/app/datalab-check > /home/datalab/runtime/bootstrap-check.log 2>&1 || true
+chown -R datalab:datalab /home/datalab/runtime 2>/dev/null || true
+chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
 "@
 docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null
 

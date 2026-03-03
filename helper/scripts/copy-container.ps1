@@ -6,7 +6,11 @@ Param(
   [switch]$ForcePull,
   [string[]]$ExtraPorts = @(),
   [string]$UiHost = "localhost",
-  [switch]$BindProjectFiles
+  [switch]$BindProjectFiles,
+  [string]$DefaultProjectHostPath = "D:\GitHub\MediLake",
+  [string]$DefaultProjectContainerPath = "/home/datalab/medilake",
+  [switch]$SkipDefaultProjectMount,
+  [switch]$NoPromptVolumes
 )
 
 Set-StrictMode -Version Latest
@@ -106,6 +110,15 @@ function Invoke-LinuxLineEndingFix {
   }
 }
 
+function Get-SafeVolumeSuffix {
+  Param([string]$Name)
+  $safe = ($Name -replace "[^a-zA-Z0-9_.-]", "-").ToLowerInvariant()
+  if (-not $safe) {
+    $safe = "default"
+  }
+  return $safe
+}
+
 if (-not $NewName) {
   $NewName = Read-Host "New container name"
 }
@@ -201,22 +214,33 @@ if ($BindProjectFiles) {
   )
 }
 
+if (-not $SkipDefaultProjectMount) {
+  if (Test-Path $DefaultProjectHostPath) {
+    $defaultVolumes += "$DefaultProjectHostPath`:$DefaultProjectContainerPath"
+    Write-Host "Auto-mounted project path: $DefaultProjectHostPath -> $DefaultProjectContainerPath"
+  } else {
+    Write-Warning "Default project path '$DefaultProjectHostPath' was not found. Skipping auto-mount."
+  }
+}
+
 $collectedVolumes = @()
-while ($true) {
-  $hostPath = Read-Host "Host path to bind (blank to finish)"
-  if (-not $hostPath) { break }
-  if (-not (Test-Path $hostPath)) {
-    Write-Host "Path '$hostPath' does not exist. Try again."
-    continue
-  }
+if (-not $NoPromptVolumes) {
+  while ($true) {
+    $hostPath = Read-Host "Host path to bind (blank to finish)"
+    if (-not $hostPath) { break }
+    if (-not (Test-Path $hostPath)) {
+      Write-Host "Path '$hostPath' does not exist. Try again."
+      continue
+    }
 
-  $containerPath = Read-Host "Container path for this mount (e.g., /home/datalab/data)"
-  if (-not $containerPath) {
-    Write-Host "Container path is required. Try again."
-    continue
-  }
+    $containerPath = Read-Host "Container path for this mount (e.g., /home/datalab/data)"
+    if (-not $containerPath) {
+      Write-Host "Container path is required. Try again."
+      continue
+    }
 
-  $collectedVolumes += "$hostPath`:$containerPath"
+    $collectedVolumes += "$hostPath`:$containerPath"
+  }
 }
 
 while (Test-ContainerExists $NewName) {
@@ -244,13 +268,14 @@ while (Test-ContainerExists $NewName) {
   }
 }
 
-$runtimeCopyDir = $null
-if ($BindProjectFiles) {
-  $runtimeCopiesRoot = Join-Path $datalabDir "runtime-copies"
-  $runtimeCopyDir = Join-Path $runtimeCopiesRoot $NewName
-  New-Item -ItemType Directory -Force -Path $runtimeCopyDir | Out-Null
-  $defaultVolumes += "${runtimeCopyDir}:/home/datalab/runtime"
+$runtimeVolumeSuffix = Get-SafeVolumeSuffix -Name $NewName
+$runtimeVolumeName = "datalab-runtime-$runtimeVolumeSuffix"
+$existingVolumes = @(docker volume ls --format "{{.Name}}" 2>$null)
+if ($existingVolumes -contains $runtimeVolumeName) {
+  docker volume rm $runtimeVolumeName 1>$null 2>$null
 }
+docker volume create $runtimeVolumeName 1>$null | Out-Null
+$defaultVolumes += "${runtimeVolumeName}:/home/datalab/runtime"
 
 $portArgs = @()
 foreach ($p in $resolvedDefaultPorts) { $portArgs += @("-p", $p) }
@@ -272,13 +297,15 @@ $hostPortMap = $hostPortMapEntries -join ","
 $envArgs = @(
   "-e", "CONTAINER_NAME=$NewName",
   "-e", "DATALAB_UI_HOST=$UiHost",
-  "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap"
+  "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap",
+  "-e", "DATALAB_SPARK_VERBOSE=0",
+  "-e", "DATALAB_SPARK_LOG_LEVEL=WARN"
 )
 
 $dockerArgs = @(
   "run", "-d", "--name", $NewName,
   "--user", "root",
-  "--workdir", "/",
+  "--workdir", "/home/datalab",
   "--label", "com.docker.compose.project=",
   "--label", "com.docker.compose.service=",
   "--label", "com.docker.compose.oneoff="
@@ -306,13 +333,18 @@ set -e
 # New copied container should start from a clean Kafka metadata state.
 rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
 mkdir -p \
+  /home/datalab/runtime/spark/events \
+  /home/datalab/runtime/spark/warehouse \
+  /home/datalab/runtime/spark/logs \
+  /home/datalab/runtime/spark/pids \
   /home/datalab/runtime/kafka/data \
   /home/datalab/runtime/kafka/logs \
   /home/datalab/runtime/kafka/pids \
   /home/datalab/runtime/kafka/zookeeper-data \
   /home/datalab/runtime/java \
   /home/datalab/runtime/scala
-bash /home/datalab/app/datalab-check > /home/datalab/runtime/bootstrap-check.log 2>&1 || true
+chown -R datalab:datalab /home/datalab/runtime 2>/dev/null || true
+chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
 "@
 docker exec $NewName bash -lc $bootstrapScript 2>$null | Out-Null
 
@@ -329,9 +361,8 @@ if ($normalizedExtraPorts.Count -gt 0) {
 if ($collectedVolumes.Count -gt 0) {
   Write-Output "Mounted: $($collectedVolumes -join ', ')"
 }
-if ($BindProjectFiles -and $runtimeCopyDir) {
-  Write-Output "Runtime mount: ${runtimeCopyDir}:/home/datalab/runtime"
-} else {
+Write-Output "Runtime volume: ${runtimeVolumeName}:/home/datalab/runtime"
+if (-not $BindProjectFiles) {
   Write-Output "Mode: isolated (no auto bind mounts from this project)."
 }
 

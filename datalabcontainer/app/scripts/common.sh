@@ -78,6 +78,7 @@ common::init_workdir
 
 : "${SPARK_HOME:=/opt/spark}"
 : "${HADOOP_HOME:=/opt/hadoop}"
+: "${HADOOP_COMMON_LIB_NATIVE_DIR:=${HADOOP_HOME}/lib/native}"
 : "${HADOOP_MAPRED_HOME:=${HADOOP_HOME}}"
 : "${HIVE_HOME:=/opt/hive}"
 : "${KAFKA_HOME:=/opt/kafka}"
@@ -88,6 +89,7 @@ common::init_workdir
 
 SPARK_HOME="$(strip_cr "${SPARK_HOME}")"
 HADOOP_HOME="$(strip_cr "${HADOOP_HOME}")"
+HADOOP_COMMON_LIB_NATIVE_DIR="$(strip_cr "${HADOOP_COMMON_LIB_NATIVE_DIR}")"
 HADOOP_MAPRED_HOME="$(strip_cr "${HADOOP_MAPRED_HOME}")"
 HIVE_HOME="$(strip_cr "${HIVE_HOME}")"
 KAFKA_HOME="$(strip_cr "${KAFKA_HOME}")"
@@ -96,7 +98,7 @@ HIVE_SERVER2_THRIFT_HOST="$(strip_cr "${HIVE_SERVER2_THRIFT_HOST}")"
 HIVE_SERVER2_HTTP_PORT="$(strip_cr "${HIVE_SERVER2_HTTP_PORT}")"
 HIVE_SERVER2_HTTP_PATH="$(strip_cr "${HIVE_SERVER2_HTTP_PATH}")"
 
-export SPARK_HOME HADOOP_HOME HADOOP_MAPRED_HOME HIVE_HOME KAFKA_HOME \
+export SPARK_HOME HADOOP_HOME HADOOP_COMMON_LIB_NATIVE_DIR HADOOP_MAPRED_HOME HIVE_HOME KAFKA_HOME \
   HIVE_SERVER2_THRIFT_PORT HIVE_SERVER2_THRIFT_HOST \
   HIVE_SERVER2_HTTP_PORT HIVE_SERVER2_HTTP_PATH
 
@@ -119,6 +121,11 @@ case ":$PATH:" in
   *) export PATH="${PATH}:${JAVA_HOME}/bin" ;;
 esac
 
+case ":${LD_LIBRARY_PATH:-}:" in
+  *":${HADOOP_COMMON_LIB_NATIVE_DIR}:"*) ;;
+  *) export LD_LIBRARY_PATH="${HADOOP_COMMON_LIB_NATIVE_DIR}:${LD_LIBRARY_PATH:-}" ;;
+esac
+
 case ":$PATH:" in
   *":${APP_BIN_DIR}:"*) ;;
   *) export PATH="${APP_BIN_DIR}:$PATH" ;;
@@ -128,10 +135,12 @@ common::ensure_cli_shortcuts() {
   local rc_file="${HOME}/.bashrc"
   local export_line='export PATH="'"${WORKSPACE}"'/app/bin:$PATH"'
   local hive_alias="alias hive='bash \"${WORKSPACE}/app/bin/hive\"'"
+  local spark_submit_alias="alias spark-submit='bash \"${WORKSPACE}/app/bin/spark-submit\"'"
+  local spark_sql_alias="alias spark-sql='bash \"${WORKSPACE}/app/bin/spark-sql\"'"
   local profile_file="${HOME}/.profile"
 
   if [ ! -e "${rc_file}" ]; then
-    printf '# Data Lab CLI shortcuts\n%s\n%s\n' "${export_line}" "${hive_alias}" > "${rc_file}" 2>/dev/null || true
+    printf '# Data Lab CLI shortcuts\n%s\n%s\n%s\n%s\n' "${export_line}" "${hive_alias}" "${spark_submit_alias}" "${spark_sql_alias}" > "${rc_file}" 2>/dev/null || true
     return
   fi
 
@@ -142,16 +151,28 @@ common::ensure_cli_shortcuts() {
   if [ -w "${rc_file}" ] && ! grep -Fq "${hive_alias}" "${rc_file}" 2>/dev/null; then
     printf '%s\n' "${hive_alias}" >> "${rc_file}" 2>/dev/null || true
   fi
+  if [ -w "${rc_file}" ] && ! grep -Fq "${spark_submit_alias}" "${rc_file}" 2>/dev/null; then
+    printf '%s\n' "${spark_submit_alias}" >> "${rc_file}" 2>/dev/null || true
+  fi
+  if [ -w "${rc_file}" ] && ! grep -Fq "${spark_sql_alias}" "${rc_file}" 2>/dev/null; then
+    printf '%s\n' "${spark_sql_alias}" >> "${rc_file}" 2>/dev/null || true
+  fi
 
   # Ensure login shells also pick up the alias/PATH
   if [ ! -e "${profile_file}" ]; then
-    printf '%s\n%s\n' "${export_line}" "${hive_alias}" > "${profile_file}" 2>/dev/null || true
+    printf '%s\n%s\n%s\n%s\n' "${export_line}" "${hive_alias}" "${spark_submit_alias}" "${spark_sql_alias}" > "${profile_file}" 2>/dev/null || true
   else
     if [ -w "${profile_file}" ] && ! grep -Fq 'app/bin' "${profile_file}" 2>/dev/null; then
       printf '%s\n' "${export_line}" >> "${profile_file}" 2>/dev/null || true
     fi
     if [ -w "${profile_file}" ] && ! grep -Fq "${hive_alias}" "${profile_file}" 2>/dev/null; then
       printf '%s\n' "${hive_alias}" >> "${profile_file}" 2>/dev/null || true
+    fi
+    if [ -w "${profile_file}" ] && ! grep -Fq "${spark_submit_alias}" "${profile_file}" 2>/dev/null; then
+      printf '%s\n' "${spark_submit_alias}" >> "${profile_file}" 2>/dev/null || true
+    fi
+    if [ -w "${profile_file}" ] && ! grep -Fq "${spark_sql_alias}" "${profile_file}" 2>/dev/null; then
+      printf '%s\n' "${spark_sql_alias}" >> "${profile_file}" 2>/dev/null || true
     fi
   fi
 }
