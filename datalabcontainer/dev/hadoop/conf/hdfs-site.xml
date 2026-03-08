@@ -17,4 +17,13 @@
     <name>dfs.permissions.enabled</name>
     <value>false</value>
   </property>
+  <!-- Single-node HDFS: avoid datanode replacement errors on append-heavy writers (for example Hudi metadata table writes). -->
+  <property>
+    <name>dfs.client.block.write.replace-datanode-on-failure.enable</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>dfs.client.block.write.replace-datanode-on-failure.policy</name>
+    <value>NEVER</value>
+  </property>
 </configuration>

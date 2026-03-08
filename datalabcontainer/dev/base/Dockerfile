@@ -12,10 +12,11 @@ ARG AIRFLOW_PYTHON_MAJOR_MINOR=3.10
 
 # Base tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv \
-    openjdk-11-jdk \
+    python3 python3-pip python3-venv python3-dev \
+    openjdk-11-jdk openjdk-17-jre-headless \
     libsnappy1v5 libzstd1 libsasl2-2 \
     curl wget git ca-certificates \
+    build-essential \
     nodejs npm php-cli php-pgsql \
     scala \
     nano vim less \
@@ -33,6 +34,7 @@ RUN npm install -g mongo-express@0.54.0 redis-commander@0.8.0 \
     && npm cache clean --force
 
 ENV JAVA11_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
+    JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
     JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
     PATH="$PATH:/usr/lib/jvm/java-11-openjdk-amd64/bin"
 
@@ -79,6 +81,18 @@ COPY datalabcontainer/dev/hive/conf/ /tmp/hive-conf/
 RUN cp /tmp/hive-conf/* ${HIVE_HOME}/conf/ \
     && rm -rf /tmp/hive-conf
 
+# Trino (embedded in the same Data Lab container)
+ENV TRINO_VERSION=435 \
+    TRINO_HOME=/opt/trino
+
+ADD https://repo1.maven.org/maven2/io/trino/trino-server/${TRINO_VERSION}/trino-server-${TRINO_VERSION}.tar.gz /tmp/trino.tgz
+RUN tar -xzf /tmp/trino.tgz -C /opt \
+    && mv /opt/trino-server-${TRINO_VERSION} ${TRINO_HOME} \
+    && rm /tmp/trino.tgz \
+    && mkdir -p /opt/trino/etc-template
+
+COPY datalabcontainer/dev/trino/lakehouse/etc/ /opt/trino/etc-template/
+
 ENV KAFKA_VERSION=3.7.1 \
     KAFKA_SCALA_VERSION=2.13 \
     KAFKA_HOME=/opt/kafka
@@ -101,6 +115,10 @@ ADD https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-${MONGO_VER
 RUN tar -xzf /tmp/mongodb.tgz -C /opt \
     && mv /opt/mongodb-linux-x86_64-ubuntu2204-${MONGO_VERSION} ${MONGO_HOME} \
     && rm /tmp/mongodb.tgz
+
+# MinIO server binary (runs as an in-container service)
+RUN curl -fsSL "https://dl.min.io/server/minio/release/linux-amd64/minio" -o /usr/local/bin/minio \
+    && chmod +x /usr/local/bin/minio
 
 ENV HUDI_VERSION=0.15.0 \
     HUDI_SPARK_ARTIFACT=hudi-spark3.5-bundle_2.12 \
@@ -131,18 +149,37 @@ RUN pip install \
     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${AIRFLOW_PYTHON_MAJOR_MINOR}.txt"
 
 RUN pip install \
-    "pyspark==3.5.1" \
     "dbt-core==1.8.7" "dbt-postgres==1.8.2" "dbt-duckdb==1.8.2" \
     "confluent-kafka==2.5.0" \
     "psycopg2-binary==2.9.9" "pymongo==4.8.0" "redis==5.0.8" \
     "pytest" \
     "delta-spark==${DELTA_VERSION}"
 
+# Use Spark-bundled PySpark to avoid external package hash/download drift.
+RUN python3 - <<'PY'
+import glob
+from pathlib import Path
+
+py4j = sorted(glob.glob("/opt/spark/python/lib/py4j-*-src.zip"))
+if not py4j:
+    raise SystemExit("py4j zip not found under /opt/spark/python/lib")
+pth = Path("/usr/local/lib/python3.10/dist-packages/pyspark_local.pth")
+pth.write_text("/opt/spark/python\n" + py4j[0] + "\n", encoding="utf-8")
+print(f"wrote {pth} with {py4j[0]}")
+PY
+
 # pgAdmin is installed in an isolated venv to avoid dependency conflicts
 # with Airflow and other stack packages in the main Python environment.
 RUN python3 -m venv /opt/pgadmin4-venv \
     && /opt/pgadmin4-venv/bin/pip install --upgrade pip setuptools wheel \
     && /opt/pgadmin4-venv/bin/pip install "pgadmin4==9.12"
+
+# Superset in an isolated venv to avoid dependency conflicts with Airflow.
+RUN python3 -m venv /opt/superset-venv \
+    && /opt/superset-venv/bin/pip install --upgrade pip wheel \
+    && /opt/superset-venv/bin/pip install "setuptools<81" \
+    && /opt/superset-venv/bin/pip install "apache-superset==4.1.2" "trino" "sqlalchemy-trino" \
+    && /opt/superset-venv/bin/pip install "marshmallow==3.21.3" "marshmallow-sqlalchemy==0.28.2"
 
 # Terraform (optional)
 ARG TERRAFORM_ZIP_SHA256=3ff056b5e8259003f67fd0f0ed7229499cfb0b41f3ff55cc184088589994f7a5
@@ -161,11 +198,12 @@ ENV SPARK_HOME=/opt/spark \
     HADOOP_HOME=/opt/hadoop \
     HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native \
     HIVE_HOME=/opt/hive \
+    TRINO_HOME=/opt/trino \
     KAFKA_HOME=/opt/kafka \
     MONGO_HOME=/opt/mongodb \
     RUNTIME_ROOT=/home/${LAB_APP_USER}/runtime \
     WORKSPACE=/home/${LAB_APP_USER} \
-    LD_LIBRARY_PATH="/opt/hadoop/lib/native:${LD_LIBRARY_PATH}" \
+    LD_LIBRARY_PATH="/opt/hadoop/lib/native" \
     PATH="/home/${LAB_APP_USER}/app/bin:${PATH}:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
 
 # Ensure Desktop doesn't auto-group containers into a stack by default
@@ -205,6 +243,7 @@ export SPARK_HOME=/opt/spark
 export HADOOP_HOME=/opt/hadoop
 export HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native
 export HIVE_HOME=/opt/hive
+export TRINO_HOME=/opt/trino
 export KAFKA_HOME=/opt/kafka
 export MONGO_HOME=/opt/mongodb
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
@@ -267,5 +306,5 @@ USER ${LAB_APP_USER}
 
 # Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
 # Advertise the common service ports (map them on `docker run` as needed)
-EXPOSE 4040 5432 6379 8080 8083 8084 8088 8181 9002 9083 9090 9092 9870 10000 10001 18080 27017
+EXPOSE 4040 5432 6379 8080 8083 8084 8088 8090 8091 8181 9000 9001 9002 9083 9090 9092 9870 10000 10001 18080 27017
 CMD ["sleep", "infinity"]

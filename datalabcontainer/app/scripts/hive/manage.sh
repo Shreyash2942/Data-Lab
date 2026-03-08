@@ -15,6 +15,21 @@ HIVE_METASTORE_LOG_FILE="${HIVE_LOG_DIR}/metastore.log"
 HIVE_METASTORE_PID_FILE="${HIVE_PID_DIR}/metastore.pid"
 HIVE_SCRIPTS_DIR="${WORKSPACE}/app/scripts/hive"
 HIVE_BEELINE_CLI="${HIVE_SCRIPTS_DIR}/cli.sh"
+HIVE_AUX_JARS_PATH_DEFAULT=""
+for jar in \
+  "/opt/spark/jars/hudi-spark-bundle.jar" \
+  "/opt/spark/jars/iceberg-spark-runtime.jar" \
+  "/opt/spark/jars/delta-spark.jar" \
+  "/opt/spark/jars/delta-storage.jar"; do
+  if [[ -f "${jar}" ]]; then
+    if [[ -z "${HIVE_AUX_JARS_PATH_DEFAULT}" ]]; then
+      HIVE_AUX_JARS_PATH_DEFAULT="${jar}"
+    else
+      HIVE_AUX_JARS_PATH_DEFAULT="${HIVE_AUX_JARS_PATH_DEFAULT},${jar}"
+    fi
+  fi
+done
+: "${HIVE_AUX_JARS_PATH:=${HIVE_AUX_JARS_PATH_DEFAULT}}"
 
 hive::ensure_dirs() {
   mkdir -p \
@@ -23,6 +38,12 @@ hive::ensure_dirs() {
     "${HIVE_METASTORE_DB}" \
     "${HIVE_WAREHOUSE}" \
     "${RUNTIME_ROOT}/hive/tmp"
+}
+
+hive::aux_jars_args() {
+  if [[ -n "${HIVE_AUX_JARS_PATH}" ]]; then
+    printf '%s\n' "${HIVE_AUX_JARS_PATH}"
+  fi
 }
 
 hive::ensure_hdfs_paths() {
@@ -149,6 +170,7 @@ hive::start_metastore() {
   echo "[*] Starting Hive metastore (Thrift) on 0.0.0.0:${HIVE_METASTORE_PORT}..."
   HIVE_CONF_DIR="${HIVE_HOME}/conf" \
   HADOOP_CONF_DIR="${HADOOP_HOME}/etc/hadoop" \
+  HIVE_AUX_JARS_PATH="${HIVE_AUX_JARS_PATH}" \
   HIVE_LOG_DIR="${HIVE_LOG_DIR}" \
   METASTORE_PID_DIR="${HIVE_PID_DIR}" \
   JAVA_HOME="${JAVA_HOME}" \
@@ -195,6 +217,7 @@ hive::start_hs2() {
   echo "[*] Starting HiveServer2 (HTTP) on 0.0.0.0:${HIVE_SERVER2_HTTP_PORT}/${HIVE_SERVER2_HTTP_PATH}..."
   HIVE_CONF_DIR="${HIVE_HOME}/conf" \
   HADOOP_CONF_DIR="${HADOOP_HOME}/etc/hadoop" \
+  HIVE_AUX_JARS_PATH="${HIVE_AUX_JARS_PATH}" \
   HIVE_LOG_DIR="${HIVE_LOG_DIR}" \
   HIVESERVER2_PID_DIR="${HIVE_PID_DIR}" \
   JAVA_HOME=${JAVA_HOME} \
@@ -205,6 +228,7 @@ hive::start_hs2() {
       --hiveconf hive.server2.thrift.http.path="${HIVE_SERVER2_HTTP_PATH}" \
       --hiveconf hive.notification.event.poll.interval=0 \
       --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
+      --hiveconf hive.aux.jars.path="${HIVE_AUX_JARS_PATH}" \
       > "${HIVE_HS2_LOG_FILE}" 2>&1 &
   echo $! > "${HIVE_HS2_HTTP_PID_FILE}"
   if ! HS2_WAIT_SERVICE="HiveServer2" hive::wait_for_port localhost "${HIVE_SERVER2_HTTP_PORT}" "HiveServer2"; then

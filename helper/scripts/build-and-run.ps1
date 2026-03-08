@@ -5,7 +5,8 @@ Param(
   [string]$Dockerfile = "datalabcontainer/dev/base/Dockerfile",
   [string[]]$ExtraPorts = @(),
   [string[]]$ExtraVolumes = @(),
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [switch]$IncludeLakehousePorts
 )
 
 Set-StrictMode -Version Latest
@@ -28,6 +29,14 @@ function Get-HostPortFromMapping {
     throw "Invalid port mapping '$Mapping'. Expected format 'host:container'."
   }
   return [int]($Mapping.Split(":")[0])
+}
+
+function Get-ContainerPortFromMapping {
+  Param([string]$Mapping)
+  if ($Mapping -notmatch "^\d+:\d+$") {
+    throw "Invalid port mapping '$Mapping'. Expected format 'host:container'."
+  }
+  return [int]($Mapping.Split(":")[1])
 }
 
 function Test-HostPortFree {
@@ -65,6 +74,18 @@ function Test-HostPortFree {
   }
 }
 
+function Get-FreeHostPort {
+  Param([int]$PreferredPort, [int[]]$ReservedPorts)
+  $candidate = $PreferredPort
+  while ($candidate -le 65535) {
+    if (($ReservedPorts -notcontains $candidate) -and (Test-HostPortFree -Port $candidate)) {
+      return $candidate
+    }
+    $candidate++
+  }
+  throw "Could not find a free host port for preferred base $PreferredPort."
+}
+
 # Build the image unless explicitly skipped.
 if (-not $SkipBuild) {
   Write-Host "Building image '$Image' from '$Dockerfile'..."
@@ -80,25 +101,36 @@ $defaultPorts = @(
   "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
   "5432:5432", "27017:27017", "6379:6379"
 )
+if ($IncludeLakehousePorts) {
+  $defaultPorts += @("8090:8090", "8091:8091", "9000:9000", "9001:9001")
+}
 
 $existingNames = @(docker container ls -a --format "{{.Names}}" 2>$null)
 if ($existingNames -contains $Name) {
   docker rm -f $Name 2>$null | Out-Null
 }
 
-$allPorts = @($defaultPorts + $ExtraPorts)
-$allHostPorts = @()
-foreach ($mapping in $allPorts) {
-  $allHostPorts += (Get-HostPortFromMapping -Mapping $mapping)
+$resolvedDefaultPorts = @()
+$reservedPorts = @()
+foreach ($mapping in $defaultPorts) {
+  $preferredHostPort = Get-HostPortFromMapping -Mapping $mapping
+  $containerPort = Get-ContainerPortFromMapping -Mapping $mapping
+  $resolvedHostPort = Get-FreeHostPort -PreferredPort $preferredHostPort -ReservedPorts $reservedPorts
+  $reservedPorts += $resolvedHostPort
+  $resolvedDefaultPorts += "$resolvedHostPort`:$containerPort"
 }
-if (@($allHostPorts | Group-Object | Where-Object { $_.Count -gt 1 }).Count -gt 0) {
-  $dupes = (@($allHostPorts | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })) -join ", "
-  throw "Duplicate host port mapping detected: $dupes"
-}
-foreach ($p in $allHostPorts) {
-  if (-not (Test-HostPortFree -Port $p)) {
-    throw "Host port $p is already in use. Stop the conflicting process/container or pass different -ExtraPorts."
+
+$normalizedExtraPorts = @()
+foreach ($mapping in $ExtraPorts) {
+  $hostPort = Get-HostPortFromMapping -Mapping $mapping
+  if ($reservedPorts -contains $hostPort) {
+    throw "Extra host port $hostPort conflicts with mapped default ports."
   }
+  if (-not (Test-HostPortFree -Port $hostPort)) {
+    throw "Extra host port $hostPort is already in use. Stop conflicting process/container or choose different -ExtraPorts."
+  }
+  $reservedPorts += $hostPort
+  $normalizedExtraPorts += $mapping
 }
 
 $datalabDir = Join-Path $repoRoot "datalabcontainer"
@@ -125,11 +157,11 @@ $defaultVolumes = @(
 )
 
 $portArgs = @()
-foreach ($p in $defaultPorts) { $portArgs += @("-p", $p) }
-foreach ($p in $ExtraPorts) { $portArgs += @("-p", $p) }
+foreach ($p in $resolvedDefaultPorts) { $portArgs += @("-p", $p) }
+foreach ($p in $normalizedExtraPorts) { $portArgs += @("-p", $p) }
 
 $hostPortMapEntries = @()
-foreach ($mapping in $defaultPorts) {
+foreach ($mapping in $resolvedDefaultPorts) {
   $parts = $mapping.Split(":")
   $hostPort = [int]$parts[0]
   $containerPort = [int]$parts[1]
@@ -190,4 +222,13 @@ chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
 docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null
 
 Write-Output "Container $Name started from $Image."
+Write-Output "Published ports:"
+foreach ($p in $resolvedDefaultPorts) {
+  Write-Output "  - $p"
+}
+if ($normalizedExtraPorts.Count -gt 0) {
+  foreach ($p in $normalizedExtraPorts) {
+    Write-Output "  - $p (extra)"
+  }
+}
 Write-Output "Enter with: docker exec -it -w / $Name bash"

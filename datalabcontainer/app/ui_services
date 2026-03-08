@@ -8,6 +8,17 @@ CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 source "${APP_DIR}/scripts/host_exec.sh"
 
 UI_HOST="${UI_HOST:-localhost}"
+TRINO_HOST="${TRINO_HOST:-localhost}"
+TRINO_PORT="${TRINO_PORT:-8091}"
+TRINO_USER="${TRINO_USER:-trino}"
+TRINO_DEFAULT_CATALOG="${TRINO_DEFAULT_CATALOG:-iceberg}"
+TRINO_DEFAULT_SCHEMA="${TRINO_DEFAULT_SCHEMA:-default}"
+SUPERSET_HOST="${SUPERSET_HOST:-localhost}"
+SUPERSET_PORT="${SUPERSET_PORT:-8090}"
+MINIO_HOST="${MINIO_HOST:-localhost}"
+MINIO_API_PORT="${MINIO_API_PORT:-9000}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
+HIVE_METASTORE_EXTERNAL_PORT="${HIVE_METASTORE_EXTERNAL_PORT:-9083}"
 : "${UI_ACTION:=${1:-}}"
 : "${DATALAB_UI_HOST:=}"
 : "${DATALAB_HOST_PORT_MAP:=}"
@@ -19,8 +30,16 @@ if [[ -f "${UI_MAP_FILE}" ]]; then
     key="${key//$'\r'/}"
     value="${value//$'\r'/}"
     case "${key}" in
-      DATALAB_UI_HOST) [[ -n "${value}" ]] && DATALAB_UI_HOST="${value}" ;;
-      DATALAB_HOST_PORT_MAP) [[ -n "${value}" ]] && DATALAB_HOST_PORT_MAP="${value}" ;;
+      DATALAB_UI_HOST)
+        if [[ -z "${DATALAB_UI_HOST}" && -n "${value}" ]]; then
+          DATALAB_UI_HOST="${value}"
+        fi
+        ;;
+      DATALAB_HOST_PORT_MAP)
+        if [[ -z "${DATALAB_HOST_PORT_MAP}" && -n "${value}" ]]; then
+          DATALAB_HOST_PORT_MAP="${value}"
+        fi
+        ;;
     esac
   done < "${UI_MAP_FILE}"
 fi
@@ -208,15 +227,24 @@ read_hive_site_property() {
 
 show_hdfs_connect_info() {
   local fs_uri bronze_path silver_path
+  local hdfs_inside hdfs_outside hdfs_ui_inside hdfs_ui_outside
 
   print_section "HDFS Connect"
   echo "Press Enter to keep defaults."
   fs_uri="$(read_fs_defaultfs)"
   bronze_path="$(prompt_default "Bronze base path" "/medilake/bronze")"
   silver_path="$(prompt_default "Silver base path" "/medilake/silver")"
+  hdfs_inside="hdfs://localhost:9000"
+  hdfs_outside="hdfs://$(effective_host_port 9000)"
+  hdfs_ui_inside="http://localhost:9870/"
+  hdfs_ui_outside="$(container_effective_url 9870 "/")"
 
   print_section "HDFS Connection Info"
   print_kv "fs.defaultFS" "${fs_uri}"
+  print_kv "HDFS URI (inside container)" "${hdfs_inside}"
+  print_kv "HDFS URI (outside host)" "${hdfs_outside}"
+  print_kv "NameNode UI (inside container)" "${hdfs_ui_inside}"
+  print_kv "NameNode UI (outside host)" "${hdfs_ui_outside}"
   print_kv "Bronze base path" "${bronze_path}"
   print_kv "Silver base path" "${silver_path}"
   print_section "Examples"
@@ -283,28 +311,55 @@ effective_host_port() {
 }
 
 show_spark_connect_info() {
-  local master_rpc
-  master_rpc="spark://$(effective_host_port 7077)"
+  local master_rpc_inside master_rpc_outside spark_ui_inside spark_ui_outside history_ui_inside history_ui_outside
+  master_rpc_inside="spark://localhost:7077"
+  master_rpc_outside="spark://$(effective_host_port 7077)"
+  spark_ui_inside="http://localhost:9090/"
+  spark_ui_outside="$(container_effective_url 9090 "/")"
+  history_ui_inside="http://localhost:18080/"
+  history_ui_outside="$(container_effective_url 18080 "/")"
   print_section "Spark Connection Info"
-  print_kv "Master RPC" "${master_rpc}"
-  print_kv "Spark UI" "$(container_effective_url 9090 "/")"
-  print_kv "History UI" "$(container_effective_url 18080 "/")"
+  print_kv "Master RPC (inside container)" "${master_rpc_inside}"
+  print_kv "Master RPC (outside host)" "${master_rpc_outside}"
+  print_kv "Spark UI (inside container)" "${spark_ui_inside}"
+  print_kv "Spark UI (outside host)" "${spark_ui_outside}"
+  print_kv "History UI (inside container)" "${history_ui_inside}"
+  print_kv "History UI (outside host)" "${history_ui_outside}"
   print_kv "Auth" "none (default)"
   print_section "Examples"
-  echo "  spark-submit --master ${master_rpc} your_job.py"
-  echo "  pyspark --master ${master_rpc}"
+  echo "  # inside container"
+  echo "  spark-submit --master ${master_rpc_inside} your_job.py"
+  echo "  # outside host (when RPC port is published)"
+  echo "  spark-submit --master ${master_rpc_outside} your_job.py"
 }
 
 show_kafka_connect_info() {
-  local bootstrap
-  bootstrap="$(effective_host_port 9092)"
+  local bootstrap_inside bootstrap_outside kafka_ui_inside kafka_ui_outside
+  bootstrap_inside="localhost:9092"
+  bootstrap_outside="$(effective_host_port 9092)"
+  kafka_ui_inside="http://localhost:9002/"
+  kafka_ui_outside="$(container_effective_url 9002 "/")"
   print_section "Kafka Connection Info"
-  print_kv "Bootstrap servers" "${bootstrap}"
+  print_kv "Bootstrap (inside container)" "${bootstrap_inside}"
+  print_kv "Bootstrap (outside host)" "${bootstrap_outside}"
   print_kv "Protocol" "PLAINTEXT"
-  print_kv "Kafka UI" "$(container_effective_url 9002 "/")"
+  print_kv "Kafka UI (inside container)" "${kafka_ui_inside}"
+  print_kv "Kafka UI (outside host)" "${kafka_ui_outside}"
   print_section "Examples"
-  echo "  kafka-console-producer.sh --bootstrap-server ${bootstrap} --topic demo"
-  echo "  kafka-console-consumer.sh --bootstrap-server ${bootstrap} --topic demo --from-beginning"
+  echo "  # inside container"
+  echo "  kafka-console-producer.sh --bootstrap-server ${bootstrap_inside} --topic demo"
+  echo "  # outside host"
+  echo "  kafka-console-producer.sh --bootstrap-server ${bootstrap_outside} --topic demo"
+}
+
+show_airflow_connect_info() {
+  local airflow_inside airflow_outside
+  airflow_inside="http://localhost:8080/"
+  airflow_outside="$(container_effective_url 8080 "/")"
+  print_section "Airflow Connection Info"
+  print_kv "Web UI (inside container)" "${airflow_inside}"
+  print_kv "Web UI (outside host)" "${airflow_outside}"
+  print_kv "Default login" "username=${CONTAINER_NAME:-datalab} password=admin"
 }
 
 show_postgres_connect_info() {
@@ -372,11 +427,18 @@ show_hive_connect_info() {
   local hive_db hive_user hive_pass jdbc_endpoint jdbc_binary_endpoint hive_hostport hive_host hive_port jdbc_url
   local metastore_uri_default metastore_uri hive_site_path warehouse_default warehouse_dir
   local metastore_uri_internal metastore_endpoint_effective
+  local hs2_http_inside hs2_http_outside hs2_thrift_inside hs2_thrift_outside
+  local metastore_inside metastore_outside
 
   print_section "Hive Connect"
   echo "Press Enter to keep defaults."
   jdbc_endpoint="$(hive_http_endpoint)"
   jdbc_binary_endpoint="$(hive_binary_endpoint)"
+  hs2_http_inside="jdbc:hive2://localhost:10001"
+  hs2_http_outside="${jdbc_endpoint}"
+  hs2_thrift_inside="thrift://localhost:10000"
+  hs2_thrift_outside="$(container_effective_endpoint 10000 "thrift")"
+  metastore_inside="thrift://localhost:9083"
   hive_hostport="${jdbc_endpoint#jdbc:hive2://}"
   if [[ "${hive_hostport}" == "${jdbc_endpoint}" ]] || [[ "${hive_hostport}" != *:* ]]; then
     hive_host="${UI_HOST}"
@@ -391,11 +453,12 @@ show_hive_connect_info() {
   hive_pass="$(prompt_default "Hive password (blank for noSasl)" "")"
   metastore_uri_internal="$(read_hive_site_property "hive.metastore.uris" || true)"
   if [[ -z "${metastore_uri_internal}" ]]; then
-    metastore_uri_internal="thrift://localhost:9083"
+    metastore_uri_internal="${metastore_inside}"
   fi
   metastore_endpoint_effective="$(container_effective_endpoint 9083 "thrift")"
+  metastore_outside="${metastore_endpoint_effective}"
   metastore_uri_default="${metastore_endpoint_effective}"
-  metastore_uri="$(prompt_default "Hive metastore URI (client-facing)" "${metastore_uri_default}")"
+  metastore_uri="$(prompt_default "Hive metastore URI (outside-host tools)" "${metastore_uri_default}")"
   hive_site_path="$(read_hive_site_path)"
   warehouse_default="$(read_hive_site_property "hive.metastore.warehouse.dir" || true)"
   if [[ -z "${warehouse_default}" ]]; then
@@ -405,14 +468,18 @@ show_hive_connect_info() {
   jdbc_url="${jdbc_endpoint}/${hive_db};transportMode=http;httpPath=cliservice;auth=noSasl"
 
   print_section "Hive Connection Info"
-  print_kv "Hive metastore URI" "${metastore_uri}"
+  print_kv "Hive metastore URI (selected)" "${metastore_uri}"
+  print_kv "Metastore (inside container)" "${metastore_inside}"
+  print_kv "Metastore (outside host)" "${metastore_outside}"
   print_kv "Metastore URI (hive-site.xml)" "${metastore_uri_internal}"
-  print_kv "Metastore endpoint (mapped)" "${metastore_endpoint_effective}"
-  print_kv "HiveServer2 Thrift (binary)" "$(container_effective_endpoint 10000 "thrift")"
-  print_kv "Hive JDBC (binary)" "${jdbc_binary_endpoint}"
-  print_kv "Hive JDBC (HTTP)" "${jdbc_endpoint}"
+  print_kv "HiveServer2 Thrift (inside)" "${hs2_thrift_inside}"
+  print_kv "HiveServer2 Thrift (outside)" "${hs2_thrift_outside}"
+  print_kv "Hive JDBC HTTP (inside)" "${hs2_http_inside}"
+  print_kv "Hive JDBC HTTP (outside)" "${hs2_http_outside}"
+  print_kv "Hive JDBC (binary outside)" "${jdbc_binary_endpoint}"
   print_kv "HiveServer2 HTTP URL" "$(container_effective_url 10001 "/cliservice")"
   print_kv "hive-site.xml path" "${hive_site_path}"
+  print_kv "Format note" "Hudi/Iceberg/Delta are best queried via Spark SQL; HS2 support depends on loaded jars."
   print_kv "Hive warehouse dir" "${warehouse_dir}"
   print_kv "Host" "${hive_host}"
   print_kv "Port" "${hive_port}"
@@ -464,8 +531,10 @@ ui_login_helper() {
     echo "6) PostgreSQL (DB + pgAdmin)"
     echo "7) MongoDB (DB + Mongo Express)"
     echo "8) Redis (DB + Redis Commander)"
+    echo "9) Trino (HTTP + JDBC Connect)"
+    echo "10) Superset (UI + Login)"
     echo "0) Exit"
-    read -r -p "Select option [0-8]: " selection
+    read -r -p "Select option [0-10]: " selection
     selection="${selection//$'\r'/}"
 
     service_is_endpoint=0
@@ -497,6 +566,16 @@ ui_login_helper() {
         service_is_endpoint=1
         endpoint_scheme="redis"
         ;;
+      9)
+        service_name="Trino HTTP"
+        container_port=8091
+        start_flag="--start-trino"
+        ;;
+      10)
+        service_name="Superset UI"
+        container_port=8090
+        start_flag="--start-superset"
+        ;;
       0) echo "Bye."; return 0 ;;
       *) echo "Invalid selection."; echo; continue ;;
     esac
@@ -527,6 +606,7 @@ ui_login_helper() {
     case "${selection}" in
       1)
         echo "Login: username=${airflow_user} password=admin"
+        show_airflow_connect_info
         ;;
       2)
         show_spark_connect_info
@@ -566,6 +646,17 @@ ui_login_helper() {
         echo "Redis Commander: $(container_effective_url 8084 "/")"
         echo "Redis Commander: no UI login (default)."
         show_redis_connect_info
+        ;;
+      9)
+        echo "Trino web endpoint (no login): ${service_url}"
+        echo "Trino user: ${TRINO_USER}"
+        echo "Trino catalog/schema: ${TRINO_DEFAULT_CATALOG}.${TRINO_DEFAULT_SCHEMA}"
+        echo "Trino JDBC: jdbc:trino://$(effective_host_port 8091)/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}?user=${TRINO_USER}"
+        ;;
+      10)
+        echo "Superset login: username=admin password=admin"
+        echo "Superset URL: ${service_url}"
+        echo "Superset databases to use: Trino Iceberg / Trino Delta / Trino Hudi"
         ;;
       *)
         echo "Login: no credentials required for this UI."
@@ -714,14 +805,45 @@ print_db_rows() {
   print_row "Redis Config" "host=${redis_host} port=${redis_port} user=${redis_user}"
 }
 
+print_lakehouse_rows() {
+  local trino_http trino_jdbc superset_ui minio_api minio_console hive_metastore
+  local trino_port superset_port minio_api_port minio_console_port hive_metastore_ext_port
+  trino_port="${1:-${TRINO_PORT}}"
+  superset_port="${2:-${SUPERSET_PORT}}"
+  minio_api_port="${3:-${MINIO_API_PORT}}"
+  minio_console_port="${4:-${MINIO_CONSOLE_PORT}}"
+  hive_metastore_ext_port="${5:-${HIVE_METASTORE_EXTERNAL_PORT}}"
+  trino_http="http://${TRINO_HOST}:${trino_port}"
+  trino_jdbc="jdbc:trino://${TRINO_HOST}:${trino_port}/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}?user=${TRINO_USER}"
+  superset_ui="http://${SUPERSET_HOST}:${superset_port}"
+  minio_api="http://${MINIO_HOST}:${minio_api_port}"
+  minio_console="http://${MINIO_HOST}:${minio_console_port}"
+  hive_metastore="thrift://${UI_HOST}:${hive_metastore_ext_port}"
+
+  print_row "Trino HTTP" "${trino_http}"
+  print_row "Trino User" "${TRINO_USER}"
+  print_row "Trino Catalog/Schema" "${TRINO_DEFAULT_CATALOG}.${TRINO_DEFAULT_SCHEMA}"
+  print_row "Trino JDBC" "${trino_jdbc}"
+  print_row "Superset UI" "${superset_ui}"
+  print_row "MinIO API" "${minio_api}"
+  print_row "MinIO Console" "${minio_console}"
+  print_row "Hive Metastore Ext" "${hive_metastore}"
+}
+
 print_ui_block_host() {
   local container="$1"
   local pg_port mongo_port redis_port
+  local trino_port superset_port minio_api_port minio_console_port hive_metastore_ext_port
   local pg_db pg_user mongo_db mongo_user redis_user
 
   pg_port="$(mapped_host_port "${container}" 5432)"
   mongo_port="$(mapped_host_port "${container}" 27017)"
   redis_port="$(mapped_host_port "${container}" 6379)"
+  trino_port="$(mapped_host_port "${container}" 8091)"
+  superset_port="$(mapped_host_port "${container}" 8090)"
+  minio_api_port="$(mapped_host_port "${container}" 9000)"
+  minio_console_port="$(mapped_host_port "${container}" 9001)"
+  hive_metastore_ext_port="$(mapped_host_port "${container}" 9083)"
   pg_db="$(default_postgres_db)"
   pg_user="$(default_postgres_user)"
   mongo_db="$(default_mongo_db)"
@@ -754,10 +876,12 @@ print_ui_block_host() {
   print_row "PostgreSQL (DB)" "$(mapped_endpoint "${container}" 5432 "postgresql")"
   print_row "MongoDB (DB)" "$(mapped_endpoint "${container}" 27017 "mongodb")"
   print_row "Redis (DB)" "$(mapped_endpoint "${container}" 6379 "redis")"
+  print_lakehouse_rows "${trino_port}" "${superset_port}" "${minio_api_port}" "${minio_console_port}" "${hive_metastore_ext_port}"
 }
 
 print_ui_block_container() {
   local target_name pg_hostport mongo_hostport redis_hostport
+  local trino_port superset_port minio_api_port minio_console_port hive_metastore_ext_port
   local pg_host pg_port mongo_host mongo_port redis_host redis_port
   local pg_db pg_user mongo_db mongo_user redis_user
 
@@ -771,6 +895,16 @@ print_ui_block_container() {
   mongo_port="${mongo_hostport##*:}"
   redis_host="${redis_hostport%:*}"
   redis_port="${redis_hostport##*:}"
+  trino_port="$(mapped_port_from_env 8091 || true)"
+  superset_port="$(mapped_port_from_env 8090 || true)"
+  minio_api_port="$(mapped_port_from_env 9000 || true)"
+  minio_console_port="$(mapped_port_from_env 9001 || true)"
+  hive_metastore_ext_port="$(mapped_port_from_env 9083 || true)"
+  [[ -z "${trino_port}" ]] && trino_port="${TRINO_PORT}"
+  [[ -z "${superset_port}" ]] && superset_port="${SUPERSET_PORT}"
+  [[ -z "${minio_api_port}" ]] && minio_api_port="${MINIO_API_PORT}"
+  [[ -z "${minio_console_port}" ]] && minio_console_port="${MINIO_CONSOLE_PORT}"
+  [[ -z "${hive_metastore_ext_port}" ]] && hive_metastore_ext_port="${HIVE_METASTORE_EXTERNAL_PORT}"
   pg_db="$(default_postgres_db)"
   pg_user="$(default_postgres_user)"
   mongo_db="$(default_mongo_db)"
@@ -803,14 +937,21 @@ print_ui_block_container() {
   print_row "PostgreSQL (DB)" "$(container_effective_endpoint 5432 "postgresql")"
   print_row "MongoDB (DB)" "$(container_effective_endpoint 27017 "mongodb")"
   print_row "Redis (DB)" "$(container_effective_endpoint 6379 "redis")"
+  print_lakehouse_rows "${trino_port}" "${superset_port}" "${minio_api_port}" "${minio_console_port}" "${hive_metastore_ext_port}"
 }
 
 print_ui_json_host() {
   local container="$1"
   local pg_port mongo_port redis_port
+  local trino_port superset_port minio_api_port minio_console_port hive_metastore_ext_port
   pg_port="$(mapped_host_port "${container}" 5432)"
   mongo_port="$(mapped_host_port "${container}" 27017)"
   redis_port="$(mapped_host_port "${container}" 6379)"
+  trino_port="$(mapped_host_port "${container}" 8091)"
+  superset_port="$(mapped_host_port "${container}" 8090)"
+  minio_api_port="$(mapped_host_port "${container}" 9000)"
+  minio_console_port="$(mapped_host_port "${container}" 9001)"
+  hive_metastore_ext_port="$(mapped_host_port "${container}" 9083)"
   cat <<EOF
 {
   "container": "$(json_escape "${container}")",
@@ -833,6 +974,23 @@ print_ui_json_host() {
     "server_name": "$(json_escape "${container}")",
     "inside": "redis://localhost:6379",
     "outside": "redis://$(json_escape "${UI_HOST}"):${redis_port}"
+  },
+  "trino": {
+    "http": "http://$(json_escape "${TRINO_HOST}"):${trino_port}",
+    "user": "$(json_escape "${TRINO_USER}")",
+    "catalog": "$(json_escape "${TRINO_DEFAULT_CATALOG}")",
+    "schema": "$(json_escape "${TRINO_DEFAULT_SCHEMA}")",
+    "jdbc": "jdbc:trino://$(json_escape "${TRINO_HOST}"):${trino_port}/$(json_escape "${TRINO_DEFAULT_CATALOG}")/$(json_escape "${TRINO_DEFAULT_SCHEMA}")?user=$(json_escape "${TRINO_USER}")"
+  },
+  "superset": {
+    "url": "http://$(json_escape "${SUPERSET_HOST}"):${superset_port}"
+  },
+  "minio": {
+    "api": "http://$(json_escape "${MINIO_HOST}"):${minio_api_port}",
+    "console": "http://$(json_escape "${MINIO_HOST}"):${minio_console_port}"
+  },
+  "hive_metastore_external": {
+    "endpoint": "thrift://$(json_escape "${UI_HOST}"):${hive_metastore_ext_port}"
   }
 }
 EOF
@@ -840,10 +998,21 @@ EOF
 
 print_ui_json_container() {
   local target_name pg_hostport mongo_hostport redis_hostport
+  local trino_port superset_port minio_api_port minio_console_port hive_metastore_ext_port
   target_name="${CONTAINER_NAME:-datalab}"
   pg_hostport="$(effective_host_port 5432)"
   mongo_hostport="$(effective_host_port 27017)"
   redis_hostport="$(effective_host_port 6379)"
+  trino_port="$(mapped_port_from_env 8091 || true)"
+  superset_port="$(mapped_port_from_env 8090 || true)"
+  minio_api_port="$(mapped_port_from_env 9000 || true)"
+  minio_console_port="$(mapped_port_from_env 9001 || true)"
+  hive_metastore_ext_port="$(mapped_port_from_env 9083 || true)"
+  [[ -z "${trino_port}" ]] && trino_port="${TRINO_PORT}"
+  [[ -z "${superset_port}" ]] && superset_port="${SUPERSET_PORT}"
+  [[ -z "${minio_api_port}" ]] && minio_api_port="${MINIO_API_PORT}"
+  [[ -z "${minio_console_port}" ]] && minio_console_port="${MINIO_CONSOLE_PORT}"
+  [[ -z "${hive_metastore_ext_port}" ]] && hive_metastore_ext_port="${HIVE_METASTORE_EXTERNAL_PORT}"
   cat <<EOF
 {
   "container": "$(json_escape "${target_name}")",
@@ -866,6 +1035,23 @@ print_ui_json_container() {
     "server_name": "$(json_escape "${target_name}")",
     "inside": "redis://localhost:6379",
     "outside": "redis://$(json_escape "${redis_hostport}")"
+  },
+  "trino": {
+    "http": "http://$(json_escape "${TRINO_HOST}"):${trino_port}",
+    "user": "$(json_escape "${TRINO_USER}")",
+    "catalog": "$(json_escape "${TRINO_DEFAULT_CATALOG}")",
+    "schema": "$(json_escape "${TRINO_DEFAULT_SCHEMA}")",
+    "jdbc": "jdbc:trino://$(json_escape "${TRINO_HOST}"):${trino_port}/$(json_escape "${TRINO_DEFAULT_CATALOG}")/$(json_escape "${TRINO_DEFAULT_SCHEMA}")?user=$(json_escape "${TRINO_USER}")"
+  },
+  "superset": {
+    "url": "http://$(json_escape "${SUPERSET_HOST}"):${superset_port}"
+  },
+  "minio": {
+    "api": "http://$(json_escape "${MINIO_HOST}"):${minio_api_port}",
+    "console": "http://$(json_escape "${MINIO_HOST}"):${minio_console_port}"
+  },
+  "hive_metastore_external": {
+    "endpoint": "thrift://$(json_escape "${UI_HOST}"):${hive_metastore_ext_port}"
   }
 }
 EOF

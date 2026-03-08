@@ -19,6 +19,9 @@ Data Lab is a single-container data engineering environment for Spark, Hadoop, H
 - Hudi `0.15.0`
 - Iceberg `1.6.1`
 - Delta Lake `3.2.0`
+- Trino `435` (embedded)
+- Superset `4.1.2` (embedded)
+- MinIO (embedded)
 
 ## Quick Start (Compose)
 ```bash
@@ -59,6 +62,10 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\run-standalone.ps1 -Na
 - Mongo Express: `http://localhost:8083/`
 - Redis Commander: `http://localhost:8084/`
 - pgAdmin: `http://localhost:8181/`
+- Trino: `http://localhost:8091/`
+- Superset: `http://localhost:8090/`
+- MinIO API: `http://localhost:9000/`
+- MinIO Console: `http://localhost:9001/`
 
 Connection endpoints:
 - Spark RPC: `spark://localhost:7077`
@@ -94,6 +101,10 @@ You can reset a stack by removing only its runtime subfolder (for example `datal
   - rolling (`:latest`)
 
 ## References
+- Trino lakehouse registration guide: `docs/TRINO-LAKEHOUSE-REGISTRATION.md`
+- Hudi registration guide: `docs/HUDI-REGISTRATION.md`
+- Iceberg registration guide: `docs/ICEBERG-REGISTRATION.md`
+- Delta registration guide: `docs/DELTA-REGISTRATION.md`
 - Spark: https://spark.apache.org/docs/latest/
 - Hadoop: https://hadoop.apache.org/docs/stable/
 - Hive: https://cwiki.apache.org/confluence/display/Hive/Home

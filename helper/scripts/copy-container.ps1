@@ -7,6 +7,7 @@ Param(
   [string[]]$ExtraPorts = @(),
   [string]$UiHost = "localhost",
   [switch]$BindProjectFiles,
+  [switch]$IncludeLakehousePorts,
   [string]$DefaultProjectHostPath = "D:\GitHub\MediLake",
   [string]$DefaultProjectContainerPath = "/home/datalab/medilake",
   [switch]$SkipDefaultProjectMount,
@@ -164,6 +165,9 @@ $defaultPorts = @(
   "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
   "5432:5432", "27017:27017", "6379:6379"
 )
+if ($IncludeLakehousePorts) {
+  $defaultPorts += @("8090:8090", "8091:8091", "9000:9000", "9001:9001")
+}
 
 $resolvedDefaultPorts = @()
 $reservedPorts = @()
@@ -305,7 +309,7 @@ $envArgs = @(
 $dockerArgs = @(
   "run", "-d", "--name", $NewName,
   "--user", "root",
-  "--workdir", "/home/datalab",
+  "--workdir", "/",
   "--label", "com.docker.compose.project=",
   "--label", "com.docker.compose.service=",
   "--label", "com.docker.compose.oneoff="
@@ -345,6 +349,33 @@ mkdir -p \
   /home/datalab/runtime/scala
 chown -R datalab:datalab /home/datalab/runtime 2>/dev/null || true
 chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
+
+# Best-effort ownership fix for mounted Data Lab paths so copied/host-bound
+# files are usable as the datalab user.
+for p in \
+  /home/datalab/app \
+  /home/datalab/airflow \
+  /home/datalab/dbt \
+  /home/datalab/delta \
+  /home/datalab/hadoop \
+  /home/datalab/hive \
+  /home/datalab/hudi \
+  /home/datalab/iceberg \
+  /home/datalab/java \
+  /home/datalab/kafka \
+  /home/datalab/mongodb \
+  /home/datalab/postgres \
+  /home/datalab/python \
+  /home/datalab/redis \
+  /home/datalab/runtime \
+  /home/datalab/scala \
+  /home/datalab/spark \
+  /home/datalab/terraform
+do
+  [ -e "$p" ] || continue
+  chown -R datalab:datalab "$p" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
+done
 "@
 docker exec $NewName bash -lc $bootstrapScript 2>$null | Out-Null
 
@@ -378,6 +409,10 @@ $serviceMap = @{
   8083  = @{ Name = "Mongo Express UI";Path = "/" }
   8084  = @{ Name = "Redis Commander UI"; Path = "/" }
   8181  = @{ Name = "pgAdmin UI"; Path = "/" }
+  8091  = @{ Name = "Trino"; Path = "/" }
+  8090  = @{ Name = "Superset"; Path = "/" }
+  9000  = @{ Name = "MinIO API"; Path = "/" }
+  9001  = @{ Name = "MinIO Console"; Path = "/" }
 }
 
 Write-Output "UI URLs (dynamic host ports):"

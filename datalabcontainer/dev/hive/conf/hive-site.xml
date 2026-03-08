@@ -15,11 +15,15 @@
   </property>
   <property>
     <name>hive.metastore.warehouse.dir</name>
-    <value>hdfs:///hive/warehouse</value>
+    <value>hdfs://localhost:9000/hive/warehouse</value>
   </property>
   <property>
     <name>hive.metastore.uris</name>
     <value>thrift://localhost:9083</value>
+  </property>
+  <property>
+    <name>hive.aux.jars.path</name>
+    <value>/opt/spark/jars/hudi-spark-bundle.jar,/opt/spark/jars/iceberg-spark-runtime.jar,/opt/spark/jars/delta-spark.jar,/opt/spark/jars/delta-storage.jar</value>
   </property>
   <property>
     <name>hive.server2.enable.doAs</name>
@@ -43,7 +47,7 @@
   </property>
   <property>
     <name>hive.notification.event.poll.interval</name>
-    <value>0s</value>
+    <value>5s</value>
   </property>
   <property>
     <name>hive.notification.event.consumers</name>

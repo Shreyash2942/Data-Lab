@@ -22,6 +22,9 @@ source "${APP_DIR}/scripts/redis/manage.sh"
 source "${APP_DIR}/scripts/dbui/manage.sh"
 source "${APP_DIR}/scripts/pgadmin/manage.sh"
 source "${APP_DIR}/scripts/spark/manage.sh"
+source "${APP_DIR}/scripts/minio/manage.sh"
+source "${APP_DIR}/scripts/trino/manage.sh"
+source "${APP_DIR}/scripts/superset/manage.sh"
 
 show_ui_services() {
   local ui_cmd="/home/datalab/app/ui_services"
@@ -70,6 +73,14 @@ show_db_access_summary() {
 start_db_uis_if_needed() {
   dbui::start
   pgadmin::start
+}
+
+start_lakehouse_services() {
+  hadoop::ensure_running
+  hive::start_metastore
+  minio::start
+  trino::start
+  superset::start
 }
 
 run_stack_validation_dag() {
@@ -132,6 +143,28 @@ handle_cli_flag() {
       show_ui_services
       exit 0
       ;;
+    --start-minio)
+      minio::start
+      show_ui_services
+      exit 0
+      ;;
+    --start-trino)
+      hadoop::ensure_running
+      hive::start_metastore
+      trino::start
+      show_ui_services
+      exit 0
+      ;;
+    --start-superset)
+      superset::start
+      show_ui_services
+      exit 0
+      ;;
+    --start-lakehouse)
+      start_lakehouse_services
+      show_ui_services
+      exit 0
+      ;;
     --start-pgadmin)
       pgadmin::start
       show_db_access_summary
@@ -140,6 +173,14 @@ handle_cli_flag() {
       ;;
     --validate-stack)
       run_stack_validation_dag
+      show_ui_services
+      exit 0
+      ;;
+    --test-lakehouse)
+      hadoop::ensure_running
+      hive::start_metastore
+      trino::start
+      trino::lakehouse_tests
       show_ui_services
       exit 0
       ;;
@@ -176,6 +217,11 @@ echo "9) Start Redis service"
 echo "10) Start all databases (PostgreSQL/MongoDB/Redis)"
 echo "11) Start database browser UIs (Mongo Express/Redis Commander/pgAdmin)"
 echo "12) Validate all stacks via Airflow DAG"
+echo "13) Start MinIO service"
+echo "14) Start Trino service"
+echo "15) Start Superset UI"
+echo "16) Start lakehouse services (MinIO/Trino/Superset + Hive/Hadoop)"
+echo "17) Test lakehouse catalogs (Trino: Iceberg/Delta/Hudi)"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -245,6 +291,35 @@ case "$opt" in
     ;;
   12)
     run_stack_validation_dag
+    show_ui_services
+    ;;
+  13)
+    minio::start
+    echo "[+] MinIO service started."
+    show_ui_services
+    ;;
+  14)
+    hadoop::ensure_running
+    hive::start_metastore
+    trino::start
+    echo "[+] Trino service started."
+    show_ui_services
+    ;;
+  15)
+    superset::start
+    echo "[+] Superset UI started."
+    show_ui_services
+    ;;
+  16)
+    start_lakehouse_services
+    echo "[+] Lakehouse services started."
+    show_ui_services
+    ;;
+  17)
+    hadoop::ensure_running
+    hive::start_metastore
+    trino::start
+    trino::lakehouse_tests
     show_ui_services
     ;;
   0)

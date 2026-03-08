@@ -20,6 +20,9 @@ source "${APP_DIR}/scripts/mongodb/manage.sh"
 source "${APP_DIR}/scripts/redis/manage.sh"
 source "${APP_DIR}/scripts/pgadmin/manage.sh"
 source "${APP_DIR}/scripts/spark/manage.sh"
+source "${APP_DIR}/scripts/minio/manage.sh"
+source "${APP_DIR}/scripts/trino/manage.sh"
+source "${APP_DIR}/scripts/superset/manage.sh"
 
 handle_cli_flag() {
   case "$1" in
@@ -32,6 +35,16 @@ handle_cli_flag() {
     --stop-mongodb) mongodb::stop; exit 0 ;;
     --stop-redis) redis::stop; exit 0 ;;
     --stop-pgadmin) pgadmin::stop; exit 0 ;;
+    --stop-minio) minio::stop; exit 0 ;;
+    --stop-trino) trino::stop; exit 0 ;;
+    --stop-superset) superset::stop; exit 0 ;;
+    --stop-lakehouse)
+      superset::stop || true
+      trino::stop || true
+      minio::stop || true
+      echo "[+] Lakehouse services stopped."
+      exit 0
+      ;;
     --stop-databases)
       redis::stop || true
       mongodb::stop || true
@@ -64,7 +77,11 @@ echo "8) Stop MongoDB service"
 echo "9) Stop Redis service"
 echo "10) Stop all databases (PostgreSQL/MongoDB/Redis)"
 echo "11) Stop pgAdmin UI"
-echo "12) Stop Docker container"
+echo "12) Stop MinIO service"
+echo "13) Stop Trino service"
+echo "14) Stop Superset UI"
+echo "15) Stop lakehouse services (MinIO/Trino/Superset)"
+echo "16) Stop Docker container"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -119,6 +136,24 @@ case "$opt" in
     echo "[+] pgAdmin UI stopped."
     ;;
   12)
+    minio::stop
+    echo "[+] MinIO service stopped."
+    ;;
+  13)
+    trino::stop
+    echo "[+] Trino service stopped."
+    ;;
+  14)
+    superset::stop
+    echo "[+] Superset UI stopped."
+    ;;
+  15)
+    superset::stop || true
+    trino::stop || true
+    minio::stop || true
+    echo "[+] Lakehouse services stopped."
+    ;;
+  16)
     (
       cd "${APP_REPO_ROOT}"
       docker compose stop "${SERVICE_NAME}"

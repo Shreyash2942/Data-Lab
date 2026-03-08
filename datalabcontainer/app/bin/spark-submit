@@ -92,6 +92,8 @@ DEFAULT_SUBMIT_OPTS=(
   "-Dlog4j.configurationFile=${LOG4J_FILE}"
   "-Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
   "-Divy.message.logger.level=1"
+  "-Ddfs.client.block.write.replace-datanode-on-failure.enable=false"
+  "-Ddfs.client.block.write.replace-datanode-on-failure.policy=NEVER"
 )
 export SPARK_SUBMIT_OPTS="${DEFAULT_SUBMIT_OPTS[*]} ${SPARK_SUBMIT_OPTS:-}"
 
@@ -109,12 +111,16 @@ if [[ "${VERBOSE_MODE}" != "1" ]]; then
     "--conf" "spark.driver.extraJavaOptions=${DRIVER_EXTRA_JAVA_OPTS}"
     "--conf" "spark.executor.extraJavaOptions=${EXECUTOR_EXTRA_JAVA_OPTS}"
     "--conf" "spark.sql.debug.maxToStringFields=${MAX_TO_STRING_FIELDS}"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.enable=false"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.policy=NEVER"
   )
 else
   QUIET_ARGS+=(
     "--conf" "spark.driver.extraJavaOptions=${DRIVER_EXTRA_JAVA_OPTS}"
     "--conf" "spark.executor.extraJavaOptions=${EXECUTOR_EXTRA_JAVA_OPTS}"
     "--conf" "spark.sql.debug.maxToStringFields=${MAX_TO_STRING_FIELDS}"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.enable=false"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.policy=NEVER"
   )
 fi
 
@@ -153,6 +159,7 @@ fi
 
 if [[ "${FILTER_JOL_WARNINGS}" == "1" ]]; then
   exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@" \
+    > >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)') \
     2> >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)' >&2)
 else
   exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@"

@@ -16,5 +16,9 @@ services:
       - "27017:27017"  # MongoDB
       - "6379:6379"    # Redis
       - "9002:9002"    # Kafka UI (Kafdrop)
+      - "8091:8091"    # Trino HTTP
+      - "8090:8090"    # Superset UI
+      - "9000:9000"    # MinIO API
+      - "9001:9001"    # MinIO Console
       - "18080:18080"  # Spark history
     command: ["sleep", "infinity"]  # keep container alive; start services with app/start inside

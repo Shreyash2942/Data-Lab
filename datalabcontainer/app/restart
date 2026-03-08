@@ -21,6 +21,9 @@ source "${APP_DIR}/scripts/mongodb/manage.sh"
 source "${APP_DIR}/scripts/redis/manage.sh"
 source "${APP_DIR}/scripts/pgadmin/manage.sh"
 source "${APP_DIR}/scripts/spark/manage.sh"
+source "${APP_DIR}/scripts/minio/manage.sh"
+source "${APP_DIR}/scripts/trino/manage.sh"
+source "${APP_DIR}/scripts/superset/manage.sh"
 
 restart_component() {
   local stop_fn=$1
@@ -45,6 +48,23 @@ handle_cli_flag() {
     --restart-mongodb) restart_component mongodb::stop mongodb::start; exit 0 ;;
     --restart-redis) restart_component redis::stop redis::start; exit 0 ;;
     --restart-pgadmin) restart_component pgadmin::stop pgadmin::start; exit 0 ;;
+    --restart-minio) restart_component minio::stop minio::start; exit 0 ;;
+    --restart-trino)
+      hadoop::ensure_running
+      hive::start_metastore
+      restart_component trino::stop trino::start
+      exit 0
+      ;;
+    --restart-superset) restart_component superset::stop superset::start; exit 0 ;;
+    --restart-lakehouse)
+      hadoop::ensure_running
+      hive::start_metastore
+      restart_component minio::stop minio::start
+      restart_component trino::stop trino::start
+      restart_component superset::stop superset::start
+      echo "[+] Lakehouse services restarted."
+      exit 0
+      ;;
     --restart-databases)
       restart_component postgres::stop postgres::start
       restart_component mongodb::stop mongodb::start
@@ -87,7 +107,11 @@ echo "8) Restart MongoDB service"
 echo "9) Restart Redis service"
 echo "10) Restart all databases (PostgreSQL/MongoDB/Redis)"
 echo "11) Restart pgAdmin UI"
-echo "12) Restart Docker container only"
+echo "12) Restart MinIO service"
+echo "13) Restart Trino service"
+echo "14) Restart Superset UI"
+echo "15) Restart lakehouse services (MinIO/Trino/Superset + Hive/Hadoop)"
+echo "16) Restart Docker container only"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -147,6 +171,28 @@ case "$opt" in
     echo "[+] pgAdmin UI restarted."
     ;;
   12)
+    restart_component minio::stop minio::start
+    echo "[+] MinIO service restarted."
+    ;;
+  13)
+    hadoop::ensure_running
+    hive::start_metastore
+    restart_component trino::stop trino::start
+    echo "[+] Trino service restarted."
+    ;;
+  14)
+    restart_component superset::stop superset::start
+    echo "[+] Superset UI restarted."
+    ;;
+  15)
+    hadoop::ensure_running
+    hive::start_metastore
+    restart_component minio::stop minio::start
+    restart_component trino::stop trino::start
+    restart_component superset::stop superset::start
+    echo "[+] Lakehouse services restarted."
+    ;;
+  16)
     (
       cd "${APP_REPO_ROOT}"
       docker compose restart "${SERVICE_NAME}"
