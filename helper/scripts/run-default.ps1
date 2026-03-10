@@ -20,10 +20,10 @@ $ports = @(
   "4040:4040",   # Spark UI
   "8080:8080",   # Airflow UI
   "8088:8088",   # YARN RM
-  "8083:8083",   # Mongo Express UI
-  "8084:8084",   # Redis Commander UI
   "8181:8181",   # pgAdmin UI
   "9002:9002",   # Kafka UI (Kafdrop)
+  "8083:8083",   # Mongo Express UI
+  "8084:8084",   # Redis Commander UI
   "9090:9090",   # Spark master UI
   "9092:9092",   # Kafka broker
   "9870:9870",   # HDFS UI

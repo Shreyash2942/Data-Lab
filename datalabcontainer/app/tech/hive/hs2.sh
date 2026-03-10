@@ -7,14 +7,14 @@ APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-SCRIPT_PATH_FROM_APP="scripts/hive/${SCRIPT_NAME}"
-source "${APP_DIR}/scripts/host_exec.sh"
+SCRIPT_PATH_FROM_APP="tech/hive/${SCRIPT_NAME}"
+source "${APP_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_PATH_FROM_APP}" "$@"
 
-source "${APP_DIR}/scripts/common.sh"
-source "${APP_DIR}/scripts/hadoop/manage.sh"
-source "${APP_DIR}/scripts/hive/manage.sh"
+source "${APP_DIR}/tech/common.sh"
+source "${APP_DIR}/tech/hadoop/manage.sh"
+source "${APP_DIR}/tech/hive/manage.sh"
 
 command=${1:-start}
 

@@ -28,6 +28,7 @@ if [ -d "/home/datalab/app" ]; then
   find /home/datalab/app -type f \( -name "*.sh" -o -name "start" -o -name "stop" -o -name "restart" -o -name "ui_services" -o -name "datalab-check" -o -name "hive" -o -name "hivecli" -o -name "hivelegacy" -o -name "spark-submit" -o -name "spark-sql" \) \
     -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
   find /home/datalab/app/bin -type f -exec chmod +x {} \; 2>/dev/null || true
+  find /home/datalab/app/tech -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
   find /home/datalab/app/scripts -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 fi
 

@@ -59,13 +59,11 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\run-standalone.ps1 -Na
 - YARN ResourceManager: `http://localhost:8088/`
 - HiveServer2 HTTP: `http://localhost:10001/cliservice`
 - Kafka UI: `http://localhost:9002/`
-- Mongo Express: `http://localhost:8083/`
-- Redis Commander: `http://localhost:8084/`
 - pgAdmin: `http://localhost:8181/`
 - Trino: `http://localhost:8091/`
 - Superset: `http://localhost:8090/`
-- MinIO API: `http://localhost:9000/`
-- MinIO Console: `http://localhost:9001/`
+- MinIO API: `http://localhost:9004/`
+- MinIO Console: `http://localhost:9005/`
 
 Connection endpoints:
 - Spark RPC: `spark://localhost:7077`
@@ -101,6 +99,7 @@ You can reset a stack by removing only its runtime subfolder (for example `datal
   - rolling (`:latest`)
 
 ## References
+- Data Lab CLI guide: `docs/DATALAB-APP-CLI.md`
 - Trino lakehouse registration guide: `docs/TRINO-LAKEHOUSE-REGISTRATION.md`
 - Hudi registration guide: `docs/HUDI-REGISTRATION.md`
 - Iceberg registration guide: `docs/ICEBERG-REGISTRATION.md`

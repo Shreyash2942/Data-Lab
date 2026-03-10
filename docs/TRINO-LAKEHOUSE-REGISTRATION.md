@@ -14,7 +14,7 @@ Inside container:
 
 ```bash
 su - datalab
-/home/datalab/app/start --start-lakehouse
+/home/datalab/app/start --start-lakehouse-stack
 ```
 
 Check endpoints:
@@ -28,18 +28,13 @@ Check endpoints:
 You can run SQL from:
 
 - Trino CLI:
-
-```bash
-/opt/trino/bin/trino --server localhost:8091
-```
+  - Use `datalab_app --setup-lakehouse-demo` or `datalab_app --test-lakehouse-catalogs`
+  - (The image uses Trino HTTP API fallback; direct CLI binary may not be present.)
 
 - Superset SQL Lab:
   - Open Superset URL from `ui_services --all`
   - Login: `admin / admin`
-  - Choose one of:
-    - `Trino Iceberg`
-    - `Trino Delta`
-    - `Trino Hudi`
+  - Choose database: `Trino Lakehouse`
 
 ## 3) Verify catalogs and schemas
 
@@ -50,69 +45,51 @@ SHOW SCHEMAS FROM delta;
 SHOW SCHEMAS FROM hudi;
 ```
 
-Create common layer schemas:
+Create all schemas/tables automatically from the SQL assets:
 
-```sql
-CREATE SCHEMA IF NOT EXISTS iceberg.bronze;
-CREATE SCHEMA IF NOT EXISTS iceberg.silver;
-CREATE SCHEMA IF NOT EXISTS iceberg.gold;
-
-CREATE SCHEMA IF NOT EXISTS delta.bronze;
-CREATE SCHEMA IF NOT EXISTS delta.silver;
-CREATE SCHEMA IF NOT EXISTS delta.gold;
-
-CREATE SCHEMA IF NOT EXISTS hudi.bronze;
-CREATE SCHEMA IF NOT EXISTS hudi.silver;
-CREATE SCHEMA IF NOT EXISTS hudi.gold;
+```bash
+datalab_app --setup-lakehouse-demo
 ```
 
-## 4) Register existing Hudi data written by Spark to HDFS
+This uses:
 
-If Spark already wrote Hudi files, register them in Trino by pointing to the HDFS location.
+- `stacks/lakehouse/iceberg/sql/01-create-schema-trino.sql`
+- `stacks/lakehouse/iceberg/sql/02-create-table-trino.sql`
+- `stacks/lakehouse/delta/sql/01-create-schema-trino.sql`
+- `stacks/lakehouse/delta/sql/02-create-table-spark.sql`
+- `stacks/lakehouse/delta/sql/03-register-table-trino.sql`
+- `stacks/lakehouse/hudi/sql/01-create-schema-trino.sql`
+- `stacks/lakehouse/hudi/sql/02-create-table-spark.sql`
 
-Example:
-
-```sql
-CREATE TABLE IF NOT EXISTS hudi.bronze.orders_hudi (
-  order_id BIGINT,
-  customer_id BIGINT,
-  amount DOUBLE,
-  event_ts TIMESTAMP
-)
-WITH (
-  location = 'hdfs://localhost:9000/datalake/hudi/bronze/orders_hudi',
-  type = 'COPY_ON_WRITE'
-);
-```
-
-Then query:
+## 4) Query demo tables
 
 ```sql
-SELECT * FROM hudi.bronze.orders_hudi LIMIT 50;
+SHOW TABLES FROM demo_iceberg;
+SHOW TABLES FROM demo_delta;
+SHOW TABLES FROM demo_hudi;
+
+SELECT * FROM demo_iceberg.iceberg_table;
+SELECT * FROM demo_delta.table_delta;
+SELECT * FROM demo_hudi.order_hudi;
 ```
 
-## 5) Query Iceberg and Delta tables
+For Hudi, if `order_hudi` is not present, register/sync a Hudi table from Spark to Hive Metastore, then query in `demo_hudi`.
+For Delta on HDFS, write with Spark and register in Trino (`delta.system.register_table`).
 
-If tables are already registered in metastore:
+## 5) Superset behavior notes
 
-```sql
-SHOW TABLES FROM iceberg.bronze;
-SHOW TABLES FROM delta.bronze;
-SELECT * FROM iceberg.bronze.<table_name> LIMIT 50;
-SELECT * FROM delta.bronze.<table_name> LIMIT 50;
-```
+- The project auto-creates one connection: `Trino Lakehouse`.
+- DDL/DML is enabled for this Trino database in SQL Lab.
+- Use 2-part names (`schema.table`) in SQL Lab:
+  - `demo_iceberg.iceberg_table`
+  - `demo_delta.table_delta`
+  - `demo_hudi.order_hudi`
+- This works through Hive catalog redirection:
+  - `hive.iceberg-catalog-name=iceberg`
+  - `hive.delta-lake-catalog-name=delta`
+  - `hive.hudi-catalog-name=hudi`
 
-If not yet registered, create/register them using your Spark/Hive metadata flow first, then query from Trino.
-
-## 6) Superset behavior notes
-
-- The project auto-creates these database connections:
-  - `Trino Iceberg`
-  - `Trino Delta`
-  - `Trino Hudi`
-- DDL/DML is enabled for these, so `CREATE SCHEMA` and `CREATE TABLE` work in SQL Lab.
-
-## 7) Troubleshooting
+## 6) Troubleshooting
 
 If a catalog is missing:
 

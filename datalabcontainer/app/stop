@@ -6,64 +6,74 @@ APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${APP_DIR}/scripts/host_exec.sh"
+source "${APP_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
-source "${APP_DIR}/scripts/common.sh"
-source "${APP_DIR}/scripts/hadoop/manage.sh"
-source "${APP_DIR}/scripts/hive/manage.sh"
-source "${APP_DIR}/scripts/airflow/manage.sh"
-source "${APP_DIR}/scripts/kafka/manage.sh"
-source "${APP_DIR}/scripts/postgres/manage.sh"
-source "${APP_DIR}/scripts/mongodb/manage.sh"
-source "${APP_DIR}/scripts/redis/manage.sh"
-source "${APP_DIR}/scripts/pgadmin/manage.sh"
-source "${APP_DIR}/scripts/spark/manage.sh"
-source "${APP_DIR}/scripts/minio/manage.sh"
-source "${APP_DIR}/scripts/trino/manage.sh"
-source "${APP_DIR}/scripts/superset/manage.sh"
+source "${APP_DIR}/tech/common.sh"
+source "${APP_DIR}/tech/hadoop/manage.sh"
+source "${APP_DIR}/tech/hive/manage.sh"
+source "${APP_DIR}/tech/airflow/manage.sh"
+source "${APP_DIR}/tech/kafka/manage.sh"
+source "${APP_DIR}/tech/postgres/manage.sh"
+source "${APP_DIR}/tech/mongodb/manage.sh"
+source "${APP_DIR}/tech/redis/manage.sh"
+source "${APP_DIR}/tech/dbui/manage.sh"
+source "${APP_DIR}/tech/pgadmin/manage.sh"
+source "${APP_DIR}/tech/spark/manage.sh"
+source "${APP_DIR}/tech/minio/manage.sh"
+source "${APP_DIR}/tech/trino/manage.sh"
+source "${APP_DIR}/tech/superset/manage.sh"
+source "${APP_DIR}/tech/service_groups.sh"
+source "${APP_DIR}/tech/cli_flags.sh"
 
 handle_cli_flag() {
   case "$1" in
+    --stop-etl-stack)
+      groups::stop_etl
+      echo "[+] ETL stack stopped."
+      exit 0
+      ;;
+    --stop-database-stack|--stop-databases)
+      groups::stop_databases
+      echo "[+] Database stack stopped (PostgreSQL/MongoDB/Redis + Mongo Express/Redis Commander/pgAdmin)."
+      exit 0
+      ;;
+    --stop-lakehouse-stack|--stop-lakehouse)
+      groups::stop_lakehouse
+      echo "[+] Lakehouse services stopped."
+      exit 0
+      ;;
+    --stop-full-platform)
+      groups::stop_full_platform
+      echo "[+] Full platform stopped."
+      exit 0
+      ;;
     --stop-spark) spark::stop; exit 0 ;;
     --stop-hadoop) hadoop::stop; exit 0 ;;
     --stop-hive) hive::stop; exit 0 ;;
     --stop-kafka) kafka::stop; exit 0 ;;
     --stop-airflow) airflow::stop; exit 0 ;;
     --stop-postgres) postgres::stop; exit 0 ;;
-    --stop-mongodb) mongodb::stop; exit 0 ;;
-    --stop-redis) redis::stop; exit 0 ;;
+    --stop-mongodb) dbui::stop_mongo_express; mongodb::stop; exit 0 ;;
+    --stop-redis) dbui::stop_redis_commander; redis::stop; exit 0 ;;
+    --stop-mongo-express) dbui::stop_mongo_express; exit 0 ;;
+    --stop-redis-commander) dbui::stop_redis_commander; exit 0 ;;
+    --stop-db-uis) dbui::stop; pgadmin::stop; exit 0 ;;
     --stop-pgadmin) pgadmin::stop; exit 0 ;;
     --stop-minio) minio::stop; exit 0 ;;
     --stop-trino) trino::stop; exit 0 ;;
     --stop-superset) superset::stop; exit 0 ;;
-    --stop-lakehouse)
-      superset::stop || true
-      trino::stop || true
-      minio::stop || true
-      echo "[+] Lakehouse services stopped."
-      exit 0
-      ;;
-    --stop-databases)
-      redis::stop || true
-      mongodb::stop || true
-      postgres::stop || true
-      echo "[+] PostgreSQL, MongoDB, and Redis services stopped."
-      exit 0
-      ;;
     --stop-core)
-      kafka::stop || true
-      hive::stop || true
-      hadoop::stop || true
-      spark::stop || true
+      groups::stop_etl
       echo "[+] Spark/Hadoop/Hive/Kafka services stopped."
       exit 0
       ;;
   esac
 }
 
-handle_cli_flag "${1:-}" || true
+CLI_FLAG="$(cli::normalize_flag "${1:-}")"
+handle_cli_flag "${CLI_FLAG}" || true
 
 echo "=== Data Lab :: STOP MENU ==="
 echo "1) Stop Spark services"
@@ -76,7 +86,7 @@ echo "7) Stop PostgreSQL service"
 echo "8) Stop MongoDB service"
 echo "9) Stop Redis service"
 echo "10) Stop all databases (PostgreSQL/MongoDB/Redis)"
-echo "11) Stop pgAdmin UI"
+echo "11) Stop DB UIs (Mongo Express/Redis Commander/pgAdmin)"
 echo "12) Stop MinIO service"
 echo "13) Stop Trino service"
 echo "14) Stop Superset UI"
@@ -107,10 +117,7 @@ case "$opt" in
     echo "[+] Airflow services stopped."
     ;;
   6)
-    kafka::stop || true
-    hive::stop || true
-    hadoop::stop || true
-    spark::stop || true
+    groups::stop_etl
     echo "[+] Spark/Hadoop/Hive/Kafka services stopped."
     ;;
   7)
@@ -118,22 +125,23 @@ case "$opt" in
     echo "[+] PostgreSQL service stopped."
     ;;
   8)
+    dbui::stop_mongo_express
     mongodb::stop
     echo "[+] MongoDB service stopped."
     ;;
   9)
+    dbui::stop_redis_commander
     redis::stop
     echo "[+] Redis service stopped."
     ;;
   10)
-    redis::stop || true
-    mongodb::stop || true
-    postgres::stop || true
+    groups::stop_databases
     echo "[+] PostgreSQL, MongoDB, and Redis services stopped."
     ;;
   11)
+    dbui::stop
     pgadmin::stop
-    echo "[+] pgAdmin UI stopped."
+    echo "[+] Database UIs stopped."
     ;;
   12)
     minio::stop
@@ -148,9 +156,7 @@ case "$opt" in
     echo "[+] Superset UI stopped."
     ;;
   15)
-    superset::stop || true
-    trino::stop || true
-    minio::stop || true
+    groups::stop_lakehouse
     echo "[+] Lakehouse services stopped."
     ;;
   16)

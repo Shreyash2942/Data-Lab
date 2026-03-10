@@ -39,7 +39,7 @@ PY
   cat <<EOF >&2
 [!] No HiveServer2 detected on ${HS2_HOST}:${HS2_PORT}.
     Launch it inside the container:
-      bash ~/app/scripts/hive/hs2.sh start
+      bash ~/app/tech/hive/hs2.sh start
 EOF
   exit 1
 fi

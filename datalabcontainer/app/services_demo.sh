@@ -11,9 +11,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${SCRIPT_DIR}/scripts/host_exec.sh"
+source "${SCRIPT_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+source "${SCRIPT_DIR}/tech/common.sh"
 
 strip_cr() {
   local value="${1:-}"
@@ -47,6 +48,23 @@ REDIS_PORT="$(strip_cr "${REDIS_PORT:-6379}")"
 
 HADOOP_BIN="${HADOOP_HOME}/bin/hadoop"
 HIVE_BIN="${HIVE_HOME}/bin/hive"
+
+resolve_lakehouse_demo_script() {
+  local format="${1:-}"
+  local root script_path
+  if [[ -z "${format}" ]]; then
+    echo "[!] Missing lakehouse format for demo script resolution." >&2
+    return 1
+  fi
+
+  root="$(common::require_lakehouse_root)" || return 1
+  script_path="${root}/${format}/${format}_example.py"
+  if [[ ! -f "${script_path}" ]]; then
+    echo "[!] ${format} demo script not found: ${script_path}" >&2
+    return 1
+  fi
+  printf '%s' "${script_path}"
+}
 
 run_python_example() {
   python "${WORKSPACE}/python/example.py"
@@ -97,15 +115,21 @@ check_hive_cli() {
 }
 
 run_hudi_demo() {
-  python "${WORKSPACE}/hudi/hudi_example.py"
+  local script_path
+  script_path="$(resolve_lakehouse_demo_script "hudi")" || return 1
+  python "${script_path}"
 }
 
 run_iceberg_demo() {
-  python "${WORKSPACE}/iceberg/iceberg_example.py"
+  local script_path
+  script_path="$(resolve_lakehouse_demo_script "iceberg")" || return 1
+  python "${script_path}"
 }
 
 run_delta_demo() {
-  python "${WORKSPACE}/delta/delta_example.py"
+  local script_path
+  script_path="$(resolve_lakehouse_demo_script "delta")" || return 1
+  python "${script_path}"
 }
 
 run_postgres_demo() {

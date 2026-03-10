@@ -51,15 +51,25 @@ On Windows use `copy datalabcontainer\.env.example datalabcontainer\.env`. The g
 
 ## Hive Metastore + HiveServer2
 
-- `datalabcontainer/dev/hive/conf/hive-site.xml` configures an embedded Derby metastore stored in `~/runtime/hive/metastore_db`, exposes metastore thrift at `thrift://localhost:9083`, and keeps the warehouse path at `hdfs:///hive/warehouse`.
+- `datalabcontainer/dev/lakehouses/hive/conf/hive-site.xml` configures an embedded Derby metastore stored in `~/runtime/hive/metastore_db`, exposes metastore thrift at `thrift://localhost:9083`, and keeps the warehouse path at `hdfs:///hive/warehouse`.
 - From the helper script choose option 3 to start the metastore + HiveServer2 (it auto-starts Hadoop if needed). Use option 6 for the broader Spark/Hadoop/Hive/Kafka bundle. Stop services with `~/app/stop` and run the CLI via the `hive` alias once HiveServer2 is up (enable the current-db prompt with `hive --hiveconf hive.cli.print.current.db=true`).
 - Quick verification: `bash ~/hive/bootstrap_demo.sh` uses the Hive CLI to create the `sales_demo`, `analytics_demo`, and `staging_demo` databases from `~/hive/init_demo_databases.sql`, and displays sample tables so you can confirm Hive is working.
 
 ## Lakehouse / Table Formats
 
-- **Hudi (menu option 12)**: `~/app/services_demo.sh` runs `~/hudi/hudi_example.py`, writing demo data to `~/runtime/lakehouse/hudi_tables`.
-- **Iceberg (menu option 13)**: the same demo helper runs `~/iceberg/iceberg_example.py`, targeting a Hadoop catalog at `~/runtime/lakehouse/iceberg_warehouse`.
-- **Delta Lake (menu option 14)**: the demo helper runs `~/delta/delta_example.py`, writing to `~/runtime/lakehouse/delta_tables`.
+- **Hudi (menu option 12)**: `~/app/services_demo.sh` runs `~/lakehouse/hudi/hudi_example.py`, writing demo data to `~/runtime/lakehouse/hudi_tables`.
+- **Iceberg (menu option 13)**: the same demo helper runs `~/lakehouse/iceberg/iceberg_example.py`, targeting a Hadoop catalog at `~/runtime/lakehouse/iceberg_warehouse`.
+- **Delta Lake (menu option 14)**: the demo helper runs `~/lakehouse/delta/delta_example.py`, writing to `~/runtime/lakehouse/delta_tables`.
+- **Superset SQL model**: use one Trino connection (`Trino Lakehouse`) and query with 2-part names (`schema.table`), for example:
+  - `demo_iceberg.iceberg_table`
+  - `demo_delta.table_delta`
+  - `demo_hudi.order_hudi`
+
+## MongoDB and Redis behavior
+
+- MongoDB and Redis are NoSQL services in this stack.
+- Do not expect SQL schema/table creation UIs for them.
+- Use Mongo collections/documents and Redis key/value structures (Compass/Redis Insight/CLI recommended).
 
 ## Kafka Broker
 

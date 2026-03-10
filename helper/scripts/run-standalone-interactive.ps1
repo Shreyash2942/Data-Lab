@@ -51,7 +51,7 @@ if ($ExtraVolumes.Count -gt 0) {
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
   "5432:5432", "27017:27017", "6379:6379"
 )
 
@@ -74,9 +74,7 @@ $defaultVolumes = @(
   "$stacksDir\mongodb:/home/datalab/mongodb",
   "$stacksDir\postgres:/home/datalab/postgres",
   "$stacksDir\redis:/home/datalab/redis",
-  "$stacksDir\hudi:/home/datalab/hudi",
-  "$stacksDir\iceberg:/home/datalab/iceberg",
-  "$stacksDir\delta:/home/datalab/delta",
+  "$stacksDir\lakehouse:/home/datalab/lakehouse",
   "$datalabDir\runtime:/home/datalab/runtime"
 )
 

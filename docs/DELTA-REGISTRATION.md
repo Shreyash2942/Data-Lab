@@ -1,41 +1,23 @@
-# Delta Registration and Query (Trino + Superset)
+# Delta Query (Trino + Superset)
 
-Use this to create/register and query Delta tables via Trino.
+Use one Superset connection (`Trino Lakehouse`) and query with 2-part names.
 
 ## 1) Start services
 
 ```bash
 su - datalab
-/home/datalab/app/start --start-lakehouse
+/home/datalab/app/start --start-lakehouse-stack
 ```
 
-## 2) Use Superset DB
+## 2) Create/refresh demo assets
 
-- Superset database connection: `Trino Delta`
+```bash
+datalab_app --setup-lakehouse-demo
+```
 
-## 3) Create schema
+## 3) Query Delta table in SQL Lab
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS delta.bronze;
-CREATE SCHEMA IF NOT EXISTS delta.silver;
-CREATE SCHEMA IF NOT EXISTS delta.gold;
+SHOW TABLES FROM demo_delta;
+SELECT * FROM demo_delta.table_delta;
 ```
-
-## 4) Create table
-
-```sql
-CREATE TABLE IF NOT EXISTS delta.bronze.orders_delta (
-  order_id BIGINT,
-  customer_id BIGINT,
-  amount DOUBLE,
-  event_ts TIMESTAMP
-);
-```
-
-## 5) Query
-
-```sql
-SHOW TABLES FROM delta.bronze;
-SELECT * FROM delta.bronze.orders_delta LIMIT 50;
-```
-

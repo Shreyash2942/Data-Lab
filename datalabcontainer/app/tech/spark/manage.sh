@@ -143,10 +143,57 @@ spark::start() {
   echo "Spark master UI: $(common::ui_url "${SPARK_MASTER_WEBUI_PORT}" "/")  |  History UI: $(common::ui_url 18080 "/")"
 }
 
+spark::patterns_running() {
+  local pattern
+  for pattern in "$@"; do
+    if pgrep -f "${pattern}" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+spark::signal_patterns() {
+  local signal="$1"
+  shift
+  local pattern
+  for pattern in "$@"; do
+    if pgrep -f "${pattern}" >/dev/null 2>&1; then
+      pkill "-${signal}" -f "${pattern}" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+spark::wait_patterns_exit() {
+  local timeout="$1"
+  shift
+  local deadline
+  deadline=$((SECONDS + timeout))
+  while [[ ${SECONDS} -lt ${deadline} ]]; do
+    if ! spark::patterns_running "$@"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 spark::stop() {
+  local -a daemon_patterns=(
+    'org\.apache\.spark\.deploy\.history\.HistoryServer'
+    'org\.apache\.spark\.deploy\.worker\.Worker'
+    'org\.apache\.spark\.deploy\.master\.Master'
+  )
+
   spark::prepare_conf
   echo "[*] Stopping Spark master, worker, and history server..."
-  bash "${SPARK_HOME}/sbin/stop-history-server.sh" || true
-  bash "${SPARK_HOME}/sbin/stop-worker.sh" || true
-  bash "${SPARK_HOME}/sbin/stop-master.sh" || true
+  bash "${SPARK_HOME}/sbin/stop-history-server.sh" >/dev/null 2>&1 || true
+  bash "${SPARK_HOME}/sbin/stop-worker.sh" >/dev/null 2>&1 || true
+  bash "${SPARK_HOME}/sbin/stop-master.sh" >/dev/null 2>&1 || true
+
+  spark::signal_patterns TERM "${daemon_patterns[@]}"
+  if ! spark::wait_patterns_exit 6 "${daemon_patterns[@]}"; then
+    spark::signal_patterns KILL "${daemon_patterns[@]}"
+    spark::wait_patterns_exit 2 "${daemon_patterns[@]}" || true
+  fi
 }

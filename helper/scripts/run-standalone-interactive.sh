@@ -52,9 +52,9 @@ port_flags=(
   -p 10000:10000
   -p 10001:10001
   -p 9002:9002
+  -p 8181:8181
   -p 8083:8083
   -p 8084:8084
-  -p 8181:8181
   -p 5432:5432
   -p 27017:27017
   -p 6379:6379
@@ -78,9 +78,7 @@ volume_flags=(
   -v "${STACKS_DIR}/mongodb:/home/datalab/mongodb"
   -v "${STACKS_DIR}/postgres:/home/datalab/postgres"
   -v "${STACKS_DIR}/redis:/home/datalab/redis"
-  -v "${STACKS_DIR}/hudi:/home/datalab/hudi"
-  -v "${STACKS_DIR}/iceberg:/home/datalab/iceberg"
-  -v "${STACKS_DIR}/delta:/home/datalab/delta"
+  -v "${STACKS_DIR}/lakehouse:/home/datalab/lakehouse"
   -v "${DATALAB_DIR}/runtime:/home/datalab/runtime"
 )
 for m in "${extra_mounts[@]}"; do

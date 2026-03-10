@@ -62,7 +62,7 @@ $container = Resolve-RunningContainer -Primary $Name -Secondary $FallbackName
 $pgPort = Get-MappedPort -Container $container -ContainerPort 5432
 $mongoPort = Get-MappedPort -Container $container -ContainerPort 27017
 $redisPort = Get-MappedPort -Container $container -ContainerPort 6379
-$mongoExpressLegacyPort = Get-MappedPort -Container $container -ContainerPort 8083
+$mongoExpressPort = Get-MappedPort -Container $container -ContainerPort 8083
 $redisCommanderPort = Get-MappedPort -Container $container -ContainerPort 8084
 $pgAdminInContainerPort = Get-MappedPort -Container $container -ContainerPort 8181
 
@@ -70,12 +70,6 @@ $pgAdminContainer = Get-RunningContainerByName -ExactName "pgadmin-$container"
 $pgAdminPort = $pgAdminInContainerPort
 if (-not $pgAdminPort -and $pgAdminContainer) {
   $pgAdminPort = Get-MappedPort -Container $pgAdminContainer -ContainerPort 80
-}
-
-$mongoExpressModernContainer = Get-RunningContainerByName -ExactName "mongo-express-$container"
-$mongoExpressModernPort = ""
-if ($mongoExpressModernContainer) {
-  $mongoExpressModernPort = Get-MappedPort -Container $mongoExpressModernContainer -ContainerPort 8081
 }
 
 Write-Output "=== Data Lab DB Access Guide ==="
@@ -90,11 +84,10 @@ $redisPassword = Prompt-WithDefault -Label "Redis password" -DefaultValue "admin
 Write-Output ""
 
 Write-Output "=== Browser UIs ==="
-if ($mongoExpressLegacyPort) { Write-Output ("Mongo Express (legacy): http://{0}:{1}/" -f $UiHost, $mongoExpressLegacyPort) }
-if ($mongoExpressModernPort) { Write-Output ("Mongo Express (modern): http://{0}:{1}/" -f $UiHost, $mongoExpressModernPort) }
-if ($redisCommanderPort) { Write-Output ("Redis Commander:        http://{0}:{1}/" -f $UiHost, $redisCommanderPort) }
 if ($pgAdminPort) { Write-Output ("pgAdmin:                http://{0}:{1}/" -f $UiHost, $pgAdminPort) }
-if (-not $mongoExpressLegacyPort -and -not $mongoExpressModernPort -and -not $redisCommanderPort -and -not $pgAdminPort) {
+if ($mongoExpressPort) { Write-Output ("Mongo Express:          http://{0}:{1}/" -f $UiHost, $mongoExpressPort) }
+if ($redisCommanderPort) { Write-Output ("Redis Commander:        http://{0}:{1}/" -f $UiHost, $redisCommanderPort) }
+if (-not $pgAdminPort -and -not $mongoExpressPort -and -not $redisCommanderPort) {
   Write-Output "No DB UI ports are currently published."
 }
 

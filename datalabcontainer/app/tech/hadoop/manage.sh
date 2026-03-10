@@ -131,20 +131,71 @@ hadoop::start() {
   echo "[*] Starting Hadoop daemons..."
   "${HDFS_BIN}" --daemon start namenode
   "${HDFS_BIN}" --daemon start datanode
-  "${YARN_BIN}" --daemon start resourcemanager
-  "${YARN_BIN}" --daemon start nodemanager
-  "${MAPRED_BIN}" --daemon start historyserver || true
+  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon start resourcemanager
+  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon start nodemanager
+  env -u YARN_LOG_DIR "${MAPRED_BIN}" --daemon start historyserver || true
   jps
   echo "HDFS UI: $(common::ui_url 9870 "/")  |  YARN UI: $(common::ui_url 8088 "/")"
 }
 
+hadoop::patterns_running() {
+  local pattern
+  for pattern in "$@"; do
+    if pgrep -f "${pattern}" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+hadoop::signal_patterns() {
+  local signal="$1"
+  shift
+  local pattern
+  for pattern in "$@"; do
+    if pgrep -f "${pattern}" >/dev/null 2>&1; then
+      pkill "-${signal}" -f "${pattern}" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+hadoop::wait_patterns_exit() {
+  local timeout="$1"
+  shift
+  local deadline
+  deadline=$((SECONDS + timeout))
+  while [[ ${SECONDS} -lt ${deadline} ]]; do
+    if ! hadoop::patterns_running "$@"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 hadoop::stop() {
+  local -a daemon_patterns=(
+    'org\.apache\.hadoop\.mapreduce\.v2\.hs\.JobHistoryServer'
+    'org\.apache\.hadoop\.yarn\.server\.nodemanager\.NodeManager'
+    'org\.apache\.hadoop\.yarn\.server\.resourcemanager\.ResourceManager'
+    'org\.apache\.hadoop\.hdfs\.server\.datanode\.DataNode'
+    'org\.apache\.hadoop\.hdfs\.server\.namenode\.NameNode'
+  )
+
   echo "[*] Stopping Hadoop daemons..."
-  "${MAPRED_BIN}" --daemon stop historyserver || true
-  "${YARN_BIN}" --daemon stop nodemanager || true
-  "${YARN_BIN}" --daemon stop resourcemanager || true
-  "${HDFS_BIN}" --daemon stop datanode || true
-  "${HDFS_BIN}" --daemon stop namenode || true
+  env -u YARN_LOG_DIR "${MAPRED_BIN}" --daemon stop historyserver >/dev/null 2>&1 || true
+  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon stop nodemanager >/dev/null 2>&1 || true
+  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon stop resourcemanager >/dev/null 2>&1 || true
+  "${HDFS_BIN}" --daemon stop datanode >/dev/null 2>&1 || true
+  "${HDFS_BIN}" --daemon stop namenode >/dev/null 2>&1 || true
+
+  # Ensure leftover daemon JVMs are terminated without sequential per-process waits.
+  hadoop::signal_patterns TERM "${daemon_patterns[@]}"
+  if ! hadoop::wait_patterns_exit 8 "${daemon_patterns[@]}"; then
+    echo "[*] Forcing remaining Hadoop daemons to stop..."
+    hadoop::signal_patterns KILL "${daemon_patterns[@]}"
+    hadoop::wait_patterns_exit 3 "${daemon_patterns[@]}" || true
+  fi
 }
 
 hadoop::ensure_running() {

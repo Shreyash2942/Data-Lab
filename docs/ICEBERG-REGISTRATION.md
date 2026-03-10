@@ -1,41 +1,23 @@
-# Iceberg Registration and Query (Trino + Superset)
+# Iceberg Query (Trino + Superset)
 
-Use this to create/register and query Iceberg tables via Trino.
+Use one Superset connection (`Trino Lakehouse`) and query with 2-part names.
 
 ## 1) Start services
 
 ```bash
 su - datalab
-/home/datalab/app/start --start-lakehouse
+/home/datalab/app/start --start-lakehouse-stack
 ```
 
-## 2) Use Superset DB
+## 2) Create/refresh demo assets
 
-- Superset database connection: `Trino Iceberg`
+```bash
+datalab_app --setup-lakehouse-demo
+```
 
-## 3) Create schema
+## 3) Query Iceberg table in SQL Lab
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS iceberg.bronze;
-CREATE SCHEMA IF NOT EXISTS iceberg.silver;
-CREATE SCHEMA IF NOT EXISTS iceberg.gold;
+SHOW TABLES FROM demo_iceberg;
+SELECT * FROM demo_iceberg.iceberg_table;
 ```
-
-## 4) Create table
-
-```sql
-CREATE TABLE IF NOT EXISTS iceberg.bronze.orders_iceberg (
-  order_id BIGINT,
-  customer_id BIGINT,
-  amount DOUBLE,
-  event_ts TIMESTAMP
-);
-```
-
-## 5) Query
-
-```sql
-SHOW TABLES FROM iceberg.bronze;
-SELECT * FROM iceberg.bronze.orders_iceberg LIMIT 50;
-```
-

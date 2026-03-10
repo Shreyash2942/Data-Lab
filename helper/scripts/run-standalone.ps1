@@ -79,11 +79,11 @@ function Get-FreeHostPort {
 $defaultPortMappings = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
   "5432:5432", "27017:27017", "6379:6379"
 )
 if ($IncludeLakehousePorts) {
-  $defaultPortMappings += @("8090:8090", "8091:8091", "9000:9000", "9001:9001")
+  $defaultPortMappings += @("8090:8090", "8091:8091", "9004:9004", "9005:9005")
 }
 
 $resolvedDefaultPorts = @()
@@ -153,9 +153,7 @@ docker run -d --name $Name `
   -v ${stacksDir}\mongodb:/home/datalab/mongodb `
   -v ${stacksDir}\postgres:/home/datalab/postgres `
   -v ${stacksDir}\redis:/home/datalab/redis `
-  -v ${stacksDir}\hudi:/home/datalab/hudi `
-  -v ${stacksDir}\iceberg:/home/datalab/iceberg `
-  -v ${stacksDir}\delta:/home/datalab/delta `
+  -v ${stacksDir}\lakehouse:/home/datalab/lakehouse `
   -v ${datalabDir}\runtime:/home/datalab/runtime `
   $ExtraVolumes `
   $Image `
@@ -195,11 +193,9 @@ for p in \
   /home/datalab/app \
   /home/datalab/airflow \
   /home/datalab/dbt \
-  /home/datalab/delta \
+  /home/datalab/lakehouse \
   /home/datalab/hadoop \
   /home/datalab/hive \
-  /home/datalab/hudi \
-  /home/datalab/iceberg \
   /home/datalab/java \
   /home/datalab/kafka \
   /home/datalab/mongodb \

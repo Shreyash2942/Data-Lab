@@ -45,8 +45,8 @@ with DAG(
       "hadoop_demo",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/hadoop/manage.sh; "
           "hadoop::ensure_running; "
           "bash /home/datalab/hadoop/scripts/hdfs_check.sh"
       ),
@@ -56,12 +56,12 @@ with DAG(
       "hive_demo_databases",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/hadoop/manage.sh; "
-          "source /home/datalab/app/scripts/hive/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/hadoop/manage.sh; "
+          "source /home/datalab/app/tech/hive/manage.sh; "
           "hive::prepare_cli; "
-          "HIVE_CLI_SKIP_RC=1 bash /home/datalab/app/scripts/hive/cli.sh -e 'SHOW DATABASES;'; "
-          "HIVE_CLI_SKIP_RC=1 bash /home/datalab/app/scripts/hive/cli.sh -e 'CREATE DATABASE IF NOT EXISTS datalab_demo_validation;'"
+          "HIVE_CLI_SKIP_RC=1 bash /home/datalab/app/tech/hive/cli.sh -e 'SHOW DATABASES;'; "
+          "HIVE_CLI_SKIP_RC=1 bash /home/datalab/app/tech/hive/cli.sh -e 'CREATE DATABASE IF NOT EXISTS datalab_demo_validation;'"
       ),
   )
 
@@ -69,8 +69,8 @@ with DAG(
       "spark_demo",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/hadoop/manage.sh; "
           "hadoop::ensure_running; "
           "spark-submit /home/datalab/spark/example_pyspark.py"
       ),
@@ -80,8 +80,8 @@ with DAG(
       "kafka_demo",
       (
           "set -euo pipefail; "
-          "bash /home/datalab/app/scripts/kafka/manage.sh stop >/dev/null 2>&1 || true; "
-          "bash /home/datalab/app/scripts/kafka/manage.sh start >/dev/null 2>&1 || true; "
+          "bash /home/datalab/app/tech/kafka/manage.sh stop >/dev/null 2>&1 || true; "
+          "bash /home/datalab/app/tech/kafka/manage.sh start >/dev/null 2>&1 || true; "
           "for i in $(seq 1 60); do "
           "  if /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then "
           "    break; "
@@ -89,7 +89,7 @@ with DAG(
           "  if [ \"$i\" -eq 60 ]; then "
           "    echo 'Kafka not ready, resetting local runtime metadata and retrying once...' >&2; "
           "    rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true; "
-          "    bash /home/datalab/app/scripts/kafka/manage.sh restart >/dev/null 2>&1 || true; "
+          "    bash /home/datalab/app/tech/kafka/manage.sh restart >/dev/null 2>&1 || true; "
           "    sleep 5; "
           "    /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || (echo 'Kafka broker still not ready after reset' >&2; exit 1); "
           "    break; "
@@ -107,8 +107,8 @@ with DAG(
       "postgres_demo",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/postgres/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/postgres/manage.sh; "
           "postgres::start; "
           "export PGPASSWORD=admin; "
           "psql -h localhost -p 5432 -U admin -d datalab -f /home/datalab/postgres/example_postgres.sql"
@@ -119,8 +119,8 @@ with DAG(
       "mongodb_demo",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/mongodb/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/mongodb/manage.sh; "
           "mkdir -p /home/datalab/runtime/mongodb/data /home/datalab/runtime/mongodb/logs /home/datalab/runtime/mongodb/pids; "
           "chmod -R u+rwX,go+rX /home/datalab/runtime/mongodb 2>/dev/null || true; "
           "mongodb::stop || true; "
@@ -135,8 +135,8 @@ with DAG(
       "redis_demo",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/redis/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/redis/manage.sh; "
           "redis::start; "
           "python /home/datalab/redis/example_redis.py"
       ),
@@ -146,26 +146,22 @@ with DAG(
       "db_ui_smoke_check",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/postgres/manage.sh; "
-          "source /home/datalab/app/scripts/mongodb/manage.sh; "
-          "source /home/datalab/app/scripts/redis/manage.sh; "
-          "source /home/datalab/app/scripts/dbui/manage.sh; "
-          "source /home/datalab/app/scripts/pgadmin/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/postgres/manage.sh; "
+          "source /home/datalab/app/tech/mongodb/manage.sh; "
+          "source /home/datalab/app/tech/redis/manage.sh; "
+          "source /home/datalab/app/tech/pgadmin/manage.sh; "
           "postgres::start; "
           "mongodb::start; "
           "redis::start; "
-          "dbui::start; "
           "pgadmin::start; "
           "for i in $(seq 1 30); do "
-          "  if curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8083/ >/dev/null "
-          "  && curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8084/ >/dev/null "
-          "  && curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8181/ >/dev/null; then "
+          "  if curl --connect-timeout 3 --max-time 10 -fsS http://localhost:8181/ >/dev/null; then "
           "    exit 0; "
           "  fi; "
           "  sleep 2; "
           "done; "
-          "echo 'DB UI endpoints not ready after retries' >&2; exit 1"
+          "echo 'pgAdmin endpoint not ready after retries' >&2; exit 1"
       ),
   )
 
@@ -213,28 +209,28 @@ with DAG(
 
   hudi_quickstart = bash_task(
       "hudi_quickstart",
-      "python /home/datalab/hudi/hudi_example.py",
+      "python /home/datalab/lakehouse/hudi/hudi_example.py",
   )
 
   iceberg_quickstart = bash_task(
       "iceberg_quickstart",
-      "python /home/datalab/iceberg/iceberg_example.py",
+      "python /home/datalab/lakehouse/iceberg/iceberg_example.py",
   )
 
   delta_quickstart = bash_task(
       "delta_quickstart",
-      "python /home/datalab/delta/delta_example.py",
+      "python /home/datalab/lakehouse/delta/delta_example.py",
   )
 
   stop_core_services = bash_task(
       "stop_core_services",
       (
           "set -euo pipefail; "
-          "source /home/datalab/app/scripts/common.sh; "
-          "source /home/datalab/app/scripts/kafka/manage.sh; "
-          "source /home/datalab/app/scripts/hive/manage.sh; "
-          "source /home/datalab/app/scripts/spark/manage.sh; "
-          "source /home/datalab/app/scripts/hadoop/manage.sh; "
+          "source /home/datalab/app/tech/common.sh; "
+          "source /home/datalab/app/tech/kafka/manage.sh; "
+          "source /home/datalab/app/tech/hive/manage.sh; "
+          "source /home/datalab/app/tech/spark/manage.sh; "
+          "source /home/datalab/app/tech/hadoop/manage.sh; "
           "kafka::stop || true; "
           "hive::stop || true; "
           "spark::stop || true; "

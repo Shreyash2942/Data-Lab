@@ -148,7 +148,7 @@ The script will prompt for:
 ## Notes
 
 - Default image: `data-lab:latest` (or the published `shreyash42/data-lab:latest`).
-- Default ports published: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 9083, 10000, 10001, 9002, 8083, 8084, 8181, 5432, 27017, 6379.
+- Default ports published: 8080, 4040, 9090, 18080, 9092, 9870, 8088, 9083, 10000, 10001, 9002, 8181, 8083, 8084, 5432, 27017, 6379.
 - Default mounts map repo folders (`datalabcontainer/app`, `datalabcontainer/runtime`, and all `stacks/*`) into `/home/datalab/...`.
 - On macOS/Linux: run the `chmod +x` commands once to make the bash scripts executable.
 

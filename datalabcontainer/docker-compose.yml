@@ -24,9 +24,7 @@ services:
       - ../stacks/mongodb:/home/datalab/mongodb
       - ../stacks/postgres:/home/datalab/postgres
       - ../stacks/redis:/home/datalab/redis
-      - ../stacks/hudi:/home/datalab/hudi
-      - ../stacks/iceberg:/home/datalab/iceberg
-      - ../stacks/delta:/home/datalab/delta
+      - ../stacks/lakehouse:/home/datalab/lakehouse
       - ./runtime:/home/datalab/runtime
     ports:
       - target: 8080    # Airflow or other UI
@@ -85,6 +83,14 @@ services:
         published: 9002
         protocol: tcp
         name: kafka-ui
+      - target: 8083    # Mongo Express UI
+        published: 8083
+        protocol: tcp
+        name: mongo-ui
+      - target: 8084    # Redis Commander UI
+        published: 8084
+        protocol: tcp
+        name: redis-ui
       - target: 8091    # Trino HTTP
         published: 8091
         protocol: tcp
@@ -93,12 +99,12 @@ services:
         published: 8090
         protocol: tcp
         name: superset
-      - target: 9000    # MinIO API
-        published: 9000
+      - target: 9004    # MinIO API
+        published: 9004
         protocol: tcp
         name: minio-api
-      - target: 9001    # MinIO Console
-        published: 9001
+      - target: 9005    # MinIO Console
+        published: 9005
         protocol: tcp
         name: minio-console
     tty: true

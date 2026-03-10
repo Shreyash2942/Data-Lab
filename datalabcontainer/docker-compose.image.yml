@@ -16,6 +16,8 @@ services:
       - "27017:27017"  # MongoDB
       - "6379:6379"    # Redis
       - "9002:9002"    # Kafka UI (Kafdrop)
+      - "8083:8083"    # Mongo Express UI
+      - "8084:8084"    # Redis Commander UI
       - "8091:8091"    # Trino HTTP
       - "8090:8090"    # Superset UI
       - "9000:9000"    # MinIO API

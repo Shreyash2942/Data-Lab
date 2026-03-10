@@ -24,15 +24,16 @@ SUPERSET_BIN="${SUPERSET_VENV}/bin/superset"
 : "${SUPERSET_ADMIN_EMAIL:=admin@local}"
 : "${SUPERSET_SECRET_KEY:=datalab-local-superset-secret-key-change-me}"
 : "${SUPERSET_SQLLAB_BACKEND_PERSISTENCE:=True}"
-: "${SUPERSET_TRINO_DB_NAME:=}"
-: "${SUPERSET_TRINO_ICEBERG_DB_NAME:=Trino Iceberg}"
-: "${SUPERSET_TRINO_DELTA_DB_NAME:=Trino Delta}"
-: "${SUPERSET_TRINO_HUDI_DB_NAME:=Trino Hudi}"
+: "${SUPERSET_TRINO_DB_NAME:=Trino Lakehouse}"
 : "${TRINO_HOST:=localhost}"
 : "${TRINO_PORT:=8091}"
 : "${TRINO_USER:=trino}"
-: "${TRINO_DEFAULT_CATALOG:=iceberg}"
+: "${TRINO_DEFAULT_CATALOG:=hive}"
 : "${TRINO_DEFAULT_SCHEMA:=default}"
+: "${SUPERSET_TRINO_MULTI_CATALOG:=True}"
+: "${SUPERSET_TRINO_NEUTRAL_CATALOG:=hive}"
+: "${SUPERSET_TRINO_NEUTRAL_SCHEMA:=default}"
+: "${SUPERSET_TRINO_GUARD_LATEST_PARTITION:=True}"
 
 superset::ensure_dirs() {
   mkdir -p "${SUPERSET_BASE}" "${SUPERSET_HOME_DIR}" "${SUPERSET_LOG_DIR}" "${SUPERSET_PID_DIR}" "${SUPERSET_DB_DIR}"
@@ -94,6 +95,69 @@ TALISMAN_ENABLED = False
 FEATURE_FLAGS = {
     "SQLLAB_BACKEND_PERSISTENCE": ${SUPERSET_SQLLAB_BACKEND_PERSISTENCE},
 }
+
+# Guard SQL Lab "select table" against Trino Iceberg metadata-only partition indexes.
+DATALAB_TRINO_GUARD_LATEST_PARTITION = str(
+    os.environ.get(
+        "SUPERSET_TRINO_GUARD_LATEST_PARTITION",
+        "${SUPERSET_TRINO_GUARD_LATEST_PARTITION}",
+    )
+).lower() in ("1", "true", "yes", "on")
+
+
+def _patch_trino_latest_partition_guard() -> None:
+    try:
+        from superset.db_engine_specs.trino import TrinoEngineSpec
+    except Exception:
+        return
+
+    if getattr(TrinoEngineSpec, "_datalab_partition_guard_patched", False):
+        return
+
+    original_get_extra_table_metadata = TrinoEngineSpec.get_extra_table_metadata
+    original_where_latest_partition = TrinoEngineSpec.where_latest_partition
+
+    def _get_extra_table_metadata_guard(
+        cls,
+        database,
+        table,
+    ):
+        try:
+            metadata = original_get_extra_table_metadata(
+                database,
+                table,
+            )
+        except Exception:
+            metadata = {}
+
+        # SQL Lab table selection should not use Trino partition metadata here,
+        # because Iceberg reports file-level fields (record_count, file_count, ...)
+        # that are not real table columns.
+        metadata.pop("partitions", None)
+        return metadata
+
+    def _where_latest_partition_guard(
+        cls,
+        database,
+        table,
+        query,
+        columns=None,
+    ):
+        # Always keep table-preview SQL as plain SELECT * ... LIMIT for Trino.
+        return query
+
+    TrinoEngineSpec.get_extra_table_metadata = classmethod(
+        _get_extra_table_metadata_guard
+    )
+    TrinoEngineSpec.where_latest_partition = classmethod(
+        _where_latest_partition_guard
+    )
+    TrinoEngineSpec._datalab_partition_guard_patched = True
+
+
+def FLASK_APP_MUTATOR(app) -> None:
+    if DATALAB_TRINO_GUARD_LATEST_PARTITION:
+        _patch_trino_latest_partition_guard()
 EOF
 }
 
@@ -126,11 +190,13 @@ superset::bootstrap_metadata() {
 }
 
 superset::ensure_trino_database() {
-  if [[ -z "${SUPERSET_TRINO_DB_NAME}" ]]; then
-    return 0
-  fi
   local trino_uri
-  trino_uri="trino://${TRINO_USER}@${TRINO_HOST}:${TRINO_PORT}/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}"
+  if [[ "${SUPERSET_TRINO_MULTI_CATALOG,,}" == "true" ]]; then
+    # Use neutral shared-metastore catalog for UI schema browsing.
+    trino_uri="trino://${TRINO_USER}@${TRINO_HOST}:${TRINO_PORT}/${SUPERSET_TRINO_NEUTRAL_CATALOG}/${SUPERSET_TRINO_NEUTRAL_SCHEMA}"
+  else
+    trino_uri="trino://${TRINO_USER}@${TRINO_HOST}:${TRINO_PORT}/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}"
+  fi
   env \
     FLASK_APP="superset" \
     SUPERSET_HOME="${SUPERSET_HOME_DIR}" \
@@ -139,50 +205,15 @@ superset::ensure_trino_database() {
     "${SUPERSET_BIN}" set-database-uri \
       -d "${SUPERSET_TRINO_DB_NAME}" \
       -u "${trino_uri}" >/dev/null 2>&1 || true
-}
-
-superset::ensure_trino_lakehouse_databases() {
-  local iceberg_uri delta_uri hudi_uri
-  iceberg_uri="trino://${TRINO_USER}@${TRINO_HOST}:${TRINO_PORT}/iceberg/${TRINO_DEFAULT_SCHEMA}"
-  delta_uri="trino://${TRINO_USER}@${TRINO_HOST}:${TRINO_PORT}/delta/${TRINO_DEFAULT_SCHEMA}"
-  hudi_uri="trino://${TRINO_USER}@${TRINO_HOST}:${TRINO_PORT}/hudi/${TRINO_DEFAULT_SCHEMA}"
-
-  env \
-    FLASK_APP="superset" \
-    SUPERSET_HOME="${SUPERSET_HOME_DIR}" \
-    SUPERSET_CONFIG_PATH="${SUPERSET_CONFIG_FILE}" \
-    SUPERSET_SECRET_KEY="${SUPERSET_SECRET_KEY}" \
-    "${SUPERSET_BIN}" set-database-uri -d "${SUPERSET_TRINO_ICEBERG_DB_NAME}" -u "${iceberg_uri}" >/dev/null 2>&1 || true
-
-  env \
-    FLASK_APP="superset" \
-    SUPERSET_HOME="${SUPERSET_HOME_DIR}" \
-    SUPERSET_CONFIG_PATH="${SUPERSET_CONFIG_FILE}" \
-    SUPERSET_SECRET_KEY="${SUPERSET_SECRET_KEY}" \
-    "${SUPERSET_BIN}" set-database-uri -d "${SUPERSET_TRINO_DELTA_DB_NAME}" -u "${delta_uri}" >/dev/null 2>&1 || true
-
-  env \
-    FLASK_APP="superset" \
-    SUPERSET_HOME="${SUPERSET_HOME_DIR}" \
-    SUPERSET_CONFIG_PATH="${SUPERSET_CONFIG_FILE}" \
-    SUPERSET_SECRET_KEY="${SUPERSET_SECRET_KEY}" \
-    "${SUPERSET_BIN}" set-database-uri -d "${SUPERSET_TRINO_HUDI_DB_NAME}" -u "${hudi_uri}" >/dev/null 2>&1 || true
 
   python3 - <<PY
 import sqlite3
 db_path = "${SUPERSET_DB_DIR}/superset.db"
-names = [
-    "${SUPERSET_TRINO_ICEBERG_DB_NAME}",
-    "${SUPERSET_TRINO_DELTA_DB_NAME}",
-    "${SUPERSET_TRINO_HUDI_DB_NAME}",
-]
-optional = "${SUPERSET_TRINO_DB_NAME}"
-if optional:
-    names.append(optional)
 conn = sqlite3.connect(db_path)
 cur = conn.cursor()
-for name in names:
-    cur.execute("UPDATE dbs SET allow_dml = 1 WHERE database_name = ?", (name,))
+cur.execute("UPDATE dbs SET allow_dml = 1 WHERE database_name = ?", ("${SUPERSET_TRINO_DB_NAME}",))
+for legacy in ("Trino Iceberg", "Trino Delta", "Trino Hudi"):
+    cur.execute("DELETE FROM dbs WHERE database_name = ?", (legacy,))
 conn.commit()
 conn.close()
 PY
@@ -205,7 +236,6 @@ superset::start() {
 
   superset::bootstrap_metadata
   superset::ensure_trino_database
-  superset::ensure_trino_lakehouse_databases
   pkill -f "${SUPERSET_VENV}/bin/superset run" >/dev/null 2>&1 || true
   echo "[*] Starting Superset on $(common::ui_url "${SUPERSET_PORT}" "/")..."
   env \

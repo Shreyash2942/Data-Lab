@@ -3,9 +3,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
-    NPM_CONFIG_UPDATE_NOTIFIER=false \
-    NPM_CONFIG_FUND=false
+    PIP_NO_CACHE_DIR=1
 
 ARG AIRFLOW_VERSION=2.9.3
 ARG AIRFLOW_PYTHON_MAJOR_MINOR=3.10
@@ -16,8 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-11-jdk openjdk-17-jre-headless \
     libsnappy1v5 libzstd1 libsasl2-2 \
     curl wget git ca-certificates \
+    nodejs npm \
     build-essential \
-    nodejs npm php-cli php-pgsql \
+    php-cli php-pgsql \
     scala \
     nano vim less \
     net-tools iputils-ping \
@@ -28,10 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/python3 /usr/bin/python || true
-
-# Browser-based DB UI dependencies
-RUN npm install -g mongo-express@0.54.0 redis-commander@0.8.0 \
-    && npm cache clean --force
 
 ENV JAVA11_HOME=/usr/lib/jvm/java-11-openjdk-amd64 \
     JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
@@ -77,7 +72,7 @@ RUN echo "${HIVE_TGZ_SHA256}  /tmp/hive.tgz" | sha256sum -c - \
     && mv /opt/apache-hive-${HIVE_VERSION}-bin ${HIVE_HOME} \
     && rm /tmp/hive.tgz
 
-COPY datalabcontainer/dev/hive/conf/ /tmp/hive-conf/
+COPY datalabcontainer/dev/lakehouses/hive/conf/ /tmp/hive-conf/
 RUN cp /tmp/hive-conf/* ${HIVE_HOME}/conf/ \
     && rm -rf /tmp/hive-conf
 
@@ -91,7 +86,7 @@ RUN tar -xzf /tmp/trino.tgz -C /opt \
     && rm /tmp/trino.tgz \
     && mkdir -p /opt/trino/etc-template
 
-COPY datalabcontainer/dev/trino/lakehouse/etc/ /opt/trino/etc-template/
+COPY datalabcontainer/dev/lakehouses/trino/etc/ /opt/trino/etc-template/
 
 ENV KAFKA_VERSION=3.7.1 \
     KAFKA_SCALA_VERSION=2.13 \
@@ -181,6 +176,18 @@ RUN python3 -m venv /opt/superset-venv \
     && /opt/superset-venv/bin/pip install "apache-superset==4.1.2" "trino" "sqlalchemy-trino" \
     && /opt/superset-venv/bin/pip install "marshmallow==3.21.3" "marshmallow-sqlalchemy==0.28.2"
 
+# Database web UIs (image-time install to avoid npm downloads at runtime)
+ENV DBUI_INSTALL_DIR=/opt/dbui \
+    MONGO_EXPRESS_NPM_VERSION=1.0.0 \
+    REDIS_COMMANDER_NPM_VERSION=0.9.0
+
+RUN mkdir -p "${DBUI_INSTALL_DIR}" \
+    && npm install --prefix "${DBUI_INSTALL_DIR}" --no-save --no-audit --no-fund --loglevel=error \
+      "mongo-express@${MONGO_EXPRESS_NPM_VERSION}" \
+      "redis-commander@${REDIS_COMMANDER_NPM_VERSION}" \
+    && (npm cache clean --force >/dev/null 2>&1 || true) \
+    && chmod -R a+rX "${DBUI_INSTALL_DIR}"
+
 # Terraform (optional)
 ARG TERRAFORM_ZIP_SHA256=3ff056b5e8259003f67fd0f0ed7229499cfb0b41f3ff55cc184088589994f7a5
 ADD https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip /tmp/terraform.zip
@@ -203,6 +210,7 @@ ENV SPARK_HOME=/opt/spark \
     MONGO_HOME=/opt/mongodb \
     RUNTIME_ROOT=/home/${LAB_APP_USER}/runtime \
     WORKSPACE=/home/${LAB_APP_USER} \
+    LAKEHOUSE_STACK_ROOT=/home/${LAB_APP_USER}/lakehouse \
     LD_LIBRARY_PATH="/opt/hadoop/lib/native" \
     PATH="/home/${LAB_APP_USER}/app/bin:${PATH}:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
 
@@ -217,11 +225,9 @@ USER root
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/app /home/${LAB_APP_USER}/app
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/airflow /home/${LAB_APP_USER}/airflow
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/dbt /home/${LAB_APP_USER}/dbt
-COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/delta /home/${LAB_APP_USER}/delta
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hadoop /home/${LAB_APP_USER}/hadoop
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hive /home/${LAB_APP_USER}/hive
-COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hudi /home/${LAB_APP_USER}/hudi
-COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/iceberg /home/${LAB_APP_USER}/iceberg
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/lakehouse /home/${LAB_APP_USER}/lakehouse
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/java /home/${LAB_APP_USER}/java
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/kafka /home/${LAB_APP_USER}/kafka
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/mongodb /home/${LAB_APP_USER}/mongodb
@@ -233,6 +239,7 @@ COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/spark /home/${LAB_APP_USER}/
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/terraform /home/${LAB_APP_USER}/terraform
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/runtime /home/${LAB_APP_USER}/runtime
 RUN find /home/${LAB_APP_USER}/app/bin -type f -exec chmod +x {} \; \
+    && find /home/${LAB_APP_USER}/app/tech -type f -name "*.sh" -exec chmod +x {} \; \
     && find /home/${LAB_APP_USER}/app/scripts -type f -name "*.sh" -exec chmod +x {} \;
 
 RUN install -d /etc/profile.d
@@ -252,6 +259,7 @@ export PATH="/home/datalab/app/bin:${PATH}"
 # Force a shared workspace path so root and datalab use the same mounts
 export WORKSPACE="/home/datalab"
 export RUNTIME_ROOT="${WORKSPACE}/runtime"
+export LAKEHOUSE_STACK_ROOT="${WORKSPACE}/lakehouse"
 export AIRFLOW_HOME="${RUNTIME_ROOT}/airflow"
 export AIRFLOW__CORE__DAGS_FOLDER="${WORKSPACE}/airflow/dags"
 export DBT_PROFILES_DIR="${WORKSPACE}/dbt"
@@ -306,5 +314,5 @@ USER ${LAB_APP_USER}
 
 # Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
 # Advertise the common service ports (map them on `docker run` as needed)
-EXPOSE 4040 5432 6379 8080 8083 8084 8088 8090 8091 8181 9000 9001 9002 9083 9090 9092 9870 10000 10001 18080 27017
+EXPOSE 4040 5432 6379 8080 8083 8084 8088 8090 8091 8181 9002 9004 9005 9083 9090 9092 9870 10000 10001 18080 27017
 CMD ["sleep", "infinity"]

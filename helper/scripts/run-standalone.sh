@@ -24,7 +24,7 @@ docker run -d --name "${NAME}" \
   --label com.docker.compose.oneoff= \
   -p 8080:8080 -p 4040:4040 -p 9090:9090 -p 18080:18080 \
   -p 9092:9092 -p 9870:9870 -p 8088:8088 -p 9083:9083 -p 10000:10000 -p 10001:10001 -p 9002:9002 \
-  -p 8083:8083 -p 8084:8084 -p 8181:8181 \
+  -p 8181:8181 -p 8083:8083 -p 8084:8084 \
   -p 5432:5432 -p 27017:27017 -p 6379:6379 \
   ${EXTRA_PORTS} \
   -v "${DATALAB_DIR}/app:/home/datalab/app" \
@@ -41,9 +41,7 @@ docker run -d --name "${NAME}" \
   -v "${STACKS_DIR}/mongodb:/home/datalab/mongodb" \
   -v "${STACKS_DIR}/postgres:/home/datalab/postgres" \
   -v "${STACKS_DIR}/redis:/home/datalab/redis" \
-  -v "${STACKS_DIR}/hudi:/home/datalab/hudi" \
-  -v "${STACKS_DIR}/iceberg:/home/datalab/iceberg" \
-  -v "${STACKS_DIR}/delta:/home/datalab/delta" \
+  -v "${STACKS_DIR}/lakehouse:/home/datalab/lakehouse" \
   -v "${DATALAB_DIR}/runtime:/home/datalab/runtime" \
   ${EXTRA_VOLUMES} \
   "${IMAGE}" \

@@ -55,7 +55,7 @@ else:
 PY
   cat <<EOF >&2
 [!] No HiveServer2 detected on ${HS2_HOST}:${HS2_PORT}.
-    Launch it first: bash ~/app/scripts/hive/hs2.sh start
+    Launch it first: bash ~/app/tech/hive/hs2.sh start
 EOF
   exit 1
 fi

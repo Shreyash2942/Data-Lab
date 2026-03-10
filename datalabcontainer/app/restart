@@ -6,24 +6,27 @@ APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${APP_DIR}/scripts/host_exec.sh"
+source "${APP_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
-source "${APP_DIR}/scripts/common.sh"
-source "${APP_DIR}/scripts/logs/manage.sh"
-source "${APP_DIR}/scripts/hadoop/manage.sh"
-source "${APP_DIR}/scripts/hive/manage.sh"
-source "${APP_DIR}/scripts/airflow/manage.sh"
-source "${APP_DIR}/scripts/kafka/manage.sh"
-source "${APP_DIR}/scripts/postgres/manage.sh"
-source "${APP_DIR}/scripts/mongodb/manage.sh"
-source "${APP_DIR}/scripts/redis/manage.sh"
-source "${APP_DIR}/scripts/pgadmin/manage.sh"
-source "${APP_DIR}/scripts/spark/manage.sh"
-source "${APP_DIR}/scripts/minio/manage.sh"
-source "${APP_DIR}/scripts/trino/manage.sh"
-source "${APP_DIR}/scripts/superset/manage.sh"
+source "${APP_DIR}/tech/common.sh"
+source "${APP_DIR}/tech/logs/manage.sh"
+source "${APP_DIR}/tech/hadoop/manage.sh"
+source "${APP_DIR}/tech/hive/manage.sh"
+source "${APP_DIR}/tech/airflow/manage.sh"
+source "${APP_DIR}/tech/kafka/manage.sh"
+source "${APP_DIR}/tech/postgres/manage.sh"
+source "${APP_DIR}/tech/mongodb/manage.sh"
+source "${APP_DIR}/tech/redis/manage.sh"
+source "${APP_DIR}/tech/dbui/manage.sh"
+source "${APP_DIR}/tech/pgadmin/manage.sh"
+source "${APP_DIR}/tech/spark/manage.sh"
+source "${APP_DIR}/tech/minio/manage.sh"
+source "${APP_DIR}/tech/trino/manage.sh"
+source "${APP_DIR}/tech/superset/manage.sh"
+source "${APP_DIR}/tech/service_groups.sh"
+source "${APP_DIR}/tech/cli_flags.sh"
 
 restart_component() {
   local stop_fn=$1
@@ -35,6 +38,26 @@ restart_component() {
 handle_cli_flag() {
   case "$1" in
     --prune-logs) logs::prune_if_needed; exit 0 ;;
+    --restart-etl-stack)
+      groups::restart_etl
+      echo "[+] ETL stack restarted."
+      exit 0
+      ;;
+    --restart-database-stack|--restart-databases)
+      groups::restart_databases
+      echo "[+] Database stack restarted (PostgreSQL/MongoDB/Redis + Mongo Express/Redis Commander/pgAdmin)."
+      exit 0
+      ;;
+    --restart-lakehouse-stack|--restart-lakehouse)
+      groups::restart_lakehouse
+      echo "[+] Lakehouse services restarted."
+      exit 0
+      ;;
+    --restart-full-platform)
+      groups::restart_full_platform
+      echo "[+] Full platform restarted."
+      exit 0
+      ;;
     --restart-spark) restart_component spark::stop spark::start; exit 0 ;;
     --restart-hadoop) restart_component hadoop::stop hadoop::start; exit 0 ;;
     --restart-hive)
@@ -45,8 +68,16 @@ handle_cli_flag() {
     --restart-kafka) restart_component kafka::stop kafka::start; exit 0 ;;
     --restart-airflow) restart_component airflow::stop airflow::start; exit 0 ;;
     --restart-postgres) restart_component postgres::stop postgres::start; exit 0 ;;
-    --restart-mongodb) restart_component mongodb::stop mongodb::start; exit 0 ;;
-    --restart-redis) restart_component redis::stop redis::start; exit 0 ;;
+    --restart-mongodb) dbui::stop_mongo_express || true; restart_component mongodb::stop mongodb::start; dbui::start_mongo_express; exit 0 ;;
+    --restart-redis) dbui::stop_redis_commander || true; restart_component redis::stop redis::start; dbui::start_redis_commander; exit 0 ;;
+    --restart-mongo-express) restart_component dbui::stop_mongo_express dbui::start_mongo_express; exit 0 ;;
+    --restart-redis-commander) restart_component dbui::stop_redis_commander dbui::start_redis_commander; exit 0 ;;
+    --restart-db-uis)
+      dbui::stop || true
+      dbui::start
+      restart_component pgadmin::stop pgadmin::start
+      exit 0
+      ;;
     --restart-pgadmin) restart_component pgadmin::stop pgadmin::start; exit 0 ;;
     --restart-minio) restart_component minio::stop minio::start; exit 0 ;;
     --restart-trino)
@@ -56,44 +87,23 @@ handle_cli_flag() {
       exit 0
       ;;
     --restart-superset) restart_component superset::stop superset::start; exit 0 ;;
-    --restart-lakehouse)
-      hadoop::ensure_running
-      hive::start_metastore
-      restart_component minio::stop minio::start
-      restart_component trino::stop trino::start
-      restart_component superset::stop superset::start
-      echo "[+] Lakehouse services restarted."
-      exit 0
-      ;;
-    --restart-databases)
-      restart_component postgres::stop postgres::start
-      restart_component mongodb::stop mongodb::start
-      restart_component redis::stop redis::start
-      echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
-      exit 0
-      ;;
     --restart-core)
-      kafka::stop || true
-      hive::stop || true
-      hadoop::stop || true
-      spark::stop || true
-      hadoop::ensure_running
-      spark::start
-      hive::prepare_cli
-      kafka::start
+      groups::restart_etl
       echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
       exit 0
       ;;
   esac
 }
 
-if [[ "${1:-}" == "--prune-logs" ]]; then
-  handle_cli_flag "${1}"
+CLI_FLAG="$(cli::normalize_flag "${1:-}")"
+
+if [[ "${CLI_FLAG}" == "--prune-logs" ]]; then
+  handle_cli_flag "${CLI_FLAG}"
 fi
 
 logs::prune_if_needed
 
-handle_cli_flag "${1:-}" || true
+handle_cli_flag "${CLI_FLAG}" || true
 
 echo "=== Data Lab :: RESTART MENU ==="
 echo "1) Restart Spark services"
@@ -106,7 +116,7 @@ echo "7) Restart PostgreSQL service"
 echo "8) Restart MongoDB service"
 echo "9) Restart Redis service"
 echo "10) Restart all databases (PostgreSQL/MongoDB/Redis)"
-echo "11) Restart pgAdmin UI"
+echo "11) Restart DB UIs (Mongo Express/Redis Commander/pgAdmin)"
 echo "12) Restart MinIO service"
 echo "13) Restart Trino service"
 echo "14) Restart Superset UI"
@@ -138,14 +148,7 @@ case "$opt" in
     echo "[+] Airflow services restarted."
     ;;
   6)
-    kafka::stop || true
-    hive::stop || true
-    hadoop::stop || true
-    spark::stop || true
-    hadoop::ensure_running
-    spark::start
-    hive::prepare_cli
-    kafka::start
+    groups::restart_etl
     echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
     ;;
   7)
@@ -153,22 +156,26 @@ case "$opt" in
     echo "[+] PostgreSQL service restarted."
     ;;
   8)
+    dbui::stop_mongo_express || true
     restart_component mongodb::stop mongodb::start
+    dbui::start_mongo_express
     echo "[+] MongoDB service restarted."
     ;;
   9)
+    dbui::stop_redis_commander || true
     restart_component redis::stop redis::start
+    dbui::start_redis_commander
     echo "[+] Redis service restarted."
     ;;
   10)
-    restart_component postgres::stop postgres::start
-    restart_component mongodb::stop mongodb::start
-    restart_component redis::stop redis::start
+    groups::restart_databases
     echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
     ;;
   11)
+    dbui::stop || true
+    dbui::start
     restart_component pgadmin::stop pgadmin::start
-    echo "[+] pgAdmin UI restarted."
+    echo "[+] Database UIs restarted."
     ;;
   12)
     restart_component minio::stop minio::start
@@ -185,11 +192,7 @@ case "$opt" in
     echo "[+] Superset UI restarted."
     ;;
   15)
-    hadoop::ensure_running
-    hive::start_metastore
-    restart_component minio::stop minio::start
-    restart_component trino::stop trino::start
-    restart_component superset::stop superset::start
+    groups::restart_lakehouse
     echo "[+] Lakehouse services restarted."
     ;;
   16)

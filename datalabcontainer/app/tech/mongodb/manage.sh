@@ -60,7 +60,11 @@ mongodb::ensure_dirs() {
 }
 
 mongodb::pid_alive() {
-  [[ -f "${MONGODB_PID_FILE}" ]] && kill -0 "$(cat "${MONGODB_PID_FILE}")" 2>/dev/null
+  local pid=""
+  [[ -f "${MONGODB_PID_FILE}" ]] || return 1
+  pid="$(cat "${MONGODB_PID_FILE}" 2>/dev/null || true)"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "${pid}" 2>/dev/null
 }
 
 mongodb::cleanup_stale_pid() {
@@ -85,6 +89,35 @@ else:
     s.close()
     sys.exit(0)
 PY
+}
+
+mongodb::running_pid_on_port() {
+  local pid=""
+  pid="$(pgrep -f "mongod.*--port[ =]${MONGO_PORT}" 2>/dev/null | head -n1 || true)"
+  if [[ "${pid}" =~ ^[0-9]+$ ]]; then
+    printf '%s' "${pid}"
+    return 0
+  fi
+  return 1
+}
+
+mongodb::is_running() {
+  local pid=""
+  if mongodb::pid_alive && mongodb::port_open localhost "${MONGO_PORT}"; then
+    return 0
+  fi
+
+  if mongodb::port_open localhost "${MONGO_PORT}"; then
+    pid="$(mongodb::running_pid_on_port || true)"
+    if [[ "${pid}" =~ ^[0-9]+$ ]]; then
+      # Keep pid file in sync even after unclean restarts.
+      printf '%s\n' "${pid}" > "${MONGODB_PID_FILE}" 2>/dev/null || true
+    fi
+    # If anything is listening on the configured MongoDB port, treat service as running.
+    # This avoids duplicate start attempts when mongod was started outside this wrapper.
+    return 0
+  fi
+  return 1
 }
 
 mongodb::wait_for_port() {
@@ -199,11 +232,17 @@ mongodb::start() {
   mongodb::ensure_dirs
   mongodb::cleanup_stale_pid
 
-  if mongodb::pid_alive && mongodb::port_open localhost "${MONGO_PORT}"; then
+  if mongodb::is_running; then
     if [[ "${MONGO_AUTH_ENABLED}" == "true" ]]; then
       mongodb::ensure_configured_auth_user
     fi
-    echo "[*] MongoDB already running (PID $(cat "${MONGODB_PID_FILE}"))."
+    local running_pid=""
+    running_pid="$(cat "${MONGODB_PID_FILE}" 2>/dev/null || true)"
+    if [[ "${running_pid}" =~ ^[0-9]+$ ]]; then
+      echo "[*] MongoDB already running (PID ${running_pid})."
+    else
+      echo "[*] MongoDB already running on localhost:${MONGO_PORT}."
+    fi
     return
   fi
 
@@ -212,6 +251,7 @@ mongodb::start() {
     --dbpath "${MONGODB_DATA_DIR}"
     --bind_ip 0.0.0.0
     --port "${MONGO_PORT}"
+    --nounixsocket
     --logpath "${MONGODB_LOG_FILE}"
     --logappend
     --pidfilepath "${MONGODB_PID_FILE}"

@@ -5,19 +5,19 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
-source "${APP_DIR}/scripts/host_exec.sh"
+source "${APP_DIR}/tech/host_exec.sh"
 
 UI_HOST="${UI_HOST:-localhost}"
 TRINO_HOST="${TRINO_HOST:-localhost}"
 TRINO_PORT="${TRINO_PORT:-8091}"
 TRINO_USER="${TRINO_USER:-trino}"
-TRINO_DEFAULT_CATALOG="${TRINO_DEFAULT_CATALOG:-iceberg}"
+TRINO_DEFAULT_CATALOG="${TRINO_DEFAULT_CATALOG:-hive}"
 TRINO_DEFAULT_SCHEMA="${TRINO_DEFAULT_SCHEMA:-default}"
 SUPERSET_HOST="${SUPERSET_HOST:-localhost}"
 SUPERSET_PORT="${SUPERSET_PORT:-8090}"
 MINIO_HOST="${MINIO_HOST:-localhost}"
-MINIO_API_PORT="${MINIO_API_PORT:-9000}"
-MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
+MINIO_API_PORT="${MINIO_API_PORT:-9004}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9005}"
 HIVE_METASTORE_EXTERNAL_PORT="${HIVE_METASTORE_EXTERNAL_PORT:-9083}"
 : "${UI_ACTION:=${1:-}}"
 : "${DATALAB_UI_HOST:=}"
@@ -66,12 +66,19 @@ json_escape() {
   printf '%s' "${s}"
 }
 
+render_value() {
+  local value="$1"
+  printf '%s' "${value}"
+}
+
 print_row() {
   local name="$1"
   local url="$2"
   name="${name//$'\r'/}"
   url="${url//$'\r'/}"
-  printf '%-20s %s\n' "${name}:" "${url}"
+  printf '%-20s ' "${name}:"
+  render_value "${url}"
+  printf '\n'
 }
 
 print_section() {
@@ -85,7 +92,9 @@ print_kv() {
   local value="$2"
   key="${key//$'\r'/}"
   value="${value//$'\r'/}"
-  printf '  %-28s %s\n' "${key}:" "${value}"
+  printf '  %-28s ' "${key}:"
+  render_value "${value}"
+  printf '\n'
 }
 
 prompt_default() {
@@ -151,6 +160,7 @@ read_hive_site_path() {
 
   local candidates=(
     "${HIVE_CONF_DIR:-/opt/hive/conf}/hive-site.xml"
+    "${APP_REPO_ROOT}/dev/lakehouses/hive/conf/hive-site.xml"
     "${APP_REPO_ROOT}/dev/hive/conf/hive-site.xml"
     "/home/datalab/hive/conf/hive-site.xml"
     "/opt/hive/conf/hive-site.xml"
@@ -380,11 +390,12 @@ show_postgres_connect_info() {
   print_kv "Database" "${pg_db}"
   print_kv "Username" "${pg_user}"
   print_kv "Password" "${pg_pass}"
-  print_kv "URL" "postgresql://${pg_host}:${pg_port}"
+  print_kv "URL (inside container)" "postgresql://localhost:5432/"
+  print_kv "URL (outside host)" "postgresql://${pg_host}:${pg_port}/"
 }
 
 show_mongodb_connect_info() {
-  local hostport mongo_host mongo_port mongo_db mongo_user mongo_pass server_name
+  local hostport mongo_host mongo_port mongo_db mongo_user mongo_pass server_name mongo_ui_url
   hostport="$(effective_host_port 27017)"
   mongo_host="${hostport%:*}"
   mongo_port="${hostport##*:}"
@@ -402,11 +413,18 @@ show_mongodb_connect_info() {
   print_kv "Username" "${mongo_user}"
   print_kv "Password" "${mongo_pass}"
   print_kv "Auth DB" "admin"
-  print_kv "URL" "mongodb://${mongo_host}:${mongo_port}"
+  print_kv "URL (inside container)" "mongodb://localhost:27017/"
+  print_kv "URL (outside host)" "mongodb://${mongo_host}:${mongo_port}/"
+  mongo_ui_url="$(container_effective_url 8083 "/")"
+  if port_open_local localhost 8083; then
+    print_kv "Mongo Express URL" "${mongo_ui_url}"
+  else
+    print_kv "Mongo Express URL" "(not running)"
+  fi
 }
 
 show_redis_connect_info() {
-  local hostport redis_host redis_port redis_pass server_name
+  local hostport redis_host redis_port redis_pass server_name redis_ui_url
   hostport="$(effective_host_port 6379)"
   redis_host="${hostport%:*}"
   redis_port="${hostport##*:}"
@@ -420,7 +438,14 @@ show_redis_connect_info() {
   print_kv "Port" "${redis_port}"
   print_kv "Username" "default"
   print_kv "Password" "${redis_pass}"
-  print_kv "URL" "redis://${redis_host}:${redis_port}"
+  print_kv "URL (inside container)" "redis://localhost:6379/"
+  print_kv "URL (outside host)" "redis://${redis_host}:${redis_port}/"
+  redis_ui_url="$(container_effective_url 8084 "/")"
+  if port_open_local localhost 8084; then
+    print_kv "Redis Commander URL" "${redis_ui_url}"
+  else
+    print_kv "Redis Commander URL" "(not running)"
+  fi
 }
 
 show_hive_connect_info() {
@@ -504,20 +529,40 @@ port_open_local() {
 import os, socket, sys
 host = os.environ["UI_WAIT_HOST"]
 port = int(os.environ["UI_WAIT_PORT"])
-s = socket.socket()
-s.settimeout(1)
-try:
-    s.connect((host, port))
-except OSError:
-    sys.exit(1)
-else:
-    s.close()
-    sys.exit(0)
+for family, socktype, proto, _, sockaddr in socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    s = socket.socket(family, socktype, proto)
+    s.settimeout(1)
+    try:
+        s.connect(sockaddr)
+    except OSError:
+        pass
+    else:
+        s.close()
+        sys.exit(0)
+    finally:
+        try:
+            s.close()
+        except OSError:
+            pass
+sys.exit(1)
 PY
 }
 
+port_listening_local() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :${port}" 2>/dev/null | awk 'NR>1 { found=1 } END { exit (found ? 0 : 1) }'
+    return $?
+  fi
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -ltn 2>/dev/null | awk -v p=":${port}" '$4 ~ p"$" { found=1 } END { exit (found ? 0 : 1) }'
+    return $?
+  fi
+  return 1
+}
+
 ui_login_helper() {
-  local selection service_name container_port start_flag service_url service_is_endpoint endpoint_scheme
+  local selection service_name container_port start_flag service_url service_is_endpoint endpoint_scheme start_now
   local airflow_user="${CONTAINER_NAME:-datalab}"
 
   while true; do
@@ -534,7 +579,12 @@ ui_login_helper() {
     echo "9) Trino (HTTP + JDBC Connect)"
     echo "10) Superset (UI + Login)"
     echo "0) Exit"
-    read -r -p "Select option [0-10]: " selection
+    selection=""
+    if ! read -r -p "Select option [0-10]: " selection; then
+      echo
+      echo "Bye."
+      return 0
+    fi
     selection="${selection//$'\r'/}"
 
     service_is_endpoint=0
@@ -546,25 +596,19 @@ ui_login_helper() {
       4) service_name="HiveServer2 HTTP"; container_port=10001; start_flag="--start-core" ;;
       5) service_name="Kafka UI"; container_port=9002; start_flag="--start-core" ;;
       6)
-        service_name="PostgreSQL (DB)"
-        container_port=5432
+        service_name="pgAdmin UI"
+        container_port=8181
         start_flag="--start-postgres"
-        service_is_endpoint=1
-        endpoint_scheme="postgresql"
         ;;
       7)
-        service_name="MongoDB (DB)"
-        container_port=27017
+        service_name="Mongo Express UI"
+        container_port=8083
         start_flag="--start-mongodb"
-        service_is_endpoint=1
-        endpoint_scheme="mongodb"
         ;;
       8)
-        service_name="Redis (DB)"
-        container_port=6379
+        service_name="Redis Commander UI"
+        container_port=8084
         start_flag="--start-redis"
-        service_is_endpoint=1
-        endpoint_scheme="redis"
         ;;
       9)
         service_name="Trino HTTP"
@@ -577,7 +621,7 @@ ui_login_helper() {
         start_flag="--start-superset"
         ;;
       0) echo "Bye."; return 0 ;;
-      *) echo "Invalid selection."; echo; continue ;;
+      *) echo "Invalid selection."; echo; return 1 ;;
     esac
 
     if [[ "${service_is_endpoint}" -eq 1 ]]; then
@@ -585,24 +629,34 @@ ui_login_helper() {
     else
       service_url="$(container_effective_url "${container_port}" "/")"
     fi
-    if ! port_open_local localhost "${container_port}"; then
+    if ! port_open_local localhost "${container_port}" && ! port_listening_local "${container_port}"; then
       echo "[!] ${service_name} is not running on port ${container_port}."
       echo "Start it with: datalab_app ${start_flag}"
-      read -r -p "Start now? [y/N]: " start_now
+      start_now="n"
+      read -r -p "Start now? [y/N]: " start_now || true
+      start_now="${start_now//$'\r'/}"
       if [[ "${start_now}" =~ ^[Yy]$ ]]; then
         bash /home/datalab/app/start "${start_flag}" >/dev/null || true
       fi
     fi
 
-    if ! port_open_local localhost "${container_port}"; then
+    if ! port_open_local localhost "${container_port}" && ! port_listening_local "${container_port}"; then
       echo "[!] ${service_name} is still not reachable. Check logs and try again."
       echo
-      continue
+      return 1
     fi
 
     echo
     echo "Service: ${service_name}"
-    echo "URL: ${service_url}"
+    if [[ "${service_is_endpoint}" -eq 1 ]]; then
+      if [[ "${service_url}" =~ ^[A-Za-z][A-Za-z0-9+.-]*://[^/]+$ ]]; then
+        service_url="${service_url}/"
+      fi
+      print_kv "URL (outside host)" "${service_url}"
+      print_kv "URL (inside container)" "${endpoint_scheme}://localhost:${container_port}/"
+    else
+      print_kv "URL" "${service_url}"
+    fi
     case "${selection}" in
       1)
         echo "Login: username=${airflow_user} password=admin"
@@ -627,42 +681,61 @@ ui_login_helper() {
         show_kafka_connect_info
         ;;
       6)
-        local pg_hostport pg_host pg_port
+        local pg_hostport pg_host pg_port pg_db pg_user pg_pass pg_server_name
         pg_hostport="$(effective_host_port 5432)"
         pg_host="${pg_hostport%:*}"
         pg_port="${pg_hostport##*:}"
-        echo "pgAdmin: $(container_effective_url 8181 "/")"
-        echo "pgAdmin login: email=admin@admin.com password=admin"
-        echo "pgAdmin server name: ${CONTAINER_NAME:-datalab}"
-        echo "PostgreSQL in pgAdmin: host=${pg_host} port=${pg_port} username=${POSTGRES_USER:-admin} password=${POSTGRES_PASSWORD:-admin} db=${POSTGRES_DB:-datalab}"
+        pg_db="${POSTGRES_DB:-datalab}"
+        pg_user="${POSTGRES_USER:-admin}"
+        pg_pass="${POSTGRES_PASSWORD:-admin}"
+        pg_server_name="${CONTAINER_NAME:-datalab}"
+
+        print_section "pgAdmin Login"
+        print_kv "Email" "${PGADMIN_EMAIL:-admin@admin.com}"
+        print_kv "Password" "${PGADMIN_PASSWORD:-admin}"
+        print_section "pgAdmin Preconfigured Server"
+        print_kv "Server name" "${pg_server_name}"
+        print_kv "Host name/address" "${pg_host}"
+        print_kv "Port" "${pg_port}"
+        print_kv "Maintenance DB" "postgres"
+        print_kv "Username" "${pg_user}"
+        print_kv "Password" "${pg_pass}"
+        print_kv "Database" "${pg_db}"
         show_postgres_connect_info
         ;;
       7)
-        echo "Mongo Express: $(container_effective_url 8083 "/")"
-        echo "Mongo Express: no UI login (default)."
+        local mongo_hostport
+        mongo_hostport="$(effective_host_port 27017)"
+        print_kv "MongoDB URL" "mongodb://${mongo_hostport}/"
         show_mongodb_connect_info
         ;;
       8)
-        echo "Redis Commander: $(container_effective_url 8084 "/")"
-        echo "Redis Commander: no UI login (default)."
+        local redis_hostport
+        redis_hostport="$(effective_host_port 6379)"
+        print_kv "Redis URL" "redis://${redis_hostport}/"
         show_redis_connect_info
         ;;
       9)
-        echo "Trino web endpoint (no login): ${service_url}"
+        print_kv "Trino web endpoint" "${service_url}"
         echo "Trino user: ${TRINO_USER}"
         echo "Trino catalog/schema: ${TRINO_DEFAULT_CATALOG}.${TRINO_DEFAULT_SCHEMA}"
-        echo "Trino JDBC: jdbc:trino://$(effective_host_port 8091)/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}?user=${TRINO_USER}"
+        print_kv "Trino JDBC" "jdbc:trino://$(effective_host_port 8091)/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}?user=${TRINO_USER}"
         ;;
       10)
         echo "Superset login: username=admin password=admin"
-        echo "Superset URL: ${service_url}"
-        echo "Superset databases to use: Trino Iceberg / Trino Delta / Trino Hudi"
+        print_kv "Superset URL" "${service_url}"
+        echo "Superset database to use: Trino Lakehouse"
+        echo "Use 2-part names (schema.table) in SQL Lab:"
+        echo "  - demo_iceberg.iceberg_table"
+        echo "  - demo_delta.table_delta"
+        echo "  - demo_hudi.order_hudi"
         ;;
       *)
         echo "Login: no credentials required for this UI."
         ;;
     esac
     echo
+    return 0
   done
 }
 
@@ -841,8 +914,8 @@ print_ui_block_host() {
   redis_port="$(mapped_host_port "${container}" 6379)"
   trino_port="$(mapped_host_port "${container}" 8091)"
   superset_port="$(mapped_host_port "${container}" 8090)"
-  minio_api_port="$(mapped_host_port "${container}" 9000)"
-  minio_console_port="$(mapped_host_port "${container}" 9001)"
+  minio_api_port="$(mapped_host_port "${container}" "${MINIO_API_PORT}")"
+  minio_console_port="$(mapped_host_port "${container}" "${MINIO_CONSOLE_PORT}")"
   hive_metastore_ext_port="$(mapped_host_port "${container}" 9083)"
   pg_db="$(default_postgres_db)"
   pg_user="$(default_postgres_user)"
@@ -897,8 +970,8 @@ print_ui_block_container() {
   redis_port="${redis_hostport##*:}"
   trino_port="$(mapped_port_from_env 8091 || true)"
   superset_port="$(mapped_port_from_env 8090 || true)"
-  minio_api_port="$(mapped_port_from_env 9000 || true)"
-  minio_console_port="$(mapped_port_from_env 9001 || true)"
+  minio_api_port="$(mapped_port_from_env "${MINIO_API_PORT}" || true)"
+  minio_console_port="$(mapped_port_from_env "${MINIO_CONSOLE_PORT}" || true)"
   hive_metastore_ext_port="$(mapped_port_from_env 9083 || true)"
   [[ -z "${trino_port}" ]] && trino_port="${TRINO_PORT}"
   [[ -z "${superset_port}" ]] && superset_port="${SUPERSET_PORT}"
@@ -949,8 +1022,8 @@ print_ui_json_host() {
   redis_port="$(mapped_host_port "${container}" 6379)"
   trino_port="$(mapped_host_port "${container}" 8091)"
   superset_port="$(mapped_host_port "${container}" 8090)"
-  minio_api_port="$(mapped_host_port "${container}" 9000)"
-  minio_console_port="$(mapped_host_port "${container}" 9001)"
+  minio_api_port="$(mapped_host_port "${container}" "${MINIO_API_PORT}")"
+  minio_console_port="$(mapped_host_port "${container}" "${MINIO_CONSOLE_PORT}")"
   hive_metastore_ext_port="$(mapped_host_port "${container}" 9083)"
   cat <<EOF
 {
@@ -1005,8 +1078,8 @@ print_ui_json_container() {
   redis_hostport="$(effective_host_port 6379)"
   trino_port="$(mapped_port_from_env 8091 || true)"
   superset_port="$(mapped_port_from_env 8090 || true)"
-  minio_api_port="$(mapped_port_from_env 9000 || true)"
-  minio_console_port="$(mapped_port_from_env 9001 || true)"
+  minio_api_port="$(mapped_port_from_env "${MINIO_API_PORT}" || true)"
+  minio_console_port="$(mapped_port_from_env "${MINIO_CONSOLE_PORT}" || true)"
   hive_metastore_ext_port="$(mapped_port_from_env 9083 || true)"
   [[ -z "${trino_port}" ]] && trino_port="${TRINO_PORT}"
   [[ -z "${superset_port}" ]] && superset_port="${SUPERSET_PORT}"

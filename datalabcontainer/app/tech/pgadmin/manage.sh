@@ -86,6 +86,7 @@ pgadmin::write_servers_json() {
   local postgres_port="${POSTGRES_PORT:-5432}"
   local postgres_user="${POSTGRES_USER:-admin}"
   local server_label="${CONTAINER_NAME:-datalab}"
+  server_label="$(strip_cr "${server_label}")"
   cat > "${PGADMIN_SERVERS_FILE}" <<EOF
 {
   "Servers": {
@@ -104,17 +105,44 @@ EOF
 }
 
 pgadmin::load_servers() {
-  local setup_cmd="${PGADMIN_SETUP_SCRIPT}"
-  if [[ ! -f "${setup_cmd}" ]]; then
-    setup_cmd="/usr/local/lib/python3.10/dist-packages/pgadmin4/setup.py"
-  fi
+  local setup_cmd=""
+  local setup_python=""
+  local candidate
+  local setup_candidates=(
+    "${PGADMIN_SETUP_SCRIPT}"
+    "/usr/local/lib/python3.10/dist-packages/pgadmin4/setup.py"
+    "/usr/local/lib/python3.11/dist-packages/pgadmin4/setup.py"
+    "/usr/lib/python3/dist-packages/pgadmin4/setup.py"
+  )
 
-  if [[ ! -f "${setup_cmd}" ]]; then
+  for candidate in "${setup_candidates[@]}"; do
+    if [[ -f "${candidate}" ]]; then
+      setup_cmd="${candidate}"
+      break
+    fi
+  done
+
+  if [[ -z "${setup_cmd}" ]]; then
+    echo "[!] pgAdmin setup.py not found; cannot auto-load default PostgreSQL server entry." >&2
     return 0
   fi
-  python3 "${setup_cmd}" load-servers "${PGADMIN_SERVERS_FILE}" \
+
+  if [[ -x "${PGADMIN_VENV_DIR}/bin/python" ]]; then
+    setup_python="${PGADMIN_VENV_DIR}/bin/python"
+  else
+    setup_python="$(command -v python3 || true)"
+  fi
+  if [[ -z "${setup_python}" ]]; then
+    echo "[!] Python runtime not found; cannot auto-load pgAdmin server entry." >&2
+    return 0
+  fi
+
+  if ! env CONFIG_DISTRO_FILE_PATH="${PGADMIN_CONFIG_FILE}" \
+    "${setup_python}" "${setup_cmd}" load-servers "${PGADMIN_SERVERS_FILE}" \
     --user "${PGADMIN_EMAIL}" \
-    --replace >/dev/null 2>&1 || true
+    --replace >/dev/null 2>&1; then
+    echo "[!] pgAdmin could not auto-load server '${CONTAINER_NAME:-datalab}'. Check ${PGADMIN_LOG_FILE}." >&2
+  fi
 }
 
 pgadmin::start() {
@@ -133,6 +161,7 @@ pgadmin::start() {
   fi
 
   if pgadmin::pid_alive && pgadmin::port_open localhost "${PGADMIN_PORT}"; then
+    pgadmin::load_servers
     echo "[*] pgAdmin already running (PID $(cat "${PGADMIN_PID_FILE}"))."
     return 0
   fi

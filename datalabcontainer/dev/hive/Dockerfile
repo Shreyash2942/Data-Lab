@@ -7,7 +7,7 @@ RUN echo "${HIVE_TGZ_SHA256}  /tmp/hive.tgz" | sha256sum -c - \
  && tar -xzf /tmp/hive.tgz -C /opt \
  && mv /opt/apache-hive-${HIVE_VERSION}-bin ${HIVE_HOME} \
  && rm /tmp/hive.tgz
-COPY datalabcontainer/dev/hive/conf/ /tmp/hive-conf/
+COPY datalabcontainer/dev/lakehouses/hive/conf/ /tmp/hive-conf/
 RUN cp /tmp/hive-conf/* ${HIVE_HOME}/conf/ \
  && rm -rf /tmp/hive-conf
 ENV PATH="$PATH:${HIVE_HOME}/bin"

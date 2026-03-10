@@ -10,8 +10,8 @@ MINIO_DATA_DIR="${MINIO_BASE}/data"
 MINIO_LOG_DIR="${MINIO_BASE}/logs"
 MINIO_PID_DIR="${MINIO_BASE}/pids"
 
-MINIO_API_PORT="${MINIO_API_PORT:-9000}"
-MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
+MINIO_API_PORT="${MINIO_API_PORT:-9004}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9005}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-minioadmin}"
 
@@ -29,6 +29,12 @@ minio::ensure_dirs() {
 
 minio::pid_alive() {
   [[ -f "${MINIO_PID_FILE}" ]] && kill -0 "$(cat "${MINIO_PID_FILE}")" 2>/dev/null
+}
+
+minio::cleanup_stale_pid() {
+  if [[ -f "${MINIO_PID_FILE}" ]] && ! minio::pid_alive; then
+    rm -f "${MINIO_PID_FILE}"
+  fi
 }
 
 minio::port_open() {
@@ -49,11 +55,25 @@ else:
 PY
 }
 
-minio::wait_for_port() {
-  local host="$1" port="$2" deadline
+minio::health_ready() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --connect-timeout 2 --max-time 5 "http://localhost:${MINIO_API_PORT}/minio/health/live" >/dev/null 2>&1
+    return $?
+  fi
+  # Fallback: if curl is unavailable, a listening port is the best local signal.
+  minio::port_open localhost "${MINIO_API_PORT}"
+}
+
+minio::is_running() {
+  minio::cleanup_stale_pid
+  minio::pid_alive && minio::port_open localhost "${MINIO_API_PORT}" && minio::health_ready
+}
+
+minio::wait_for_ready() {
+  local deadline
   deadline=$((SECONDS + 45))
   while [[ ${SECONDS} -lt ${deadline} ]]; do
-    if minio::port_open "${host}" "${port}"; then
+    if minio::is_running; then
       return 0
     fi
     sleep 1
@@ -63,23 +83,26 @@ minio::wait_for_port() {
 
 minio::start() {
   minio::ensure_dirs
+  minio::cleanup_stale_pid
   if ! command -v minio >/dev/null 2>&1; then
     echo "[!] minio binary not found; rebuild image to include it." >&2
     return 1
   fi
 
-  if minio::pid_alive && minio::port_open localhost "${MINIO_API_PORT}"; then
+  if minio::is_running; then
     echo "[*] MinIO already running (PID $(cat "${MINIO_PID_FILE}"))."
     return 0
   fi
 
+  rm -f "${MINIO_PID_FILE}"
   pkill -f "minio server" >/dev/null 2>&1 || true
   echo "[*] Starting MinIO on $(common::ui_url "${MINIO_API_PORT}" "/") (console: $(common::ui_url "${MINIO_CONSOLE_PORT}" "/"))..."
   env MINIO_ROOT_USER="${MINIO_ROOT_USER}" MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}" \
     nohup minio server "${MINIO_DATA_DIR}" --address ":${MINIO_API_PORT}" --console-address ":${MINIO_CONSOLE_PORT}" \
       > "${MINIO_LOG_FILE}" 2>&1 &
   echo $! > "${MINIO_PID_FILE}"
-  if ! minio::wait_for_port localhost "${MINIO_API_PORT}"; then
+  if ! minio::wait_for_ready; then
+    minio::cleanup_stale_pid
     echo "[!] MinIO failed to open port ${MINIO_API_PORT}; see ${MINIO_LOG_FILE}" >&2
     return 1
   fi
@@ -96,7 +119,7 @@ minio::stop() {
 }
 
 minio::status() {
-  if minio::pid_alive && minio::port_open localhost "${MINIO_API_PORT}"; then
+  if minio::is_running; then
     echo "[+] MinIO API: $(common::ui_url "${MINIO_API_PORT}" "/")"
     echo "[+] MinIO Console: $(common::ui_url "${MINIO_CONSOLE_PORT}" "/")"
   else

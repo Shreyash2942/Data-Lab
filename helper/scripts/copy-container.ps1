@@ -162,11 +162,11 @@ if ($UseSourceImage) {
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
   "5432:5432", "27017:27017", "6379:6379"
 )
 if ($IncludeLakehousePorts) {
-  $defaultPorts += @("8090:8090", "8091:8091", "9000:9000", "9001:9001")
+  $defaultPorts += @("8090:8090", "8091:8091", "9004:9004", "9005:9005")
 }
 
 $resolvedDefaultPorts = @()
@@ -212,9 +212,7 @@ if ($BindProjectFiles) {
     "$stacksDir\mongodb:/home/datalab/mongodb",
     "$stacksDir\postgres:/home/datalab/postgres",
     "$stacksDir\redis:/home/datalab/redis",
-    "$stacksDir\hudi:/home/datalab/hudi",
-    "$stacksDir\iceberg:/home/datalab/iceberg",
-    "$stacksDir\delta:/home/datalab/delta"
+    "$stacksDir\lakehouse:/home/datalab/lakehouse"
   )
 }
 
@@ -356,11 +354,9 @@ for p in \
   /home/datalab/app \
   /home/datalab/airflow \
   /home/datalab/dbt \
-  /home/datalab/delta \
+  /home/datalab/lakehouse \
   /home/datalab/hadoop \
   /home/datalab/hive \
-  /home/datalab/hudi \
-  /home/datalab/iceberg \
   /home/datalab/java \
   /home/datalab/kafka \
   /home/datalab/mongodb \
@@ -406,13 +402,13 @@ $serviceMap = @{
   8088  = @{ Name = "YARN ResourceMgr";Path = "/" }
   10001 = @{ Name = "HiveServer2 HTTP";Path = "/cliservice" }
   9002  = @{ Name = "Kafka UI";        Path = "/" }
-  8083  = @{ Name = "Mongo Express UI";Path = "/" }
-  8084  = @{ Name = "Redis Commander UI"; Path = "/" }
   8181  = @{ Name = "pgAdmin UI"; Path = "/" }
+  8083  = @{ Name = "Mongo Express UI"; Path = "/" }
+  8084  = @{ Name = "Redis Commander UI"; Path = "/" }
   8091  = @{ Name = "Trino"; Path = "/" }
   8090  = @{ Name = "Superset"; Path = "/" }
-  9000  = @{ Name = "MinIO API"; Path = "/" }
-  9001  = @{ Name = "MinIO Console"; Path = "/" }
+  9004  = @{ Name = "MinIO API"; Path = "/" }
+  9005  = @{ Name = "MinIO Console"; Path = "/" }
 }
 
 Write-Output "UI URLs (dynamic host ports):"

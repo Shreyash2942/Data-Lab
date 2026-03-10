@@ -48,7 +48,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INIT_SQL="${SCRIPT_DIR}/init_demo_databases.sql"
-CLI_WRAPPER="${WORKSPACE}/app/scripts/hive/cli.sh"
+CLI_WRAPPER="${WORKSPACE}/app/tech/hive/cli.sh"
 
 if [ ! -f "${INIT_SQL}" ]; then
   echo "Missing init SQL at ${INIT_SQL}" >&2

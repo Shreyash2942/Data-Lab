@@ -115,7 +115,10 @@ export HDFS_BIN YARN_BIN MAPRED_BIN HADOOP_BIN HIVE_BIN SCHEMATOOL_BIN
 JAVA_HOME="$(strip_cr "${JAVA_HOME}")"
 export JAVA_HOME
 export HADOOP_CONF_DIR="${HADOOP_HOME}/etc/hadoop"
-export YARN_CONF_DIR="${HADOOP_HOME}/etc/hadoop"
+# Avoid deprecated YARN_CONF_DIR warnings from newer Hadoop CLIs.
+if [[ -n "${YARN_CONF_DIR:-}" ]]; then
+  unset YARN_CONF_DIR
+fi
 case ":$PATH:" in
   *":${JAVA_HOME}/bin:"*) ;;
   *) export PATH="${PATH}:${JAVA_HOME}/bin" ;;
@@ -181,7 +184,7 @@ common::ensure_cli_shortcuts
 
 export SPARK_PID_DIR SPARK_LOG_DIR SPARK_EVENTS_DIR
 export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=file://${SPARK_EVENTS_DIR}"
-export HADOOP_LOG_DIR YARN_LOG_DIR MAPRED_LOG_DIR
+export HADOOP_LOG_DIR MAPRED_LOG_DIR
 export HIVE_PID_DIR
 export _HIVE_PID_DIR="${HIVE_PID_DIR}"
 export HIVE_SERVER2_PID_DIR="${HIVE_PID_DIR}"
@@ -241,6 +244,50 @@ common::ui_url() {
   local host_port
   host_port="$(common::mapped_host_port "${container_port}")"
   printf 'http://%s:%s%s' "${DATALAB_UI_HOST}" "${host_port}" "${path}"
+}
+
+common::resolve_lakehouse_root() {
+  local candidate
+  local -a candidates=(
+    "${LAKEHOUSE_STACK_ROOT:-}"
+    "${LAKEHOUSE_ROOT:-}"
+    "${WORKSPACE}/lakehouse"
+    "/home/datalab/lakehouse"
+    "${WORKSPACE}/stacks/lakehouse"
+    "${DATALAB_REPO_ROOT}/stacks/lakehouse"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    candidate="$(strip_cr "${candidate}")"
+    [[ -z "${candidate}" ]] && continue
+    if [[ -d "${candidate}" ]]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+common::lakehouse_root_hint() {
+  local -a candidates=(
+    "${LAKEHOUSE_STACK_ROOT:-<unset>}"
+    "${LAKEHOUSE_ROOT:-<unset>}"
+    "${WORKSPACE}/lakehouse"
+    "/home/datalab/lakehouse"
+    "${WORKSPACE}/stacks/lakehouse"
+    "${DATALAB_REPO_ROOT}/stacks/lakehouse"
+  )
+  printf '%s' "${candidates[*]}"
+}
+
+common::require_lakehouse_root() {
+  local root
+  root="$(common::resolve_lakehouse_root || true)"
+  if [[ -z "${root}" ]]; then
+    echo "[!] Lakehouse asset root not found. Checked: $(common::lakehouse_root_hint)" >&2
+    return 1
+  fi
+  printf '%s' "${root}"
 }
 
 common::assert_inside_container() {
