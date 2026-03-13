@@ -180,16 +180,16 @@ postgres::bootstrap_user_db() {
 
   role_exists="$("${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_USER}'")"
   if [[ "${role_exists}" != "1" ]]; then
-    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; CREATE ROLE ${POSTGRES_USER} LOGIN PASSWORD '${escaped_password}';" >/dev/null
+    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; CREATE ROLE ${POSTGRES_USER} LOGIN CREATEDB PASSWORD '${escaped_password}';" >/dev/null
   else
-    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; ALTER ROLE ${POSTGRES_USER} WITH PASSWORD '${escaped_password}';" >/dev/null
+    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; ALTER ROLE ${POSTGRES_USER} WITH LOGIN CREATEDB PASSWORD '${escaped_password}';" >/dev/null
   fi
 
   role_exists="$("${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='${POSTGRES_ADMIN_USER}'")"
   if [[ "${role_exists}" != "1" ]]; then
-    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; CREATE ROLE ${POSTGRES_ADMIN_USER} LOGIN PASSWORD '${escaped_admin_password}';" >/dev/null
+    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; CREATE ROLE ${POSTGRES_ADMIN_USER} LOGIN CREATEDB PASSWORD '${escaped_admin_password}';" >/dev/null
   else
-    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; ALTER ROLE ${POSTGRES_ADMIN_USER} WITH PASSWORD '${escaped_admin_password}';" >/dev/null
+    "${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -c "SET password_encryption='scram-sha-256'; ALTER ROLE ${POSTGRES_ADMIN_USER} WITH LOGIN CREATEDB PASSWORD '${escaped_admin_password}';" >/dev/null
   fi
 
   db_exists="$("${POSTGRES_PSQL_BIN}" -h "${POSTGRES_BASE}" -p "${POSTGRES_PORT}" -U "${POSTGRES_SUPERUSER}" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'")"

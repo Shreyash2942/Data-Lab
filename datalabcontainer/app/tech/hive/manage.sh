@@ -32,10 +32,12 @@ done
 : "${HIVE_AUX_JARS_PATH:=${HIVE_AUX_JARS_PATH_DEFAULT}}"
 
 hive::ensure_dirs() {
+  local metastore_parent
+  metastore_parent="$(dirname "${HIVE_METASTORE_DB}")"
   mkdir -p \
     "${HIVE_LOG_DIR}" \
     "${HIVE_PID_DIR}" \
-    "${HIVE_METASTORE_DB}" \
+    "${metastore_parent}" \
     "${HIVE_WAREHOUSE}" \
     "${RUNTIME_ROOT}/hive/tmp"
 }

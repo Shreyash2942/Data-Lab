@@ -22,7 +22,20 @@ The Spark master UI listens on http://localhost:9090 and the history server on h
 
 ## Running jobs
 
-Execute the bundled example (runs fine in local mode without the cluster):
+By default, `~/app/bin/spark-submit` targets the Spark standalone master (`spark://localhost:7077`) when `--master` is not supplied. It also applies a conservative per-application core cap (`spark.cores.max=1`) so multiple jobs can run in parallel on the same worker.
+
+Current single-container defaults that impact parallel jobs:
+
+- Spark worker cores: `2`
+- Spark worker memory: `2g`
+- Per app cap from wrapper: `spark.cores.max=1`
+- Scheduler mode from wrapper/defaults: `FAIR`
+
+With these defaults, Spark usually executes about 2 apps at once and queues the rest.
+
+Example: if Airflow triggers 12 Spark tasks in parallel, Spark runs about 2 immediately and keeps 10 waiting in queue until resources free up.
+
+Execute the bundled example:
 
 ```bash
 cd ~/spark
@@ -35,6 +48,16 @@ From elsewhere:
 
 ```bash
 spark-submit ~/spark/example_pyspark.py
+```
+
+Override defaults when needed:
+
+```bash
+# Force local mode for quick debugging
+spark-submit --master local[*] ~/spark/example_pyspark.py
+
+# Increase per-app core cap for heavier single jobs
+DATALAB_SPARK_APP_MAX_CORES=2 spark-submit ~/spark/example_pyspark.py
 ```
 
 Menu shortcut: `bash ~/app/services_demo.sh --run-spark-example` (option `2`).

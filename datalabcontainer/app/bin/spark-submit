@@ -17,6 +17,9 @@ JAVALIN_LOG_LEVEL="$(printf '%s' "${JAVALIN_LOG_LEVEL}" | tr '[:lower:]' '[:uppe
 VERBOSE_MODE="${DATALAB_SPARK_VERBOSE:-0}"
 MAX_TO_STRING_FIELDS="${DATALAB_SPARK_MAX_TO_STRING_FIELDS:-1000}"
 FILTER_JOL_WARNINGS="${DATALAB_FILTER_JOL_WARNINGS:-1}"
+SPARK_DEFAULT_MASTER="${DATALAB_SPARK_SUBMIT_MASTER:-spark://localhost:7077}"
+SPARK_APP_MAX_CORES="${DATALAB_SPARK_APP_MAX_CORES:-1}"
+SPARK_SCHEDULER_MODE="${DATALAB_SPARK_SCHEDULER_MODE:-FAIR}"
 
 LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
 if ! mkdir -p "${SPARK_CONF_DIR_DEFAULT}" 2>/dev/null; then
@@ -157,10 +160,48 @@ if ! can_write_dir "${WAREHOUSE_DIR}"; then
   )
 fi
 
+detect_master_arg() {
+  local prev="" arg
+  for arg in "$@"; do
+    if [[ "${prev}" == "--master" ]]; then
+      printf '%s' "${arg}"
+      return 0
+    fi
+    case "${arg}" in
+      --master)
+        prev="--master"
+        ;;
+      --master=*)
+        printf '%s' "${arg#--master=}"
+        return 0
+        ;;
+      *)
+        prev=""
+        ;;
+    esac
+  done
+  return 1
+}
+
+MASTER_ARGS=()
+CLUSTER_CONF_ARGS=()
+REQUESTED_MASTER="$(detect_master_arg "$@" || true)"
+if [[ -z "${REQUESTED_MASTER}" ]]; then
+  REQUESTED_MASTER="${SPARK_DEFAULT_MASTER}"
+  MASTER_ARGS=(--master "${REQUESTED_MASTER}")
+fi
+
+if [[ "${REQUESTED_MASTER}" == spark://* ]]; then
+  CLUSTER_CONF_ARGS+=(--conf "spark.scheduler.mode=${SPARK_SCHEDULER_MODE}")
+  if [[ "${SPARK_APP_MAX_CORES}" =~ ^[0-9]+$ ]] && [[ "${SPARK_APP_MAX_CORES}" -gt 0 ]]; then
+    CLUSTER_CONF_ARGS+=(--conf "spark.cores.max=${SPARK_APP_MAX_CORES}")
+  fi
+fi
+
 if [[ "${FILTER_JOL_WARNINGS}" == "1" ]]; then
-  exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@" \
+  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "$@" \
     > >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)') \
     2> >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)' >&2)
 else
-  exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@"
+  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "$@"
 fi

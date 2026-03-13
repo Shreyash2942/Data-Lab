@@ -1,6 +1,6 @@
 # Airflow Layer
 
-All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/stacks/airflow`). Airflow 2.9 is preinstalled and configured for a local SQLite metadata database plus a filesystem executor for lightweight demos.
+All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/stacks/airflow`). Airflow 2.9 is preinstalled and configured to use PostgreSQL metadata (`datalab` DB) with `LocalExecutor` for parallel task execution in this single-container environment.
 
 ## Layout
 
@@ -62,6 +62,27 @@ airflow dags test example_dag 2024-01-01
 ```
 
 You can also invoke option `8` in `~/app/services_demo.sh` (`--check-airflow`) for a quick version check.
+
+## Parallelism and Spark queue behavior
+
+Default Airflow runtime settings in this project:
+
+- `executor=LocalExecutor`
+- `parallelism=16` (global task slots)
+- `max_active_tasks_per_dag=8`
+- `max_active_runs_per_dag=4`
+
+When Airflow tasks submit Spark jobs, Airflow concurrency and Spark cluster capacity are separate limits:
+
+- Airflow can mark tasks as `running` up to its configured slots.
+- Spark may run fewer jobs immediately and queue the rest based on available worker resources.
+
+Example with 12 Spark tasks in one DAG (current defaults):
+
+- Airflow can run 8 tasks from that DAG at once.
+- Spark worker (2 cores) with `spark.cores.max=1` can execute about 2 Spark apps at once.
+- Remaining submitted Spark apps wait in Spark queue even though their Airflow tasks are already `running`.
+- Remaining DAG tasks stay `queued` in Airflow until DAG slots free up.
 
 ## Notes
 

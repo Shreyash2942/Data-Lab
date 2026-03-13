@@ -15,6 +15,9 @@ This environment is designed for teaching, demos, and local experimentation.
 
 Use this doc plus each stack's README to explain configuration and usage.
 
+For future platform expansion into machine learning and AI, see `docs/ML-AI-FUTURE-ROADMAP.md`.
+For deployment strategy choices (single-container vs multi-container), see `docs/CONTAINER-TOPOLOGY-GUIDE.md`.
+
 ## Environment Setup
 
 Run the example-to-local env copy once so Docker Compose picks up a writable `.env`:

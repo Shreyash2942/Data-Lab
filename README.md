@@ -39,6 +39,29 @@ datalab_app
 datalab_app --start-core
 ```
 
+## System Requirements
+
+Minimum (container runs, core workflows possible):
+
+1. CPU: 4 vCPU
+2. RAM: 12 GB
+3. Disk: 50 GB free SSD
+4. Docker: Docker Desktop or Docker Engine with Compose support
+
+Recommended (full platform smoother: Airflow + Spark + Hive + Trino + Superset + DB UIs):
+
+1. CPU: 8 vCPU
+2. RAM: 24 GB
+3. Disk: 100 GB free SSD
+4. Docker Desktop resource limits (if used): at least 8 CPU and 20+ GB memory
+
+Future-oriented target (for later ML/AI profile work):
+
+1. CPU: 12+ vCPU
+2. RAM: 32 to 64 GB
+3. Disk: 200 GB free SSD
+4. Optional GPU: NVIDIA GPU with 12+ GB VRAM (only for local LLM serving/inference)
+
 ## Quick Start (Standalone)
 Linux/macOS:
 ```bash
@@ -104,6 +127,8 @@ You can reset a stack by removing only its runtime subfolder (for example `datal
 - Hudi registration guide: `docs/HUDI-REGISTRATION.md`
 - Iceberg registration guide: `docs/ICEBERG-REGISTRATION.md`
 - Delta registration guide: `docs/DELTA-REGISTRATION.md`
+- Future ML/AI roadmap: `docs/ML-AI-FUTURE-ROADMAP.md`
+- Container topology guide (single vs multi-container): `docs/CONTAINER-TOPOLOGY-GUIDE.md`
 - Spark: https://spark.apache.org/docs/latest/
 - Hadoop: https://hadoop.apache.org/docs/stable/
 - Hive: https://cwiki.apache.org/confluence/display/Hive/Home

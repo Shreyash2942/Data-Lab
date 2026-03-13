@@ -4,6 +4,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
+if ! declare -F postgres::start >/dev/null 2>&1; then
+  # Allows Airflow start to prepare metadata backend even when caller did not
+  # source postgres helpers first.
+  source "${SCRIPT_DIR}/../postgres/manage.sh"
+fi
 
 AIRFLOW_WEB_PID_FILE="${AIRFLOW_PID_DIR}/webserver.pid"
 AIRFLOW_SCHED_PID_FILE="${AIRFLOW_PID_DIR}/scheduler.pid"
@@ -11,13 +16,36 @@ AIRFLOW_DEFAULT_USERNAME="${AIRFLOW_DEFAULT_USER:-${CONTAINER_NAME:-datalab}}"
 AIRFLOW_DEFAULT_PASSWORD="${AIRFLOW_DEFAULT_PASS:-admin}"
 AIRFLOW_DEFAULT_EMAIL="${AIRFLOW_DEFAULT_EMAIL:-${AIRFLOW_DEFAULT_USERNAME}@example.com}"
 AIRFLOW_WEB_PORT="${AIRFLOW_WEB_PORT:-8080}"
+: "${AIRFLOW_USE_POSTGRES_METADATA:=true}"
+: "${AIRFLOW_EXECUTOR:=LocalExecutor}"
+: "${AIRFLOW_DB_NAME:=${POSTGRES_DB:-datalab}}"
+: "${AIRFLOW_DB_USER:=${POSTGRES_USER:-admin}}"
+: "${AIRFLOW_DB_PASSWORD:=${POSTGRES_PASSWORD:-admin}}"
+: "${AIRFLOW_CORE_PARALLELISM:=16}"
+: "${AIRFLOW_CORE_MAX_ACTIVE_TASKS_PER_DAG:=8}"
+: "${AIRFLOW_CORE_MAX_ACTIVE_RUNS_PER_DAG:=4}"
+
+airflow::configure_runtime() {
+  export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
+  export AIRFLOW__CORE__PARALLELISM="${AIRFLOW__CORE__PARALLELISM:-${AIRFLOW_CORE_PARALLELISM}}"
+  export AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG="${AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG:-${AIRFLOW_CORE_MAX_ACTIVE_TASKS_PER_DAG}}"
+  export AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG="${AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG:-${AIRFLOW_CORE_MAX_ACTIVE_RUNS_PER_DAG}}"
+
+  if [[ "${AIRFLOW_USE_POSTGRES_METADATA}" == "true" ]]; then
+    postgres::start
+    export AIRFLOW__CORE__EXECUTOR="${AIRFLOW__CORE__EXECUTOR:-${AIRFLOW_EXECUTOR}}"
+    export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@localhost:${POSTGRES_PORT:-5432}/${AIRFLOW_DB_NAME}}"
+  else
+    export AIRFLOW__CORE__EXECUTOR="${AIRFLOW__CORE__EXECUTOR:-SequentialExecutor}"
+  fi
+}
 
 airflow::ensure_dirs() {
   mkdir -p "${AIRFLOW_PID_DIR}"
 }
 
 airflow::migrate_db() {
-  export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
+  airflow::configure_runtime
   airflow db migrate
 }
 
@@ -129,6 +157,7 @@ airflow::start_scheduler() {
 }
 
 airflow::start() {
+  airflow::configure_runtime
   airflow::ensure_dirs
   airflow::cleanup_stale_pids
   airflow::migrate_db

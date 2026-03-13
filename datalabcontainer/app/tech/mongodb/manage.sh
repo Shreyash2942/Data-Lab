@@ -259,7 +259,9 @@ mongodb::start() {
   )
 
   # First-time bootstrap: start without auth, create user, restart with auth.
+  # This intentionally starts mongod twice on first run.
   if [[ "${MONGO_AUTH_ENABLED}" == "true" && ! -f "${MONGODB_AUTH_BOOTSTRAP_MARKER}" ]]; then
+    echo "[*] First-run MongoDB auth bootstrap: initializing root user before auth mode."
     if ! "${MONGOD_BIN}" "${base_args[@]}"; then
       echo "[!] MongoDB bootstrap start failed. Recent log lines:" >&2
       tail -n 80 "${MONGODB_LOG_FILE}" >&2 || true
@@ -272,6 +274,7 @@ mongodb::start() {
     fi
     mongodb::bootstrap_auth
     touch "${MONGODB_AUTH_BOOTSTRAP_MARKER}"
+    echo "[*] MongoDB auth bootstrap complete; restarting in --auth mode..."
     mongodb::shutdown
   fi
 

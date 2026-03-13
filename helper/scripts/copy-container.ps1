@@ -1,13 +1,14 @@
 Param(
   [string]$SourceName = "datalab",
   [string]$NewName = "",
-  [string]$Image = "shreyash42/data-lab:latest",
+  [string]$Image = "",
   [switch]$UseSourceImage,
   [switch]$ForcePull,
   [string[]]$ExtraPorts = @(),
   [string]$UiHost = "localhost",
   [switch]$BindProjectFiles,
   [switch]$IncludeLakehousePorts,
+  [switch]$ExcludeLakehousePorts,
   [string]$DefaultProjectHostPath = "D:\GitHub\MediLake",
   [string]$DefaultProjectContainerPath = "/home/datalab/medilake",
   [switch]$SkipDefaultProjectMount,
@@ -127,6 +128,8 @@ if (-not $NewName) {
   throw "Container name is required."
 }
 
+$preferredLocalImage = "data-lab:latest"
+$publishedFallbackImage = "shreyash42/data-lab:latest"
 $resolvedImage = $Image
 if ($UseSourceImage) {
   $exists = docker container inspect $SourceName 2>$null
@@ -142,7 +145,13 @@ if ($UseSourceImage) {
   Write-Host "Using source image: $resolvedImage"
 } else {
   if (-not $resolvedImage) {
-    throw "Image is required. Pass -Image <repo/image:tag>."
+    if (Test-ImageExists -ImageRef $preferredLocalImage) {
+      $resolvedImage = $preferredLocalImage
+      Write-Host "Using local rebuilt image by default: $resolvedImage"
+    } else {
+      $resolvedImage = $publishedFallbackImage
+      Write-Host "Local '$preferredLocalImage' not found. Falling back to published image: $resolvedImage"
+    }
   }
 
   $imageExistsLocally = Test-ImageExists -ImageRef $resolvedImage
@@ -165,7 +174,14 @@ $defaultPorts = @(
   "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
   "5432:5432", "27017:27017", "6379:6379"
 )
-if ($IncludeLakehousePorts) {
+
+# Include lakehouse/analytics ports by default so copied containers expose the
+# full platform with conflict-free dynamic host mappings.
+$includeLakehouseByDefault = $true
+if ($ExcludeLakehousePorts -and -not $IncludeLakehousePorts) {
+  $includeLakehouseByDefault = $false
+}
+if ($includeLakehouseByDefault) {
   $defaultPorts += @("8090:8090", "8091:8091", "9004:9004", "9005:9005")
 }
 
