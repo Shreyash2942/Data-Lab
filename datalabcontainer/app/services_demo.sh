@@ -75,9 +75,15 @@ run_spark_example() {
 }
 
 run_dbt_project() {
+  local target="${DBT_TARGET:-duckdb}"
   (
     cd "${WORKSPACE}/dbt"
-    dbt debug && dbt run
+    echo "[*] Running dbt target: ${target}"
+    if [[ "${target}" == "hive" ]]; then
+      dbt debug --target "${target}" && dbt run --full-refresh --target "${target}"
+    else
+      dbt debug --target "${target}" && dbt run --target "${target}"
+    fi
   )
 }
 
@@ -150,6 +156,10 @@ run_redis_demo() {
   REDIS_PORT="${REDIS_PORT}" python "${WORKSPACE}/redis/example_redis.py"
 }
 
+run_gx_demo() {
+  bash "${WORKSPACE}/app/tech/great_expectations/manage.sh" run-demo
+}
+
 run_hdfs_smoke_test() {
   bash "${WORKSPACE}/hadoop/scripts/hdfs_check.sh"
 }
@@ -204,6 +214,9 @@ run_all_demos() {
   echo "[*] Running Redis demo..."
   run_redis_demo || echo "Redis demo failed."
 
+  echo "[*] Running Great Expectations demo..."
+  run_gx_demo || echo "Great Expectations demo failed."
+
   echo "[+] Demo run completed."
 }
 
@@ -227,6 +240,7 @@ handle_cli_flag() {
     --run-postgres-demo) run_postgres_demo; exit 0 ;;
     --run-mongodb-demo) run_mongodb_demo; exit 0 ;;
     --run-redis-demo) run_redis_demo; exit 0 ;;
+    --run-gx-demo|--run-great-expectations-demo) run_gx_demo; exit 0 ;;
     --run-all-demos) run_all_demos; exit 0 ;;
   esac
 }
@@ -236,7 +250,7 @@ handle_cli_flag "$1"
 echo "=== Data Lab :: DEMO MENU ==="
 echo "1) Python example"
 echo "2) Spark example"
-echo "3) dbt project"
+echo "3) dbt project (set DBT_TARGET=duckdb|hive|spark_session)"
 echo "4) Kafka demo"
 echo "5) Java example"
 echo "6) Scala example"
@@ -253,6 +267,7 @@ echo "16) Hive demo databases (create + show tables)"
 echo "17) PostgreSQL demo"
 echo "18) MongoDB demo"
 echo "19) Redis demo"
+echo "20) Great Expectations demo"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -276,6 +291,7 @@ case "$opt" in
   17) run_postgres_demo ;;
   18) run_mongodb_demo ;;
   19) run_redis_demo ;;
+  20) run_gx_demo ;;
   0) echo "Bye." ;;
   *) echo "Invalid option."; exit 1 ;;
 esac

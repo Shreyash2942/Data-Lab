@@ -44,14 +44,25 @@ This starts Airflow if needed and runs:
 - DAG: `data_lab_stack_validation`
 - Command used: `airflow dags test data_lab_stack_validation <today>`
 
+Validation cleanup removes only temporary CDC demo artifacts. It does not shut down your running services after the DAG finishes.
+
 You can also run the same action from `datalab_app` start menu option `12`.
 
 ### DAG dependency map (`data_lab_stack_validation`)
 
-- Serial core chain: `start_core_services -> hadoop_demo -> hive_demo_databases -> spark_demo -> {kafka_demo, hudi_quickstart, iceberg_quickstart, delta_quickstart}`
-- Independent demos off start: `{python_example, java_example, scala_example, terraform_demo}`
-- Database validation branch: `start_database_services -> {postgres_demo, mongodb_demo, redis_demo, db_ui_smoke_check}`
-- All flow into `stop_core_services` (trigger_rule=`all_success`)
+- Fast chain: `preflight_checks -> database_stack_health -> etl_stack_health -> lakehouse_stack_health -> quality_stack_health -> observability_stack_health -> ui_services_dynamic_port_mapping -> cleanup_validation_artifacts`
+- Cleanup task uses `trigger_rule=all_done`
+
+The validation DAG is optimized for a fast smoke pass, not a full demo marathon. It checks:
+
+- Database stack: PostgreSQL, MongoDB, Redis, pgAdmin, Mongo Express, Redis Commander
+- ETL stack: Hadoop, Hive, Spark, Kafka, Schema Registry, Kafka Connect, CDC plugin/converter readiness
+- Lakehouse stack: MinIO, Trino, Superset
+- Quality/dev stack: Great Expectations, JupyterLab
+- Observability stack: Marquez/OpenLineage, Prometheus, Grafana
+- Copied-container URL rendering: `ui_services --json` dynamic port mapping logic
+
+Longer lakehouse demo jobs and optional sample workflows remain available through their dedicated helpers; they are intentionally not part of the default validation DAG so `datalab_app --validate-stack` finishes quickly.
 
 ## Common commands
 

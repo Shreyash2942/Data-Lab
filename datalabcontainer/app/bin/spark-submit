@@ -20,6 +20,10 @@ FILTER_JOL_WARNINGS="${DATALAB_FILTER_JOL_WARNINGS:-1}"
 SPARK_DEFAULT_MASTER="${DATALAB_SPARK_SUBMIT_MASTER:-spark://localhost:7077}"
 SPARK_APP_MAX_CORES="${DATALAB_SPARK_APP_MAX_CORES:-1}"
 SPARK_SCHEDULER_MODE="${DATALAB_SPARK_SCHEDULER_MODE:-FAIR}"
+OPENLINEAGE_MODE="${DATALAB_OPENLINEAGE_ENABLED:-auto}"
+OPENLINEAGE_NAMESPACE="${DATALAB_OPENLINEAGE_NAMESPACE:-${CONTAINER_NAME:-datalab}}"
+OPENLINEAGE_URL="${DATALAB_OPENLINEAGE_URL:-http://127.0.0.1:5000/api/v1/lineage}"
+OPENLINEAGE_LIB_DIR="${OPENLINEAGE_SPARK_HOME:-/opt/openlineage-spark}/lib"
 
 LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
 if ! mkdir -p "${SPARK_CONF_DIR_DEFAULT}" 2>/dev/null; then
@@ -144,6 +148,25 @@ can_write_dir() {
   return 0
 }
 
+port_open() {
+  local host="$1"
+  local port="$2"
+  SPARK_WAIT_HOST="${host}" SPARK_WAIT_PORT="${port}" python3 - <<'PY'
+import os, socket, sys
+host = os.environ["SPARK_WAIT_HOST"]
+port = int(os.environ["SPARK_WAIT_PORT"])
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect((host, port))
+except OSError:
+    sys.exit(1)
+else:
+    s.close()
+    sys.exit(0)
+PY
+}
+
 if ! can_write_dir "${EVENT_DIR}"; then
   mkdir -p "${USER_EVENT_DIR}"
   EXTRA_CONF_ARGS+=(
@@ -198,10 +221,36 @@ if [[ "${REQUESTED_MASTER}" == spark://* ]]; then
   fi
 fi
 
+OPENLINEAGE_CONF_ARGS=()
+openlineage_enabled=0
+if compgen -G "${OPENLINEAGE_LIB_DIR}/*.jar" > /dev/null; then
+  case "${OPENLINEAGE_MODE}" in
+    1|true|TRUE|yes|YES|on|ON)
+      openlineage_enabled=1
+      ;;
+    auto|AUTO)
+      if port_open 127.0.0.1 5000; then
+        openlineage_enabled=1
+      fi
+      ;;
+  esac
+fi
+
+if [[ "${openlineage_enabled}" -eq 1 ]]; then
+  OPENLINEAGE_JARS="$(printf '%s\n' "${OPENLINEAGE_LIB_DIR}"/*.jar | paste -sd, -)"
+  OPENLINEAGE_CONF_ARGS+=(
+    "--jars" "${OPENLINEAGE_JARS}"
+    "--conf" "spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener"
+    "--conf" "spark.openlineage.transport.type=http"
+    "--conf" "spark.openlineage.transport.url=${OPENLINEAGE_URL}"
+    "--conf" "spark.openlineage.namespace=${OPENLINEAGE_NAMESPACE}"
+  )
+fi
+
 if [[ "${FILTER_JOL_WARNINGS}" == "1" ]]; then
-  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "$@" \
+  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "${OPENLINEAGE_CONF_ARGS[@]}" "$@" \
     > >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)') \
     2> >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)' >&2)
 else
-  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "$@"
+  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "${OPENLINEAGE_CONF_ARGS[@]}" "$@"
 fi

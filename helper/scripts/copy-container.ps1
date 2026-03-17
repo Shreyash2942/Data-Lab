@@ -121,6 +121,28 @@ function Get-SafeVolumeSuffix {
   return $safe
 }
 
+function Resolve-ContainerMountPath {
+  Param(
+    [string]$InputPath,
+    [string]$DefaultRoot = "/home/datalab"
+  )
+
+  $normalized = ($InputPath ?? "").Trim()
+  if (-not $normalized) {
+    return ""
+  }
+
+  $normalized = $normalized.Replace("\", "/")
+
+  if ($normalized.StartsWith("~/")) {
+    $normalized = "$DefaultRoot/" + $normalized.Substring(2)
+  } elseif (-not $normalized.StartsWith("/")) {
+    $normalized = "$DefaultRoot/" + ($normalized.TrimStart(".","/"))
+  }
+
+  return ($normalized -replace "/{2,}", "/")
+}
+
 if (-not $NewName) {
   $NewName = Read-Host "New container name"
 }
@@ -171,7 +193,8 @@ if ($UseSourceImage) {
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084", "8085:8085", "8086:8086",
+  "8888:8888", "8891:8891", "5000:5000", "3000:3000", "9095:9095", "3001:3001",
   "5432:5432", "27017:27017", "6379:6379"
 )
 
@@ -225,10 +248,20 @@ if ($BindProjectFiles) {
     "$stacksDir\hive:/home/datalab/hive",
     "$stacksDir\hadoop:/home/datalab/hadoop",
     "$stacksDir\kafka:/home/datalab/kafka",
+    "$stacksDir\kafka_connect:/home/datalab/kafka_connect",
     "$stacksDir\mongodb:/home/datalab/mongodb",
+    "$stacksDir\minio:/home/datalab/minio",
+    "$stacksDir\marquez:/home/datalab/marquez",
     "$stacksDir\postgres:/home/datalab/postgres",
+    "$stacksDir\prometheus:/home/datalab/prometheus",
     "$stacksDir\redis:/home/datalab/redis",
-    "$stacksDir\lakehouse:/home/datalab/lakehouse"
+    "$stacksDir\schema_registry:/home/datalab/schema_registry",
+    "$stacksDir\lakehouse:/home/datalab/lakehouse",
+    "$stacksDir\grafana:/home/datalab/grafana",
+    "$stacksDir\great_expectations:/home/datalab/great_expectations",
+    "$stacksDir\jupyter:/home/datalab/jupyter",
+    "$stacksDir\superset:/home/datalab/superset",
+    "$stacksDir\trino:/home/datalab/trino"
   )
 }
 
@@ -243,6 +276,7 @@ if (-not $SkipDefaultProjectMount) {
 
 $collectedVolumes = @()
 if (-not $NoPromptVolumes) {
+  $defaultContainerMountRoot = "/home/datalab"
   while ($true) {
     $hostPath = Read-Host "Host path to bind (blank to finish)"
     if (-not $hostPath) { break }
@@ -251,11 +285,19 @@ if (-not $NoPromptVolumes) {
       continue
     }
 
-    $containerPath = Read-Host "Container path for this mount (e.g., /home/datalab/data)"
+    $containerPathInput = Read-Host "Container path/name for this mount (relative paths go under $defaultContainerMountRoot)"
+    if (-not $containerPathInput) {
+      Write-Host "Container path is required. Try again."
+      continue
+    }
+
+    $containerPath = Resolve-ContainerMountPath -InputPath $containerPathInput -DefaultRoot $defaultContainerMountRoot
     if (-not $containerPath) {
       Write-Host "Container path is required. Try again."
       continue
     }
+
+    Write-Host "Using container path: $containerPath"
 
     $collectedVolumes += "$hostPath`:$containerPath"
   }
@@ -375,14 +417,24 @@ for p in \
   /home/datalab/hive \
   /home/datalab/java \
   /home/datalab/kafka \
+  /home/datalab/kafka_connect \
   /home/datalab/mongodb \
+  /home/datalab/minio \
+  /home/datalab/marquez \
   /home/datalab/postgres \
+  /home/datalab/prometheus \
   /home/datalab/python \
   /home/datalab/redis \
+  /home/datalab/schema_registry \
   /home/datalab/runtime \
   /home/datalab/scala \
   /home/datalab/spark \
-  /home/datalab/terraform
+  /home/datalab/terraform \
+  /home/datalab/grafana \
+  /home/datalab/great_expectations \
+  /home/datalab/jupyter \
+  /home/datalab/superset \
+  /home/datalab/trino
 do
   [ -e "$p" ] || continue
   chown -R datalab:datalab "$p" 2>/dev/null || true
@@ -416,13 +468,18 @@ $serviceMap = @{
   4040  = @{ Name = "Spark App UI";    Path = "/" }
   9870  = @{ Name = "HDFS NameNode";   Path = "/" }
   8088  = @{ Name = "YARN ResourceMgr";Path = "/" }
-  10001 = @{ Name = "HiveServer2 HTTP";Path = "/cliservice" }
   9002  = @{ Name = "Kafka UI";        Path = "/" }
   8181  = @{ Name = "pgAdmin UI"; Path = "/" }
   8083  = @{ Name = "Mongo Express UI"; Path = "/" }
   8084  = @{ Name = "Redis Commander UI"; Path = "/" }
+  8085  = @{ Name = "Schema Registry API"; Path = "/apis/registry/v3" }
+  8086  = @{ Name = "Kafka Connect API"; Path = "/connectors" }
   8091  = @{ Name = "Trino"; Path = "/" }
   8090  = @{ Name = "Superset"; Path = "/" }
+  5000  = @{ Name = "Marquez API"; Path = "/api/v1/namespaces" }
+  3000  = @{ Name = "Marquez UI"; Path = "/" }
+  9095  = @{ Name = "Prometheus UI"; Path = "/" }
+  3001  = @{ Name = "Grafana UI"; Path = "/" }
   9004  = @{ Name = "MinIO API"; Path = "/" }
   9005  = @{ Name = "MinIO Console"; Path = "/" }
 }
@@ -443,7 +500,9 @@ foreach ($mapping in $resolvedDefaultPorts) {
   $containerPort = [int]$parts[1]
   if ($containerPort -eq 9083) {
     Write-Output ("  - Hive Metastore: thrift://{0}:{1}" -f $UiHost, $hostPort)
-    break
+  }
+  if ($containerPort -eq 10000) {
+    Write-Output ("  - HiveServer2 Thrift: thrift://{0}:{1}" -f $UiHost, $hostPort)
   }
 }
 

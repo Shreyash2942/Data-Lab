@@ -29,6 +29,7 @@ fi
 
 WORKSPACE="$(strip_cr "${WORKSPACE:-/home/datalab}")"
 RUNTIME_ROOT="$(strip_cr "${RUNTIME_ROOT:-${WORKSPACE}/runtime}")"
+DATALAB_CHECK_FAST="$(strip_cr "${DATALAB_CHECK_FAST:-0}")"
 mkdir -p "${RUNTIME_ROOT}"
 
 ok()  { printf '[OK]   %s\n' "$*"; }
@@ -48,20 +49,46 @@ run_check() {
   fi
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 echo "=== Data Lab :: Quick Check ==="
 echo "Workspace: ${WORKSPACE}"
 
-run_check "Python" python --version
-run_check "Airflow CLI" airflow version
-run_check "Spark CLI" spark-submit --version
-run_check "Hadoop CLI" hadoop version
-run_check "Hive CLI" hive --version
-run_check "Kafka CLI" "${KAFKA_HOME}/bin/kafka-topics.sh" --version
-run_check "PostgreSQL CLI" psql --version
-run_check "MongoDB daemon" mongod --version
-run_check "Redis CLI" redis-cli --version
-run_check "dbt" dbt --version
-run_check "Terraform" terraform version
+if is_truthy "${DATALAB_CHECK_FAST}"; then
+  echo "[*] Fast mode enabled: using presence checks for CLI/tooling."
+  run_check "Python" command -v python
+  run_check "Airflow CLI" command -v airflow
+  run_check "Spark CLI" command -v spark-submit
+  run_check "Hadoop CLI" command -v hadoop
+  run_check "Hive CLI" command -v hive
+  run_check "Kafka CLI" test -x "${KAFKA_HOME}/bin/kafka-topics.sh"
+  run_check "PostgreSQL CLI" command -v psql
+  run_check "MongoDB daemon" command -v mongod
+  run_check "Redis CLI" command -v redis-cli
+  run_check "dbt" command -v dbt
+  run_check "Terraform" command -v terraform
+else
+  run_check "Python" python --version
+  run_check "Airflow CLI" airflow version
+  run_check "Spark CLI" spark-submit --version
+  run_check "Hadoop CLI" hadoop version
+  run_check "Hive CLI" hive --version
+  run_check "Kafka CLI" "${KAFKA_HOME}/bin/kafka-topics.sh" --version
+  run_check "PostgreSQL CLI" psql --version
+  run_check "MongoDB daemon" mongod --version
+  run_check "Redis CLI" redis-cli --version
+  run_check "dbt" dbt --version
+  run_check "Terraform" terraform version
+fi
 run_check "Hudi jar" test -f "${SPARK_HOME}/jars/hudi-spark-bundle.jar"
 run_check "Iceberg jar" test -f "${SPARK_HOME}/jars/iceberg-spark-runtime.jar"
 run_check "Delta jar" test -f "${SPARK_HOME}/jars/delta-spark.jar"

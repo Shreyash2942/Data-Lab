@@ -2,9 +2,7 @@
 set -euo pipefail
 
 HS2_HOST="${HIVE_CLI_HOST:-localhost}"
-HS2_PORT="${HIVE_CLI_PORT:-10001}"
-HS2_HTTP_PATH="${HIVE_CLI_HTTP_PATH:-cliservice}"
-HS2_AUTH="${HIVE_CLI_AUTH:-noSasl}"
+HS2_PORT="${HIVE_CLI_PORT:-10000}"
 HS2_DB="${HIVE_CLI_DB:-default}"
 HS2_USER="${HIVE_CLI_USER:-datalab}"
 HS2_PASS="${HIVE_CLI_PASS:-}"
@@ -13,7 +11,7 @@ HIVE_RC_FILE="${HIVE_RC_FILE:-${HOME}/.hiverc}"
 BEELINE_SILENT="${HIVE_CLI_SILENT:-true}"
 BEELINE_VERBOSE="${HIVE_CLI_VERBOSE:-false}"
 
-JDBC_URL="jdbc:hive2://${HS2_HOST}:${HS2_PORT}/${HS2_DB};transportMode=http;httpPath=${HS2_HTTP_PATH};auth=${HS2_AUTH}"
+JDBC_URL="jdbc:hive2://${HS2_HOST}:${HS2_PORT}/${HS2_DB}"
 
 if [[ -z "${USER:-}" ]]; then
   USER="$(id -un 2>/dev/null || echo datalab)"

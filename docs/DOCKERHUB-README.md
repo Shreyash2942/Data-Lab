@@ -2,6 +2,21 @@
 
 This guide shows how to build, tag, push, and pull the Data Lab image with Docker Hub.
 
+## Important image model
+
+`data-lab:latest` is the single runtime image for the full Data Lab platform.
+
+During local builds, Docker may also pull temporary build-source images such as:
+
+- `prom/prometheus`
+- `grafana/grafana`
+- `marquezproject/marquez`
+- `marquezproject/marquez-web`
+- `apicurio/apicurio-registry`
+- `quay.io/debezium/connect`
+
+These are only multi-stage build sources. They are not separate runtime images you need to push or run for Data Lab.
+
 ## Prerequisites
 
 - Docker Desktop (or Docker Engine) is running.
@@ -111,5 +126,23 @@ Remove unused images/containers/networks:
 
 ```powershell
 docker system prune -f
+```
+
+Remove only the known Data Lab build-source images after `data-lab:latest` is built:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\helper\scripts\cleanup-build-source-images.ps1
+```
+
+Dry run first:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\helper\scripts\cleanup-build-source-images.ps1 -DryRun
+```
+
+Linux/macOS:
+
+```bash
+bash ./helper/scripts/cleanup-build-source-images.sh
 ```
 

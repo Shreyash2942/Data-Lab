@@ -8,14 +8,14 @@ CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 source "${APP_DIR}/tech/host_exec.sh"
 
 UI_HOST="${UI_HOST:-localhost}"
-TRINO_HOST="${TRINO_HOST:-localhost}"
+TRINO_HOST="${TRINO_HOST:-${UI_HOST}}"
 TRINO_PORT="${TRINO_PORT:-8091}"
 TRINO_USER="${TRINO_USER:-trino}"
 TRINO_DEFAULT_CATALOG="${TRINO_DEFAULT_CATALOG:-hive}"
 TRINO_DEFAULT_SCHEMA="${TRINO_DEFAULT_SCHEMA:-default}"
-SUPERSET_HOST="${SUPERSET_HOST:-localhost}"
+SUPERSET_HOST="${SUPERSET_HOST:-${UI_HOST}}"
 SUPERSET_PORT="${SUPERSET_PORT:-8090}"
-MINIO_HOST="${MINIO_HOST:-localhost}"
+MINIO_HOST="${MINIO_HOST:-${UI_HOST}}"
 MINIO_API_PORT="${MINIO_API_PORT:-9004}"
 MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9005}"
 HIVE_METASTORE_EXTERNAL_PORT="${HIVE_METASTORE_EXTERNAL_PORT:-9083}"
@@ -46,6 +46,15 @@ fi
 
 if [[ -n "${DATALAB_UI_HOST}" ]]; then
   UI_HOST="${DATALAB_UI_HOST}"
+fi
+if [[ -z "${TRINO_HOST:-}" || "${TRINO_HOST}" == "localhost" ]]; then
+  TRINO_HOST="${UI_HOST}"
+fi
+if [[ -z "${SUPERSET_HOST:-}" || "${SUPERSET_HOST}" == "localhost" ]]; then
+  SUPERSET_HOST="${UI_HOST}"
+fi
+if [[ -z "${MINIO_HOST:-}" || "${MINIO_HOST}" == "localhost" ]]; then
+  MINIO_HOST="${UI_HOST}"
 fi
 
 print_header() {
@@ -264,7 +273,7 @@ show_hdfs_connect_info() {
 }
 
 hive_http_endpoint() {
-  container_effective_endpoint 10001 "jdbc:hive2"
+  container_effective_endpoint 10000 "jdbc:hive2"
 }
 
 hive_binary_endpoint() {
@@ -362,6 +371,111 @@ show_kafka_connect_info() {
   echo "  kafka-console-producer.sh --bootstrap-server ${bootstrap_outside} --topic demo"
 }
 
+show_schema_registry_info() {
+  local api_inside api_outside info_inside info_outside
+  api_inside="http://localhost:8085/apis/registry/v3"
+  api_outside="$(container_effective_url 8085 "/apis/registry/v3")"
+  info_inside="http://localhost:8085/apis/registry/v3/system/info"
+  info_outside="$(container_effective_url 8085 "/apis/registry/v3/system/info")"
+  print_section "Schema Registry Info"
+  print_kv "API (inside container)" "${api_inside}"
+  print_kv "API (outside host)" "${api_outside}"
+  print_kv "System info (inside container)" "${info_inside}"
+  print_kv "System info (outside host)" "${info_outside}"
+  print_kv "Storage" "PostgreSQL database ${SCHEMA_REGISTRY_DB:-registrydb}"
+  print_kv "Purpose" "Avro/JSON Schema/Protobuf artifact registry"
+}
+
+show_kafka_connect_api_info() {
+  local api_inside api_outside bootstrap_inside bootstrap_outside plugin_dir
+  local cdc_basic_config cdc_registry_config cdc_json_topic cdc_json_connector cdc_registry_topic cdc_registry_connector
+  api_inside="http://localhost:8086/connectors"
+  api_outside="$(container_effective_url 8086 "/connectors")"
+  bootstrap_inside="localhost:9092"
+  bootstrap_outside="$(effective_host_port 9092)"
+  plugin_dir="/home/datalab/runtime/kafka-connect/plugins"
+  cdc_basic_config="/home/datalab/kafka/connectors/postgres-cdc-basic.json"
+  cdc_registry_config="/home/datalab/kafka/connectors/postgres-cdc-registry.json"
+  cdc_json_connector="datalab-postgres-cdc"
+  cdc_json_topic="datalab_cdc.public.${CDC_SOURCE_TABLE:-customer_events}"
+  cdc_registry_connector="datalab-postgres-cdc-registry"
+  cdc_registry_topic="datalab_cdc-registry.public.${CDC_SOURCE_TABLE:-customer_events}"
+  print_section "Kafka Connect Info"
+  print_kv "REST API (inside container)" "${api_inside}"
+  print_kv "REST API (outside host)" "${api_outside}"
+  print_kv "Bootstrap (inside container)" "${bootstrap_inside}"
+  print_kv "Bootstrap (outside host)" "${bootstrap_outside}"
+  print_kv "Plugin dir" "${plugin_dir}"
+  print_kv "Internal topics" "datalab_connect_configs, datalab_connect_offsets, datalab_connect_statuses"
+  print_kv "Debezium demo (json)" "${cdc_json_connector} -> ${cdc_json_topic}"
+  print_kv "Debezium demo (registry)" "${cdc_registry_connector} -> ${cdc_registry_topic}"
+  print_kv "Sample config (json)" "${cdc_basic_config}"
+  print_kv "Sample config (registry)" "${cdc_registry_config}"
+}
+
+show_jupyter_connect_info() {
+  local inside_url outside_url
+  inside_url="http://localhost:8888/lab?token=${JUPYTER_TOKEN:-datalab}"
+  outside_url="$(container_effective_url 8888 "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+  print_section "JupyterLab Info"
+  print_kv "UI (inside container)" "${inside_url}"
+  print_kv "UI (outside host)" "${outside_url}"
+  print_kv "Token" "${JUPYTER_TOKEN:-datalab}"
+  print_kv "Workspace root" "${WORKSPACE:-/home/datalab}"
+  print_kv "Starter notebook" "/home/datalab/runtime/jupyter/notebooks/DataLab_Phase3_Quickstart.ipynb"
+}
+
+show_gx_connect_info() {
+  local inside_url outside_url
+  inside_url="http://localhost:8891/"
+  outside_url="$(container_effective_url 8891 "/")"
+  print_section "Great Expectations Info"
+  print_kv "Data Docs (inside container)" "${inside_url}"
+  print_kv "Data Docs (outside host)" "${outside_url}"
+  print_kv "Project root" "/home/datalab/runtime/great_expectations/project"
+  print_kv "Demo data" "/home/datalab/runtime/great_expectations/demo_data/customer_events_quality.csv"
+  print_kv "Last result" "/home/datalab/runtime/great_expectations/last_validation.json"
+  print_kv "Helper" "datalab_app --run-great-expectations-demo"
+}
+
+show_marquez_connect_info() {
+  local api_inside api_outside ui_inside ui_outside
+  api_inside="http://localhost:5000/api/v1/namespaces"
+  api_outside="$(container_effective_url 5000 "/api/v1/namespaces")"
+  ui_inside="http://localhost:3000/"
+  ui_outside="$(container_effective_url 3000 "/")"
+  print_section "Marquez / OpenLineage Info"
+  print_kv "API (inside container)" "${api_inside}"
+  print_kv "API (outside host)" "${api_outside}"
+  print_kv "UI (inside container)" "${ui_inside}"
+  print_kv "UI (outside host)" "${ui_outside}"
+  print_kv "Admin metrics (inside container)" "http://localhost:5001/metrics"
+  print_kv "Namespace default" "${LINEAGE_NAMESPACE:-datalab}"
+  print_kv "Helper" "datalab_app --run-lineage-demo"
+}
+
+show_prometheus_connect_info() {
+  local inside_url outside_url
+  inside_url="http://localhost:9095/"
+  outside_url="$(container_effective_url 9095 "/")"
+  print_section "Prometheus Info"
+  print_kv "UI (inside container)" "${inside_url}"
+  print_kv "UI (outside host)" "${outside_url}"
+  print_kv "Health exporter metrics" "http://localhost:9105/metrics"
+  print_kv "Purpose" "Scrapes Spark Prometheus endpoints and Data Lab service health exporter"
+}
+
+show_grafana_connect_info() {
+  local inside_url outside_url
+  inside_url="http://localhost:3001/"
+  outside_url="$(container_effective_url 3001 "/")"
+  print_section "Grafana Info"
+  print_kv "UI (inside container)" "${inside_url}"
+  print_kv "UI (outside host)" "${outside_url}"
+  print_kv "Login" "${GRAFANA_ADMIN_USER:-admin} / ${GRAFANA_ADMIN_PASSWORD:-admin}"
+  print_kv "Provisioned dashboard" "Data Lab Overview"
+}
+
 show_airflow_connect_info() {
   local airflow_inside airflow_outside
   airflow_inside="http://localhost:8080/"
@@ -449,25 +563,24 @@ show_redis_connect_info() {
 }
 
 show_hive_connect_info() {
-  local hive_db hive_user hive_pass jdbc_endpoint jdbc_binary_endpoint hive_hostport hive_host hive_port jdbc_url
+  local hive_db hive_user hive_pass jdbc_endpoint hive_hostport hive_host hive_port jdbc_url
   local metastore_uri_default metastore_uri hive_site_path warehouse_default warehouse_dir
   local metastore_uri_internal metastore_endpoint_effective
-  local hs2_http_inside hs2_http_outside hs2_thrift_inside hs2_thrift_outside
+  local hs2_inside hs2_outside hs2_thrift_inside hs2_thrift_outside
   local metastore_inside metastore_outside
 
   print_section "Hive Connect"
   echo "Press Enter to keep defaults."
   jdbc_endpoint="$(hive_http_endpoint)"
-  jdbc_binary_endpoint="$(hive_binary_endpoint)"
-  hs2_http_inside="jdbc:hive2://localhost:10001"
-  hs2_http_outside="${jdbc_endpoint}"
+  hs2_inside="jdbc:hive2://localhost:10000/default"
+  hs2_outside="${jdbc_endpoint}"
   hs2_thrift_inside="thrift://localhost:10000"
   hs2_thrift_outside="$(container_effective_endpoint 10000 "thrift")"
   metastore_inside="thrift://localhost:9083"
   hive_hostport="${jdbc_endpoint#jdbc:hive2://}"
   if [[ "${hive_hostport}" == "${jdbc_endpoint}" ]] || [[ "${hive_hostport}" != *:* ]]; then
     hive_host="${UI_HOST}"
-    hive_port="10001"
+    hive_port="10000"
   else
     hive_host="${hive_hostport%:*}"
     hive_port="${hive_hostport##*:}"
@@ -475,7 +588,7 @@ show_hive_connect_info() {
 
   hive_db="$(prompt_default "Hive database" "default")"
   hive_user="$(prompt_default "Hive username" "datalab")"
-  hive_pass="$(prompt_default "Hive password (blank for noSasl)" "")"
+  hive_pass="$(prompt_default "Hive password (blank for auth=NONE)" "")"
   metastore_uri_internal="$(read_hive_site_property "hive.metastore.uris" || true)"
   if [[ -z "${metastore_uri_internal}" ]]; then
     metastore_uri_internal="${metastore_inside}"
@@ -490,7 +603,7 @@ show_hive_connect_info() {
     warehouse_default="hdfs:///hive/warehouse"
   fi
   warehouse_dir="$(prompt_default "Hive warehouse directory" "${warehouse_default}")"
-  jdbc_url="${jdbc_endpoint}/${hive_db};transportMode=http;httpPath=cliservice;auth=noSasl"
+  jdbc_url="${jdbc_endpoint}/${hive_db}"
 
   print_section "Hive Connection Info"
   print_kv "Hive metastore URI (selected)" "${metastore_uri}"
@@ -499,10 +612,8 @@ show_hive_connect_info() {
   print_kv "Metastore URI (hive-site.xml)" "${metastore_uri_internal}"
   print_kv "HiveServer2 Thrift (inside)" "${hs2_thrift_inside}"
   print_kv "HiveServer2 Thrift (outside)" "${hs2_thrift_outside}"
-  print_kv "Hive JDBC HTTP (inside)" "${hs2_http_inside}"
-  print_kv "Hive JDBC HTTP (outside)" "${hs2_http_outside}"
-  print_kv "Hive JDBC (binary outside)" "${jdbc_binary_endpoint}"
-  print_kv "HiveServer2 HTTP URL" "$(container_effective_url 10001 "/cliservice")"
+  print_kv "Hive JDBC (inside)" "${hs2_inside}"
+  print_kv "Hive JDBC (outside)" "${hs2_outside}"
   print_kv "hive-site.xml path" "${hive_site_path}"
   print_kv "Format note" "Hudi/Iceberg/Delta are best queried via Spark SQL; HS2 support depends on loaded jars."
   print_kv "Hive warehouse dir" "${warehouse_dir}"
@@ -515,9 +626,8 @@ show_hive_connect_info() {
   else
     print_kv "Password" "(blank)"
   fi
-  print_kv "Auth" "noSasl"
-  print_kv "HTTP Path" "cliservice"
-  print_kv "JDBC URL (HTTP)" "${jdbc_url}"
+  print_kv "Auth" "NONE"
+  print_kv "JDBC URL" "${jdbc_url}"
   print_section "Beeline Examples"
   echo "  beeline -u \"${jdbc_url}\" -n \"${hive_user}\""
   echo "  beeline -u \"${jdbc_url}\" -n \"${hive_user}\" -p \"${hive_pass}\""
@@ -563,6 +673,7 @@ port_listening_local() {
 
 ui_login_helper() {
   local selection service_name container_port start_flag service_url service_is_endpoint endpoint_scheme start_now
+  local endpoint_path inside_endpoint_url
   local airflow_user="${CONTAINER_NAME:-datalab}"
 
   while true; do
@@ -572,15 +683,22 @@ ui_login_helper() {
     echo "2) Spark (Master/History/App + Connect)"
     echo "3) HDFS (NameNode + Connect)"
     echo "4) Hive (HS2 + Metastore + Connect)"
-    echo "5) Kafka (UI + Connect)"
+    echo "5) Kafka (UI + Broker)"
     echo "6) PostgreSQL (DB + pgAdmin)"
     echo "7) MongoDB (DB + Mongo Express)"
     echo "8) Redis (DB + Redis Commander)"
     echo "9) Trino (HTTP + JDBC Connect)"
     echo "10) Superset (UI + Login)"
+    echo "11) Schema Registry (API)"
+    echo "12) Kafka Connect (API)"
+    echo "13) JupyterLab"
+    echo "14) Great Expectations (Data Docs)"
+    echo "15) Marquez (UI + API)"
+    echo "16) Prometheus"
+    echo "17) Grafana"
     echo "0) Exit"
     selection=""
-    if ! read -r -p "Select option [0-10]: " selection; then
+    if ! read -r -p "Select option [0-17]: " selection; then
       echo
       echo "Bye."
       return 0
@@ -589,11 +707,13 @@ ui_login_helper() {
 
     service_is_endpoint=0
     endpoint_scheme="http"
+    endpoint_path="/"
+    inside_endpoint_url=""
     case "${selection}" in
       1) service_name="Airflow"; container_port=8080; start_flag="--start-airflow" ;;
       2) service_name="Spark Master"; container_port=9090; start_flag="--start-core" ;;
       3) service_name="HDFS NameNode"; container_port=9870; start_flag="--start-core" ;;
-      4) service_name="HiveServer2 HTTP"; container_port=10001; start_flag="--start-core" ;;
+      4) service_name="HiveServer2"; container_port=10000; start_flag="--start-core" ;;
       5) service_name="Kafka UI"; container_port=9002; start_flag="--start-core" ;;
       6)
         service_name="pgAdmin UI"
@@ -620,12 +740,68 @@ ui_login_helper() {
         container_port=8090
         start_flag="--start-superset"
         ;;
+      11)
+        service_name="Schema Registry API"
+        container_port=8085
+        start_flag="--start-schema-registry"
+        service_is_endpoint=1
+        endpoint_path="/apis/registry/v3"
+        inside_endpoint_url="http://localhost:8085/apis/registry/v3"
+        ;;
+      12)
+        service_name="Kafka Connect API"
+        container_port=8086
+        start_flag="--start-kafka-connect"
+        service_is_endpoint=1
+        endpoint_path="/connectors"
+        inside_endpoint_url="http://localhost:8086/connectors"
+        ;;
+      13)
+        service_name="JupyterLab"
+        container_port=8888
+        start_flag="--start-jupyter"
+        service_is_endpoint=1
+        endpoint_path="/lab?token=${JUPYTER_TOKEN:-datalab}"
+        inside_endpoint_url="http://localhost:8888/lab?token=${JUPYTER_TOKEN:-datalab}"
+        ;;
+      14)
+        service_name="Great Expectations Data Docs"
+        container_port=8891
+        start_flag="--start-great-expectations"
+        service_is_endpoint=1
+        endpoint_path="/"
+        inside_endpoint_url="http://localhost:8891/"
+        ;;
+      15)
+        service_name="Marquez UI"
+        container_port=3000
+        start_flag="--start-lineage"
+        service_is_endpoint=1
+        endpoint_path="/"
+        inside_endpoint_url="http://localhost:3000/"
+        ;;
+      16)
+        service_name="Prometheus UI"
+        container_port=9095
+        start_flag="--start-prometheus"
+        service_is_endpoint=1
+        endpoint_path="/"
+        inside_endpoint_url="http://localhost:9095/"
+        ;;
+      17)
+        service_name="Grafana UI"
+        container_port=3001
+        start_flag="--start-grafana"
+        service_is_endpoint=1
+        endpoint_path="/"
+        inside_endpoint_url="http://localhost:3001/"
+        ;;
       0) echo "Bye."; return 0 ;;
       *) echo "Invalid selection."; echo; return 1 ;;
     esac
 
     if [[ "${service_is_endpoint}" -eq 1 ]]; then
-      service_url="$(container_effective_endpoint "${container_port}" "${endpoint_scheme}")"
+      service_url="$(container_effective_url "${container_port}" "${endpoint_path}")"
     else
       service_url="$(container_effective_url "${container_port}" "/")"
     fi
@@ -649,11 +825,8 @@ ui_login_helper() {
     echo
     echo "Service: ${service_name}"
     if [[ "${service_is_endpoint}" -eq 1 ]]; then
-      if [[ "${service_url}" =~ ^[A-Za-z][A-Za-z0-9+.-]*://[^/]+$ ]]; then
-        service_url="${service_url}/"
-      fi
       print_kv "URL (outside host)" "${service_url}"
-      print_kv "URL (inside container)" "${endpoint_scheme}://localhost:${container_port}/"
+      print_kv "URL (inside container)" "${inside_endpoint_url}"
     else
       print_kv "URL" "${service_url}"
     fi
@@ -729,6 +902,27 @@ ui_login_helper() {
         echo "  - demo_iceberg.iceberg_table"
         echo "  - demo_delta.table_delta"
         echo "  - demo_hudi.order_hudi"
+        ;;
+      11)
+        show_schema_registry_info
+        ;;
+      12)
+        show_kafka_connect_api_info
+        ;;
+      13)
+        show_jupyter_connect_info
+        ;;
+      14)
+        show_gx_connect_info
+        ;;
+      15)
+        show_marquez_connect_info
+        ;;
+      16)
+        show_prometheus_connect_info
+        ;;
+      17)
+        show_grafana_connect_info
         ;;
       *)
         echo "Login: no credentials required for this UI."
@@ -928,8 +1122,7 @@ print_ui_block_host() {
   print_row "Silver Base Path" "$(default_silver_path)"
   print_row "Spark RPC" "$(mapped_endpoint "${container}" 7077 "spark")"
   print_row "Kafka Broker" "$(mapped_endpoint "${container}" 9092 "kafka")"
-  print_row "Hive JDBC HTTP" "$(mapped_endpoint "${container}" 10001 "jdbc:hive2")"
-  print_row "Hive JDBC Binary" "$(mapped_endpoint "${container}" 10000 "jdbc:hive2")"
+  print_row "Hive JDBC" "$(mapped_endpoint "${container}" 10000 "jdbc:hive2")"
   print_row "HiveServer2 Thrift" "$(mapped_endpoint "${container}" 10000 "thrift")"
   print_row "Hive Metastore (client endpoint)" "$(mapped_endpoint "${container}" 9083 "thrift")"
   print_row "Hive Config Path" "$(read_hive_site_path)"
@@ -940,8 +1133,15 @@ print_ui_block_host() {
   print_row "Spark App UI" "$(mapped_url "${container}" 4040 "/")"
   print_row "HDFS NameNode" "$(mapped_url "${container}" 9870 "/")"
   print_row "YARN ResourceMgr" "$(mapped_url "${container}" 8088 "/")"
-  print_row "HiveServer2 HTTP" "$(mapped_url "${container}" 10001 "/cliservice")"
   print_row "Kafka UI" "$(mapped_url "${container}" 9002 "/")"
+  print_row "Schema Registry API" "$(mapped_url "${container}" 8085 "/apis/registry/v3")"
+  print_row "Kafka Connect API" "$(mapped_url "${container}" 8086 "/connectors")"
+  print_row "JupyterLab" "$(mapped_url "${container}" 8888 "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+  print_row "GX Data Docs" "$(mapped_url "${container}" 8891 "/")"
+  print_row "Marquez API" "$(mapped_url "${container}" 5000 "/api/v1/namespaces")"
+  print_row "Marquez UI" "$(mapped_url "${container}" 3000 "/")"
+  print_row "Prometheus UI" "$(mapped_url "${container}" 9095 "/")"
+  print_row "Grafana UI" "$(mapped_url "${container}" 3001 "/")"
   print_row "Mongo Express UI" "$(mapped_url "${container}" 8083 "/")"
   print_row "Redis Commander UI" "$(mapped_url "${container}" 8084 "/")"
   print_row "pgAdmin UI" "$(mapped_url "${container}" 8181 "/")"
@@ -989,8 +1189,7 @@ print_ui_block_container() {
   print_row "Silver Base Path" "$(default_silver_path)"
   print_row "Spark RPC" "$(container_effective_endpoint 7077 "spark")"
   print_row "Kafka Broker" "$(container_effective_endpoint 9092 "kafka")"
-  print_row "Hive JDBC HTTP" "$(hive_http_endpoint)"
-  print_row "Hive JDBC Binary" "$(hive_binary_endpoint)"
+  print_row "Hive JDBC" "$(hive_http_endpoint)"
   print_row "HiveServer2 Thrift" "$(container_effective_endpoint 10000 "thrift")"
   print_row "Hive Metastore (client endpoint)" "$(container_effective_endpoint 9083 "thrift")"
   print_row "Hive Config Path" "$(read_hive_site_path)"
@@ -1001,8 +1200,15 @@ print_ui_block_container() {
   print_row "Spark App UI" "$(container_effective_url 4040 "/")"
   print_row "HDFS NameNode" "$(container_effective_url 9870 "/")"
   print_row "YARN ResourceMgr" "$(container_effective_url 8088 "/")"
-  print_row "HiveServer2 HTTP" "$(container_effective_url 10001 "/cliservice")"
   print_row "Kafka UI" "$(container_effective_url 9002 "/")"
+  print_row "Schema Registry API" "$(container_effective_url 8085 "/apis/registry/v3")"
+  print_row "Kafka Connect API" "$(container_effective_url 8086 "/connectors")"
+  print_row "JupyterLab" "$(container_effective_url 8888 "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+  print_row "GX Data Docs" "$(container_effective_url 8891 "/")"
+  print_row "Marquez API" "$(container_effective_url 5000 "/api/v1/namespaces")"
+  print_row "Marquez UI" "$(container_effective_url 3000 "/")"
+  print_row "Prometheus UI" "$(container_effective_url 9095 "/")"
+  print_row "Grafana UI" "$(container_effective_url 3001 "/")"
   print_row "Mongo Express UI" "$(container_effective_url 8083 "/")"
   print_row "Redis Commander UI" "$(container_effective_url 8084 "/")"
   print_row "pgAdmin UI" "$(container_effective_url 8181 "/")"
@@ -1033,6 +1239,28 @@ print_ui_json_host() {
   "hive_metastore_endpoint": "$(json_escape "$(mapped_endpoint "${container}" 9083 "thrift")")",
   "spark_rpc": "$(json_escape "$(mapped_endpoint "${container}" 7077 "spark")")",
   "kafka_broker": "$(json_escape "$(mapped_endpoint "${container}" 9092 "kafka")")",
+  "schema_registry": {
+    "api": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 8085)/apis/registry/v3"
+  },
+  "kafka_connect": {
+    "api": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 8086)/connectors"
+  },
+  "jupyterlab": {
+    "url": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 8888)/lab?token=$(json_escape "${JUPYTER_TOKEN:-datalab}")"
+  },
+  "great_expectations": {
+    "data_docs": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 8891)/"
+  },
+  "marquez": {
+    "api": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 5000)/api/v1/namespaces",
+    "ui": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 3000)/"
+  },
+  "prometheus": {
+    "url": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 9095)/"
+  },
+  "grafana": {
+    "url": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 3001)/"
+  },
   "postgresql": {
     "server_name": "$(json_escape "${container}")",
     "inside": "postgresql://localhost:5432",
@@ -1094,6 +1322,28 @@ print_ui_json_container() {
   "hive_metastore_endpoint": "$(json_escape "$(container_effective_endpoint 9083 "thrift")")",
   "spark_rpc": "$(json_escape "$(container_effective_endpoint 7077 "spark")")",
   "kafka_broker": "$(json_escape "$(container_effective_endpoint 9092 "kafka")")",
+  "schema_registry": {
+    "api": "$(json_escape "$(container_effective_url 8085 "/apis/registry/v3")")"
+  },
+  "kafka_connect": {
+    "api": "$(json_escape "$(container_effective_url 8086 "/connectors")")"
+  },
+  "jupyterlab": {
+    "url": "$(json_escape "$(container_effective_url 8888 "/lab?token=${JUPYTER_TOKEN:-datalab}")")"
+  },
+  "great_expectations": {
+    "data_docs": "$(json_escape "$(container_effective_url 8891 "/")")"
+  },
+  "marquez": {
+    "api": "$(json_escape "$(container_effective_url 5000 "/api/v1/namespaces")")",
+    "ui": "$(json_escape "$(container_effective_url 3000 "/")")"
+  },
+  "prometheus": {
+    "url": "$(json_escape "$(container_effective_url 9095 "/")")"
+  },
+  "grafana": {
+    "url": "$(json_escape "$(container_effective_url 3001 "/")")"
+  },
   "postgresql": {
     "server_name": "$(json_escape "${target_name}")",
     "inside": "postgresql://localhost:5432",
@@ -1140,9 +1390,11 @@ if datalab::inside_container; then
     print_ui_block_container
     echo
     echo "Note: Hive Metastore/PostgreSQL/MongoDB/Redis entries are service endpoints, not HTTP web UIs."
+    echo "Schema Registry, Kafka Connect, and Marquez API entries are HTTP APIs."
+    echo "Great Expectations entry is the generated Data Docs site."
     echo "Hive metastore value shown above is the client endpoint (auto-mapped for copied containers)."
-    echo "Hive defaults: auth=noSasl user=datalab password=(blank) db=default httpPath=cliservice."
-    echo "Hive ports: metastore=9083, hs2-thrift=10000, hs2-http=10001/cliservice."
+    echo "Hive defaults: auth=NONE user=datalab password=(blank) db=default."
+    echo "Hive ports: metastore=9083, hs2-thrift=10000."
     echo
     if [[ -n "${DATALAB_HOST_PORT_MAP}" ]]; then
       echo "Showing host-mapped ports from container env."
@@ -1183,6 +1435,8 @@ echo "Container: ${target_container}"
 print_ui_block_host "${target_container}"
 echo
 echo "Note: Hive Metastore/PostgreSQL/MongoDB/Redis entries are service endpoints, not HTTP web UIs."
+echo "Schema Registry, Kafka Connect, and Marquez API entries are HTTP APIs."
+echo "Great Expectations entry is the generated Data Docs site."
 echo "Hive metastore value shown above is the client endpoint (auto-mapped for copied containers)."
-echo "Hive defaults: auth=noSasl user=datalab password=(blank) db=default httpPath=cliservice."
-echo "Hive ports: metastore=9083, hs2-thrift=10000, hs2-http=10001/cliservice."
+echo "Hive defaults: auth=NONE user=datalab password=(blank) db=default."
+echo "Hive ports: metastore=9083, hs2-thrift=10000."

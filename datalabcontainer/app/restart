@@ -16,11 +16,17 @@ source "${APP_DIR}/tech/hadoop/manage.sh"
 source "${APP_DIR}/tech/hive/manage.sh"
 source "${APP_DIR}/tech/airflow/manage.sh"
 source "${APP_DIR}/tech/kafka/manage.sh"
+source "${APP_DIR}/tech/kafka_connect/manage.sh"
 source "${APP_DIR}/tech/postgres/manage.sh"
+source "${APP_DIR}/tech/schema_registry/manage.sh"
 source "${APP_DIR}/tech/mongodb/manage.sh"
 source "${APP_DIR}/tech/redis/manage.sh"
 source "${APP_DIR}/tech/dbui/manage.sh"
 source "${APP_DIR}/tech/pgadmin/manage.sh"
+source "${APP_DIR}/tech/great_expectations/manage.sh"
+source "${APP_DIR}/tech/jupyter/manage.sh"
+source "${APP_DIR}/tech/lineage/manage.sh"
+source "${APP_DIR}/tech/monitoring/manage.sh"
 source "${APP_DIR}/tech/spark/manage.sh"
 source "${APP_DIR}/tech/minio/manage.sh"
 source "${APP_DIR}/tech/trino/manage.sh"
@@ -53,6 +59,16 @@ handle_cli_flag() {
       echo "[+] Lakehouse services restarted."
       exit 0
       ;;
+    --restart-quality-stack)
+      groups::restart_quality
+      echo "[+] Quality & dev services restarted."
+      exit 0
+      ;;
+    --restart-observability-stack)
+      groups::restart_observability
+      echo "[+] Observability services restarted."
+      exit 0
+      ;;
     --restart-full-platform)
       groups::restart_full_platform
       echo "[+] Full platform restarted."
@@ -66,10 +82,17 @@ handle_cli_flag() {
       exit 0
       ;;
     --restart-kafka) restart_component kafka::stop kafka::start; exit 0 ;;
+    --restart-schema-registry) restart_component schema_registry::stop schema_registry::start; exit 0 ;;
+    --restart-kafka-connect) restart_component kafka_connect::stop kafka_connect::start; exit 0 ;;
     --restart-airflow) restart_component airflow::stop airflow::start; exit 0 ;;
     --restart-postgres) restart_component postgres::stop postgres::start; exit 0 ;;
     --restart-mongodb) dbui::stop_mongo_express || true; restart_component mongodb::stop mongodb::start; dbui::start_mongo_express; exit 0 ;;
     --restart-redis) dbui::stop_redis_commander || true; restart_component redis::stop redis::start; dbui::start_redis_commander; exit 0 ;;
+    --restart-jupyter) restart_component jupyter::stop jupyter::start; exit 0 ;;
+    --restart-great-expectations) restart_component gx::stop gx::start; exit 0 ;;
+    --restart-lineage) restart_component lineage::stop lineage::start; exit 0 ;;
+    --restart-prometheus) restart_component monitoring::stop_prometheus monitoring::start_prometheus; exit 0 ;;
+    --restart-grafana) restart_component monitoring::stop_grafana monitoring::start_grafana; exit 0 ;;
     --restart-mongo-express) restart_component dbui::stop_mongo_express dbui::start_mongo_express; exit 0 ;;
     --restart-redis-commander) restart_component dbui::stop_redis_commander dbui::start_redis_commander; exit 0 ;;
     --restart-db-uis)
@@ -89,7 +112,7 @@ handle_cli_flag() {
     --restart-superset) restart_component superset::stop superset::start; exit 0 ;;
     --restart-core)
       groups::restart_etl
-      echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+      echo "[+] Spark/Hadoop/Hive/Kafka/Schema Registry/Kafka Connect services restarted."
       exit 0
       ;;
   esac
@@ -110,18 +133,27 @@ echo "1) Restart Spark services"
 echo "2) Restart Hadoop services"
 echo "3) Restart Hive services"
 echo "4) Restart Kafka services"
-echo "5) Restart Airflow webserver & scheduler"
-echo "6) Restart ALL core services (Spark/Hadoop/Hive/Kafka)"
-echo "7) Restart PostgreSQL service"
-echo "8) Restart MongoDB service"
-echo "9) Restart Redis service"
-echo "10) Restart all databases (PostgreSQL/MongoDB/Redis)"
-echo "11) Restart DB UIs (Mongo Express/Redis Commander/pgAdmin)"
-echo "12) Restart MinIO service"
-echo "13) Restart Trino service"
-echo "14) Restart Superset UI"
-echo "15) Restart lakehouse services (MinIO/Trino/Superset + Hive/Hadoop)"
-echo "16) Restart Docker container only"
+echo "5) Restart Schema Registry"
+echo "6) Restart Kafka Connect"
+echo "7) Restart Airflow webserver & scheduler"
+echo "8) Restart ALL core services (Spark/Hadoop/Hive/Kafka/Schema Registry/Kafka Connect)"
+echo "9) Restart PostgreSQL service"
+echo "10) Restart MongoDB service"
+echo "11) Restart Redis service"
+echo "12) Restart all databases (PostgreSQL/MongoDB/Redis)"
+echo "13) Restart DB UIs (Mongo Express/Redis Commander/pgAdmin)"
+echo "14) Restart MinIO service"
+echo "15) Restart Trino service"
+echo "16) Restart Superset UI"
+echo "17) Restart lakehouse services (MinIO/Trino/Superset + Hive/Hadoop)"
+echo "18) Restart JupyterLab"
+echo "19) Restart Great Expectations Data Docs"
+echo "20) Restart Quality & Dev stack"
+echo "21) Restart Marquez"
+echo "22) Restart Prometheus"
+echo "23) Restart Grafana"
+echo "24) Restart Observability stack"
+echo "25) Restart Docker container only"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -144,58 +176,94 @@ case "$opt" in
     echo "[+] Kafka services restarted."
     ;;
   5)
+    restart_component schema_registry::stop schema_registry::start
+    echo "[+] Schema Registry restarted."
+    ;;
+  6)
+    restart_component kafka_connect::stop kafka_connect::start
+    echo "[+] Kafka Connect restarted."
+    ;;
+  7)
     restart_component airflow::stop airflow::start
     echo "[+] Airflow services restarted."
     ;;
-  6)
+  8)
     groups::restart_etl
-    echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+    echo "[+] Spark/Hadoop/Hive/Kafka/Schema Registry/Kafka Connect services restarted."
     ;;
-  7)
+  9)
     restart_component postgres::stop postgres::start
     echo "[+] PostgreSQL service restarted."
     ;;
-  8)
+  10)
     dbui::stop_mongo_express || true
     restart_component mongodb::stop mongodb::start
     dbui::start_mongo_express
     echo "[+] MongoDB service restarted."
     ;;
-  9)
+  11)
     dbui::stop_redis_commander || true
     restart_component redis::stop redis::start
     dbui::start_redis_commander
     echo "[+] Redis service restarted."
     ;;
-  10)
+  12)
     groups::restart_databases
     echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
     ;;
-  11)
+  13)
     dbui::stop || true
     dbui::start
     restart_component pgadmin::stop pgadmin::start
     echo "[+] Database UIs restarted."
     ;;
-  12)
+  14)
     restart_component minio::stop minio::start
     echo "[+] MinIO service restarted."
     ;;
-  13)
+  15)
     hadoop::ensure_running
     hive::start_metastore
     restart_component trino::stop trino::start
     echo "[+] Trino service restarted."
     ;;
-  14)
+  16)
     restart_component superset::stop superset::start
     echo "[+] Superset UI restarted."
     ;;
-  15)
+  17)
     groups::restart_lakehouse
     echo "[+] Lakehouse services restarted."
     ;;
-  16)
+  18)
+    restart_component jupyter::stop jupyter::start
+    echo "[+] JupyterLab restarted."
+    ;;
+  19)
+    restart_component gx::stop gx::start
+    echo "[+] Great Expectations Data Docs restarted."
+    ;;
+  20)
+    groups::restart_quality
+    echo "[+] Quality & dev services restarted."
+    ;;
+  21)
+    restart_component lineage::stop lineage::start
+    echo "[+] Marquez services restarted."
+    ;;
+  22)
+    restart_component monitoring::stop_prometheus monitoring::start_prometheus
+    echo "[+] Prometheus restarted."
+    ;;
+  23)
+    restart_component monitoring::stop_grafana monitoring::start_grafana
+    echo "[+] Grafana restarted."
+    ;;
+  24)
+    groups::restart_observability
+    echo "[+] Observability services restarted."
+    ;;
+  25)
     (
       cd "${APP_REPO_ROOT}"
       docker compose restart "${SERVICE_NAME}"

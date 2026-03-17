@@ -1,3 +1,58 @@
+ARG APICURIO_CONVERTER_VERSION=3.0.8
+ARG DEBEZIUM_VERSION=3.4.0.Final
+ARG OPENLINEAGE_VERSION=1.38.0
+ARG MARQUEZ_VERSION=0.50.0
+ARG PROMETHEUS_VERSION=v3.2.1
+ARG GRAFANA_VERSION=11.5.2
+
+FROM maven:3.9.9-eclipse-temurin-17 AS apicurio-converter-builder
+ARG APICURIO_CONVERTER_VERSION
+WORKDIR /tmp/apicurio-converter
+RUN cat <<EOF > pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>local.datalab</groupId>
+  <artifactId>apicurio-converter-bundle</artifactId>
+  <version>1.0.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>io.apicurio</groupId>
+      <artifactId>apicurio-registry-utils-converter</artifactId>
+      <version>${APICURIO_CONVERTER_VERSION}</version>
+    </dependency>
+  </dependencies>
+</project>
+EOF
+RUN mvn -q -f pom.xml dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=/tmp/apicurio-converter/libs
+
+FROM maven:3.9.9-eclipse-temurin-17 AS openlineage-spark-builder
+ARG OPENLINEAGE_VERSION
+WORKDIR /tmp/openlineage-spark
+RUN cat <<EOF > pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>local.datalab</groupId>
+  <artifactId>openlineage-spark-bundle</artifactId>
+  <version>1.0.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>io.openlineage</groupId>
+      <artifactId>openlineage-spark_2.12</artifactId>
+      <version>${OPENLINEAGE_VERSION}</version>
+    </dependency>
+  </dependencies>
+</project>
+EOF
+RUN mvn -q -f pom.xml dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=/tmp/openlineage-spark/libs
+
+FROM quay.io/debezium/connect:${DEBEZIUM_VERSION} AS debezium-connect
+FROM marquezproject/marquez:${MARQUEZ_VERSION} AS marquez-api
+FROM marquezproject/marquez-web:${MARQUEZ_VERSION} AS marquez-web
+FROM prom/prometheus:${PROMETHEUS_VERSION} AS prometheus-bin
+FROM grafana/grafana:${GRAFANA_VERSION} AS grafana-bin
+
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -12,7 +67,7 @@ ARG AIRFLOW_PYTHON_MAJOR_MINOR=3.10
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
     openjdk-11-jdk openjdk-17-jre-headless \
-    libsnappy1v5 libzstd1 libsasl2-2 \
+    libsnappy1v5 libzstd1 libsasl2-2 libkrb5-dev \
     curl wget git ca-certificates \
     nodejs npm \
     build-essential \
@@ -88,6 +143,25 @@ RUN tar -xzf /tmp/trino.tgz -C /opt \
 
 COPY datalabcontainer/dev/lakehouses/trino/etc/ /opt/trino/etc-template/
 
+ENV APICURIO_REGISTRY_VERSION=3.2.0 \
+    APICURIO_REGISTRY_HOME=/opt/apicurio-registry
+
+COPY --from=apicurio/apicurio-registry:3.2.0 /deployments "${APICURIO_REGISTRY_HOME}"
+COPY --from=eclipse-temurin:21-jre-jammy /opt/java/openjdk /opt/java/openjdk-21
+
+ENV MARQUEZ_HOME=/opt/marquez \
+    MARQUEZ_WEB_HOME=/opt/marquez-web \
+    PROMETHEUS_HOME=/opt/prometheus \
+    GRAFANA_HOME=/opt/grafana \
+    OPENLINEAGE_SPARK_HOME=/opt/openlineage-spark
+
+COPY --from=marquez-api /usr/src/app/ "${MARQUEZ_HOME}/"
+COPY --from=marquez-web /usr/src/app/ "${MARQUEZ_WEB_HOME}/"
+COPY --from=prometheus-bin /bin/prometheus "${PROMETHEUS_HOME}/prometheus"
+COPY --from=prometheus-bin /bin/promtool "${PROMETHEUS_HOME}/promtool"
+COPY --from=grafana-bin /usr/share/grafana/ "${GRAFANA_HOME}/"
+COPY --from=openlineage-spark-builder /tmp/openlineage-spark/libs/ "${OPENLINEAGE_SPARK_HOME}/lib/"
+
 ENV KAFKA_VERSION=3.7.1 \
     KAFKA_SCALA_VERSION=2.13 \
     KAFKA_HOME=/opt/kafka
@@ -98,6 +172,9 @@ RUN echo "${KAFKA_TGZ_SHA512}  /tmp/kafka.tgz" | sha512sum -c - \
     && tar -xzf /tmp/kafka.tgz -C /opt \
     && mv /opt/kafka_${KAFKA_SCALA_VERSION}-${KAFKA_VERSION} ${KAFKA_HOME} \
     && rm /tmp/kafka.tgz
+
+COPY --from=debezium-connect /kafka/connect/debezium-connector-postgres ${KAFKA_HOME}/plugins/debezium-connector-postgres
+COPY --from=apicurio-converter-builder /tmp/apicurio-converter/libs ${KAFKA_HOME}/plugins/apicurio-registry-converter
 
 COPY datalabcontainer/dev/kafka/conf/ /tmp/kafka-conf/
 RUN cp /tmp/kafka-conf/* ${KAFKA_HOME}/config/ \
@@ -145,6 +222,7 @@ RUN pip install \
 
 RUN pip install \
     "dbt-core==1.8.7" "dbt-postgres==1.8.2" "dbt-duckdb==1.8.2" \
+    "dbt-hive==1.8.0" "dbt-spark==1.8.0" \
     "confluent-kafka==2.5.0" \
     "psycopg2-binary==2.9.9" "pymongo==4.8.0" "redis==5.0.8" \
     "pytest" \
@@ -175,6 +253,24 @@ RUN python3 -m venv /opt/superset-venv \
     && /opt/superset-venv/bin/pip install "setuptools<81" \
     && /opt/superset-venv/bin/pip install "apache-superset==4.1.2" "trino" "sqlalchemy-trino" \
     && /opt/superset-venv/bin/pip install "marshmallow==3.21.3" "marshmallow-sqlalchemy==0.28.2"
+
+# JupyterLab in an isolated venv with system packages enabled so notebooks can
+# import the shared Spark/Python tooling already bundled in the image.
+RUN python3 -m venv --system-site-packages /opt/jupyterlab-venv \
+    && /opt/jupyterlab-venv/bin/pip install --upgrade pip setuptools wheel \
+    && /opt/jupyterlab-venv/bin/pip install \
+      "jupyterlab==4.2.7" \
+      "ipykernel==6.29.5" \
+      "pandas==2.2.2" \
+    && /opt/jupyterlab-venv/bin/python -m ipykernel install --prefix=/opt/jupyterlab-venv --name data-lab-python --display-name "Python 3 (Data Lab)"
+
+# Great Expectations in its own venv so validation dependencies do not bleed
+# into the main Airflow runtime.
+RUN python3 -m venv --system-site-packages /opt/gx-venv \
+    && /opt/gx-venv/bin/pip install --upgrade pip setuptools wheel \
+    && /opt/gx-venv/bin/pip install \
+      "great_expectations==1.15.0" \
+      "pandas==2.2.2"
 
 # Database web UIs (image-time install to avoid npm downloads at runtime)
 ENV DBUI_INSTALL_DIR=/opt/dbui \
@@ -230,13 +326,23 @@ COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hive /home/${LAB_APP_USER}/h
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/lakehouse /home/${LAB_APP_USER}/lakehouse
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/java /home/${LAB_APP_USER}/java
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/kafka /home/${LAB_APP_USER}/kafka
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/kafka_connect /home/${LAB_APP_USER}/kafka_connect
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/mongodb /home/${LAB_APP_USER}/mongodb
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/minio /home/${LAB_APP_USER}/minio
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/marquez /home/${LAB_APP_USER}/marquez
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/postgres /home/${LAB_APP_USER}/postgres
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/prometheus /home/${LAB_APP_USER}/prometheus
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/python /home/${LAB_APP_USER}/python
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/redis /home/${LAB_APP_USER}/redis
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/schema_registry /home/${LAB_APP_USER}/schema_registry
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/scala /home/${LAB_APP_USER}/scala
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/spark /home/${LAB_APP_USER}/spark
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/superset /home/${LAB_APP_USER}/superset
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/terraform /home/${LAB_APP_USER}/terraform
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/trino /home/${LAB_APP_USER}/trino
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/grafana /home/${LAB_APP_USER}/grafana
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/great_expectations /home/${LAB_APP_USER}/great_expectations
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/jupyter /home/${LAB_APP_USER}/jupyter
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/runtime /home/${LAB_APP_USER}/runtime
 RUN find /home/${LAB_APP_USER}/app/bin -type f -exec chmod +x {} \; \
     && find /home/${LAB_APP_USER}/app/tech -type f -name "*.sh" -exec chmod +x {} \; \
@@ -252,6 +358,12 @@ export HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native
 export HIVE_HOME=/opt/hive
 export TRINO_HOME=/opt/trino
 export KAFKA_HOME=/opt/kafka
+export APICURIO_REGISTRY_HOME=/opt/apicurio-registry
+export MARQUEZ_HOME=/opt/marquez
+export MARQUEZ_WEB_HOME=/opt/marquez-web
+export PROMETHEUS_HOME=/opt/prometheus
+export GRAFANA_HOME=/opt/grafana
+export OPENLINEAGE_SPARK_HOME=/opt/openlineage-spark
 export MONGO_HOME=/opt/mongodb
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 export LD_LIBRARY_PATH="/opt/hadoop/lib/native:${LD_LIBRARY_PATH}"
@@ -280,7 +392,7 @@ RUN chmod 0644 /etc/profile.d/datalab-path.sh \
 
 RUN cat <<'EOF' >/etc/profile.d/hive-cli.sh
 alias beeline='/opt/hive/bin/beeline'
-# Default hive command connects to local HS2 (HTTP on 10001/cliservice)
+# Default hive command connects to local HS2 (thrift/binary on 10000)
 alias hive='bash /home/datalab/app/bin/hive'
 alias hivehs2='/opt/hive/bin/beeline -u jdbc:hive2://localhost:10000/default -n datalab'
 EOF
@@ -314,5 +426,6 @@ USER ${LAB_APP_USER}
 
 # Keep the container alive by default; still allows overriding with `docker run ... <cmd>`
 # Advertise the common service ports (map them on `docker run` as needed)
-EXPOSE 4040 5432 6379 8080 8083 8084 8088 8090 8091 8181 9002 9004 9005 9083 9090 9092 9870 10000 10001 18080 27017
+EXPOSE 4040 5432 6379 8080 8083 8084 8085 8086 8088 8090 8091 8181 8888 8891 9002 9004 9005 9083 9090 9092 9870 10000 10001 18080 27017
+EXPOSE 3000 3001 5000 9095 9105
 CMD ["sleep", "infinity"]

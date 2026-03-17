@@ -8,6 +8,7 @@ This environment is designed for teaching, demos, and local experimentation.
   - `/datalabcontainer/dev/base` -> build definition for main image
   - `/datalabcontainer/dev/<stack>` -> reference Dockerfiles per tech
   - `/stacks/<stack>` -> code + README per stack
+  - `/datalabcontainer/app/tech/<stack>` -> service-management modules for the monolithic runtime
 - Dual users:
   - `datalab` (default)
   - `root` (system)
@@ -16,6 +17,7 @@ This environment is designed for teaching, demos, and local experimentation.
 Use this doc plus each stack's README to explain configuration and usage.
 
 For future platform expansion into machine learning and AI, see `docs/ML-AI-FUTURE-ROADMAP.md`.
+For future data engineering platform expansion, see `docs/DATA-ENGINEERING-EXPANSION-ROADMAP.md`.
 For deployment strategy choices (single-container vs multi-container), see `docs/CONTAINER-TOPOLOGY-GUIDE.md`.
 
 ## Environment Setup

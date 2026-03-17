@@ -43,8 +43,8 @@ case "${command}" in
     ;;
   status)
     if hive::hs2_running; then
-      if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]]; then
-        echo "[+] HiveServer2 running (PID $(cat "${HIVE_HS2_HTTP_PID_FILE}"))"
+      if [[ -f "${HIVE_HS2_PID_FILE}" ]]; then
+        echo "[+] HiveServer2 running (PID $(cat "${HIVE_HS2_PID_FILE}"))"
       else
         echo "[+] HiveServer2 running."
       fi

@@ -5,9 +5,7 @@ HIVE_BIN=${HIVE_BIN:-/opt/hive/bin/hive}
 HADOOP_BIN=${HADOOP_BIN:-/opt/hadoop/bin/hdfs}
 
 HS2_HOST="${HIVE_CLI_HOST:-localhost}"
-HS2_PORT="${HIVE_CLI_PORT:-10001}"
-HS2_HTTP_PATH="${HIVE_CLI_HTTP_PATH:-cliservice}"
-HS2_AUTH="${HIVE_CLI_AUTH:-noSasl}"
+HS2_PORT="${HIVE_CLI_PORT:-10000}"
 HS2_DB="${HIVE_CLI_DB:-default}"
 HS2_USER="${HIVE_CLI_USER:-datalab}"
 HS2_PASS="${HIVE_CLI_PASS:-}"

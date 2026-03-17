@@ -104,6 +104,12 @@ spark::ensure_dirs() {
   mkdir -p "${SPARK_PID_DIR}" "${SPARK_LOG_DIR}" "${SPARK_EVENTS_DIR}" "${SPARK_WAREHOUSE_DIR}" "${SPARK_WORKER_DIR}"
 }
 
+spark::is_running() {
+  pgrep -f 'org\.apache\.spark\.deploy\.master\.Master' >/dev/null 2>&1 \
+    && pgrep -f 'org\.apache\.spark\.deploy\.worker\.Worker' >/dev/null 2>&1 \
+    && pgrep -f 'org\.apache\.spark\.deploy\.history\.HistoryServer' >/dev/null 2>&1
+}
+
 spark::master_url() {
   printf 'spark://%s:%s\n' "${SPARK_MASTER_HOST}" "${SPARK_MASTER_PORT}"
 }
@@ -141,6 +147,14 @@ spark::start() {
   spark::start_worker
   spark::start_history_server
   echo "Spark master UI: $(common::ui_url "${SPARK_MASTER_WEBUI_PORT}" "/")  |  History UI: $(common::ui_url 18080 "/")"
+}
+
+spark::ensure_running() {
+  if spark::is_running; then
+    echo "[*] Spark already running."
+    return 0
+  fi
+  spark::start
 }
 
 spark::patterns_running() {

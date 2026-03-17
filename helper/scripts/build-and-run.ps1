@@ -98,7 +98,8 @@ if (-not $SkipBuild) {
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084", "8085:8085", "8086:8086",
+  "8888:8888", "8891:8891", "5000:5000", "3000:3000", "9095:9095", "3001:3001",
   "5432:5432", "27017:27017", "6379:6379"
 )
 if ($IncludeLakehousePorts) {
@@ -147,10 +148,20 @@ $defaultVolumes = @(
   "$stacksDir\hive:/home/datalab/hive",
   "$stacksDir\hadoop:/home/datalab/hadoop",
   "$stacksDir\kafka:/home/datalab/kafka",
+  "$stacksDir\kafka_connect:/home/datalab/kafka_connect",
   "$stacksDir\mongodb:/home/datalab/mongodb",
+  "$stacksDir\minio:/home/datalab/minio",
+  "$stacksDir\marquez:/home/datalab/marquez",
   "$stacksDir\postgres:/home/datalab/postgres",
+  "$stacksDir\prometheus:/home/datalab/prometheus",
   "$stacksDir\redis:/home/datalab/redis",
   "$stacksDir\lakehouse:/home/datalab/lakehouse",
+  "$stacksDir\schema_registry:/home/datalab/schema_registry",
+  "$stacksDir\grafana:/home/datalab/grafana",
+  "$stacksDir\great_expectations:/home/datalab/great_expectations",
+  "$stacksDir\jupyter:/home/datalab/jupyter",
+  "$stacksDir\superset:/home/datalab/superset",
+  "$stacksDir\trino:/home/datalab/trino",
   "$datalabDir\runtime:/home/datalab/runtime"
 )
 
@@ -174,7 +185,7 @@ foreach ($v in $ExtraVolumes) { $volumeArgs += @("-v", $v) }
 $dockerArgs = @(
   "run", "-d", "--name", $Name,
   "--user", "root",
-  "--workdir", "/home/datalab",
+  "--workdir", "/",
   "--label", "com.docker.compose.project=",
   "--label", "com.docker.compose.service=",
   "--label", "com.docker.compose.oneoff=",
@@ -216,6 +227,39 @@ mkdir -p \
   /home/datalab/runtime/scala
 chown -R datalab:datalab /home/datalab/runtime 2>/dev/null || true
 chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
+
+for p in \
+  /home/datalab/app \
+  /home/datalab/airflow \
+  /home/datalab/dbt \
+  /home/datalab/lakehouse \
+  /home/datalab/hadoop \
+  /home/datalab/hive \
+  /home/datalab/java \
+  /home/datalab/kafka \
+  /home/datalab/kafka_connect \
+  /home/datalab/mongodb \
+  /home/datalab/minio \
+  /home/datalab/marquez \
+  /home/datalab/postgres \
+  /home/datalab/prometheus \
+  /home/datalab/python \
+  /home/datalab/redis \
+  /home/datalab/schema_registry \
+  /home/datalab/runtime \
+  /home/datalab/scala \
+  /home/datalab/spark \
+  /home/datalab/terraform \
+  /home/datalab/grafana \
+  /home/datalab/great_expectations \
+  /home/datalab/jupyter \
+  /home/datalab/superset \
+  /home/datalab/trino
+do
+  [ -e "$p" ] || continue
+  chown -R datalab:datalab "$p" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
+done
 "@
 docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null
 

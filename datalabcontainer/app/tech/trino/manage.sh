@@ -119,6 +119,21 @@ trino::wait_for_port() {
   return 1
 }
 
+trino::query_ready() {
+  trino::cli_exec "SELECT 1" >/dev/null 2>&1
+}
+
+trino::wait_ready() {
+  local deadline=$((SECONDS + 120))
+  while [[ ${SECONDS} -lt ${deadline} ]]; do
+    if trino::query_ready; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 trino::resolve_lakehouse_root() {
   common::resolve_lakehouse_root
 }
@@ -166,8 +181,12 @@ trino::start() {
   fi
 
   if trino::pid_alive && trino::port_open localhost "${TRINO_PORT}"; then
-    echo "[*] Trino already running (PID $(cat "${TRINO_PID_FILE}"))."
-    return 0
+    if trino::wait_ready; then
+      echo "[*] Trino already running (PID $(cat "${TRINO_PID_FILE}"))."
+      return 0
+    fi
+    echo "[!] Trino is listening on ${TRINO_PORT} but did not become query-ready." >&2
+    return 1
   fi
 
   pkill -f "io.trino.server.TrinoServer" >/dev/null 2>&1 || true
@@ -178,6 +197,10 @@ trino::start() {
   echo $! > "${TRINO_PID_FILE}"
   if ! trino::wait_for_port localhost "${TRINO_PORT}"; then
     echo "[!] Trino failed to open port ${TRINO_PORT}; see ${TRINO_LOG_FILE}" >&2
+    return 1
+  fi
+  if ! trino::wait_ready; then
+    echo "[!] Trino opened port ${TRINO_PORT} but did not become query-ready; see ${TRINO_LOG_FILE}" >&2
     return 1
   fi
   echo "[+] Trino started (PID $(cat "${TRINO_PID_FILE}"))."

@@ -52,12 +52,20 @@ These profiles are practical guidance for this repo.
 3. Disk: 100 GB free SSD
 4. Notes: suitable for running most services together with better stability.
 
+### Future target (data engineering expansion on the same single-container topology)
+
+1. CPU: 12 vCPU
+2. RAM: 32 GB
+3. Disk: 150 GB free SSD
+4. Notes: good target for schema registry, Kafka Connect/CDC, data quality, notebooks, lineage, and monitoring while preserving the monolithic runtime model.
+
 ### Future target (ML/AI expansion profile)
 
-1. CPU: 12+ vCPU
+1. CPU: 12 to 16+ vCPU
 2. RAM: 32 to 64 GB
 3. Disk: 200 GB free SSD
 4. Optional GPU: NVIDIA GPU with 12+ GB VRAM for local LLM serving.
+5. Notes: AI/ML services should stay optional and layered on top of the current data engineering stack.
 
 ### Multi-container guidance
 
@@ -73,6 +81,16 @@ Keep both modes:
 2. `scale/prod-like` profile: multi-container (future addition)
 
 This keeps current simplicity while allowing a clean path for heavier workloads.
+
+## Dynamic Port Strategy
+
+Current and future services should follow the same host-port model already used by copied containers.
+
+1. Keep a stable port inside the container for each service.
+2. Allow host ports to be remapped dynamically.
+3. Resolve outside-host URLs from `DATALAB_HOST_PORT_MAP`.
+4. Surface final host endpoints through `ui_services` and `datalab_app`.
+5. Treat hardcoded host-side ports as invalid for future roadmap work.
 
 ## Migration Triggers
 
@@ -99,7 +117,8 @@ Start with this minimal separation:
 
 1. Current single-container remains valid for ETL, lakehouse demos, and development.
 2. Airflow parallel task state and Spark real execution capacity are separate limits.
-3. This document is planning guidance only and does not change runtime behavior.
+3. Dynamic port compatibility is part of the required behavior for future services.
+4. This document is planning guidance only and does not change runtime behavior.
 
 ## References
 

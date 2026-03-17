@@ -1,12 +1,14 @@
 # Data Lab Non-Stackable Container (Single `docker run`)
 
 Repository layout note:
+
 - Container assets live in `datalabcontainer/`
 - Stack examples live in `stacks/`
 
 Quick commands to start Data Lab without Docker Compose stack labels. This runs a single container named `datalab`, maps the project folders into `/home/datalab`, and publishes the common service ports.
 
 ## Linux/macOS
+
 ```bash
 # 1) build or pull the image
 docker build -t data-lab:latest .
@@ -17,6 +19,7 @@ NAME=datalab IMAGE=data-lab:latest ./helper/scripts/run-standalone.sh
 ```
 
 ## Windows PowerShell
+
 ```powershell
 # 1) build or pull the image
 docker build -t data-lab:latest .
@@ -36,6 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\ui-services.ps1 -Name 
 ```
 
 ## Notes
+
 - Default ports: 8080 (Airflow), 4040/9090/18080 (Spark), 9092 (Kafka), 9870/8088 (Hadoop), 10000/10001 (Hive), 9002 (Kafdrop), 8083 (Mongo Express), 8084 (Redis Commander), 8181 (pgAdmin), 5432 (PostgreSQL), 27017 (MongoDB), 6379 (Redis).
 - Default mounts map the repo folders into `/home/datalab/...` plus `runtime` for state. Add more with `EXTRA_VOLUMES` (bash) or `-ExtraVolumes` (PowerShell).
 - Enter the container: `docker exec -it -w / datalab bash` then `su - datalab` for the dev user.
@@ -50,6 +54,7 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\ui-services.ps1 -Name 
 - Script source of truth: `.\helper\scripts\*`.
 
 ## Build/Run Optimization
+
 - Reuse local layers when iterating:
   - `docker build -t data-lab:latest -f datalabcontainer/dev/base/Dockerfile .`
 - Use immutable tags for CI/push:
@@ -121,6 +126,7 @@ Default pgAdmin login from helper script:
 - Password: `root`
 
 ## Manual Docker Run (Full Port Mapping)
+
 Use this if you want to create the container directly without helper scripts:
 
 ```bash
@@ -154,5 +160,3 @@ docker run -d --name datalab `
   shreyash42/data-lab:latest `
   sleep infinity
 ```
-
-

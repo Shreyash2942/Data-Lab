@@ -6,3 +6,23 @@ data_lab:
       path: /home/datalab/runtime/dbt/data_lab.duckdb
       schema: main
       threads: 1
+    hive:
+      type: hive
+      host: localhost
+      port: 10000
+      schema: default
+      threads: 1
+    spark_session:
+      type: spark
+      method: session
+      host: localhost
+      schema: default
+      threads: 1
+      server_side_parameters:
+        spark.master: spark://localhost:7077
+        spark.sql.catalogImplementation: hive
+        spark.hadoop.fs.defaultFS: hdfs://localhost:9000
+        spark.sql.warehouse.dir: hdfs://localhost:9000/hive/warehouse
+        spark.hadoop.hive.metastore.uris: thrift://localhost:9083
+        spark.sql.hive.metastore.version: 2.3.9
+        spark.sql.hive.metastore.jars: builtin

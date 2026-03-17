@@ -20,10 +20,14 @@ KAFKA_ZK_LOG="${KAFKA_LOG_DIR}/zookeeper.log"
 KAFKA_BROKER_LOG="${KAFKA_LOG_DIR}/kafka.log"
 KAFKA_BROKER_CONFIG="${KAFKA_BASE}/server.properties"
 KAFKA_JAVA_NET_OPTS="-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false"
+: "${KAFKA_ZOOKEEPER_HEAP_OPTS:=-Xms256M -Xmx256M}"
+: "${KAFKA_BROKER_HEAP_OPTS:=-Xms384M -Xmx384M}"
 : "${KAFKA_ZK_PORT:=2181}"
 : "${KAFKA_BROKER_PORT:=9092}"
 KAFKA_ZK_PORT="$(strip_cr "${KAFKA_ZK_PORT}")"
 KAFKA_BROKER_PORT="$(strip_cr "${KAFKA_BROKER_PORT}")"
+KAFKA_ZOOKEEPER_HEAP_OPTS="$(strip_cr "${KAFKA_ZOOKEEPER_HEAP_OPTS}")"
+KAFKA_BROKER_HEAP_OPTS="$(strip_cr "${KAFKA_BROKER_HEAP_OPTS}")"
 : "${KAFKA_BROKER_ID:=}"
 
 kafka::broker_id() {
@@ -184,7 +188,7 @@ kafka::start_zookeeper() {
     fi
   fi
   echo "[*] Starting Zookeeper..."
-  LOG_DIR="${KAFKA_LOG_DIR}" ZOO_LOG_DIR="${KAFKA_LOG_DIR}" KAFKA_OPTS="${KAFKA_JAVA_NET_OPTS}" \
+  LOG_DIR="${KAFKA_LOG_DIR}" ZOO_LOG_DIR="${KAFKA_LOG_DIR}" KAFKA_OPTS="${KAFKA_JAVA_NET_OPTS}" KAFKA_HEAP_OPTS="${KAFKA_ZOOKEEPER_HEAP_OPTS}" \
   nohup "${KAFKA_HOME}/bin/zookeeper-server-start.sh" "${KAFKA_HOME}/config/zookeeper.properties" \
     > "${KAFKA_ZK_LOG}" 2>&1 &
   echo $! > "${KAFKA_ZK_PID_FILE}"
@@ -201,8 +205,6 @@ kafka::start_zookeeper() {
 }
 
 kafka::start_broker() {
-  # Clear any stale broker znode before the first start to avoid KeeperErrorCode=NodeExists
-  kafka::clear_stale_znode
   kafka::cleanup_stale_pids
   if kafka::pid_alive "${KAFKA_BROKER_PID_FILE}" && kafka::port_open localhost "${KAFKA_BROKER_PORT}" && kafka::broker_ready; then
     echo "[*] Kafka already running (PID $(cat "${KAFKA_BROKER_PID_FILE}"))."
@@ -219,13 +221,15 @@ kafka::start_broker() {
       return 1
     fi
   fi
+  # Clear any stale broker znode only when we are about to start a fresh broker.
+  kafka::clear_stale_znode
   echo "[*] Starting Kafka broker..."
   if ! kafka::render_broker_config; then
     return 1
   fi
   pkill -f "kafka.Kafka" 2>/dev/null || true
   sleep 1
-  LOG_DIR="${KAFKA_LOG_DIR}" KAFKA_OPTS="${KAFKA_JAVA_NET_OPTS}" \
+  LOG_DIR="${KAFKA_LOG_DIR}" KAFKA_OPTS="${KAFKA_JAVA_NET_OPTS}" KAFKA_HEAP_OPTS="${KAFKA_BROKER_HEAP_OPTS}" \
   nohup "${KAFKA_HOME}/bin/kafka-server-start.sh" "${KAFKA_BROKER_CONFIG}" \
     > "${KAFKA_BROKER_LOG}" 2>&1 &
   echo $! > "${KAFKA_BROKER_PID_FILE}"
@@ -240,7 +244,7 @@ kafka::start_broker() {
       if ! kafka::render_broker_config; then
         return 1
       fi
-      LOG_DIR="${KAFKA_LOG_DIR}" KAFKA_OPTS="${KAFKA_JAVA_NET_OPTS}" \
+      LOG_DIR="${KAFKA_LOG_DIR}" KAFKA_OPTS="${KAFKA_JAVA_NET_OPTS}" KAFKA_HEAP_OPTS="${KAFKA_BROKER_HEAP_OPTS}" \
       nohup "${KAFKA_HOME}/bin/kafka-server-start.sh" "${KAFKA_BROKER_CONFIG}" \
         > "${KAFKA_BROKER_LOG}" 2>&1 &
       echo $! > "${KAFKA_BROKER_PID_FILE}"

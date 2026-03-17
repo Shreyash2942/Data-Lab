@@ -21,10 +21,20 @@ services:
       - ../stacks/hive:/home/datalab/hive
       - ../stacks/hadoop:/home/datalab/hadoop
       - ../stacks/kafka:/home/datalab/kafka
+      - ../stacks/kafka_connect:/home/datalab/kafka_connect
       - ../stacks/mongodb:/home/datalab/mongodb
+      - ../stacks/minio:/home/datalab/minio
+      - ../stacks/marquez:/home/datalab/marquez
       - ../stacks/postgres:/home/datalab/postgres
+      - ../stacks/prometheus:/home/datalab/prometheus
       - ../stacks/redis:/home/datalab/redis
+      - ../stacks/schema_registry:/home/datalab/schema_registry
       - ../stacks/lakehouse:/home/datalab/lakehouse
+      - ../stacks/grafana:/home/datalab/grafana
+      - ../stacks/great_expectations:/home/datalab/great_expectations
+      - ../stacks/jupyter:/home/datalab/jupyter
+      - ../stacks/superset:/home/datalab/superset
+      - ../stacks/trino:/home/datalab/trino
       - ./runtime:/home/datalab/runtime
     ports:
       - target: 8080    # Airflow or other UI
@@ -91,6 +101,38 @@ services:
         published: 8084
         protocol: tcp
         name: redis-ui
+      - target: 8085    # Schema Registry API
+        published: 8085
+        protocol: tcp
+        name: schema-registry
+      - target: 8086    # Kafka Connect API
+        published: 8086
+        protocol: tcp
+        name: kafka-connect
+      - target: 8888    # JupyterLab
+        published: 8888
+        protocol: tcp
+        name: jupyterlab
+      - target: 8891    # Great Expectations Data Docs
+        published: 8891
+        protocol: tcp
+        name: gx-data-docs
+      - target: 5000    # Marquez API
+        published: 5000
+        protocol: tcp
+        name: marquez-api
+      - target: 3000    # Marquez UI
+        published: 3000
+        protocol: tcp
+        name: marquez-ui
+      - target: 9095    # Prometheus UI
+        published: 9095
+        protocol: tcp
+        name: prometheus
+      - target: 3001    # Grafana UI
+        published: 3001
+        protocol: tcp
+        name: grafana
       - target: 8091    # Trino HTTP
         published: 8091
         protocol: tcp

@@ -11,8 +11,18 @@ Includes:
 - Spark 3.5.1 (Hadoop 3)
 - Hadoop 3.3.6
 - Hive 2.3.9 (Spark 3.5 compatible)
+- Kafka Connect (bundled with Kafka 3.7.1)
+- Debezium PostgreSQL connector (bundled into Kafka Connect plugins)
+- Apicurio Registry 3.2.0
+- Apicurio Kafka Connect converter bundle for registry-backed CDC demos
+- OpenLineage Spark integration 1.38.0
+- Marquez 0.50.0
+- Prometheus 3.2.1
+- Grafana 11.5.2
+- Great Expectations 1.15.0 (isolated venv)
+- JupyterLab 4.2.7 (isolated venv)
 - Airflow
-- dbt Core + Postgres adapter
+- dbt Core + DuckDB/Postgres/Hive/Spark adapters
 - Terraform (optional)
 - Dual users: `datalab` (default) and `root` (admin)
 
@@ -22,7 +32,7 @@ Lakehouse tooling baked in:
 - Apache Iceberg 1.6.1 Spark runtime
 - Delta Lake 3.2.0 (Scala + Python packages)
 
-> All JVM-based components (Spark, Hadoop, Hive, Kafka, Airflow) run on this single Java 11 runtime to avoid cross-version conflicts.
+> The primary data stack (Spark, Hadoop, Hive, Kafka, Airflow) runs on Java 11. Service-specific runtimes are bundled where required: Marquez uses Java 17 and Apicurio Registry uses Java 21.
 
 ## Build Optimization Notes
 - Build context is trimmed via root `.dockerignore` to avoid large runtime/doc/helper payloads.

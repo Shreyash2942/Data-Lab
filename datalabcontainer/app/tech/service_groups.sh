@@ -8,9 +8,11 @@ set -euo pipefail
 groups::start_etl() {
   airflow::start
   hadoop::ensure_running
-  spark::start
+  spark::ensure_running
   hive::prepare_cli
   kafka::start
+  schema_registry::start
+  kafka_connect::start
 }
 
 groups::start_databases() {
@@ -29,13 +31,27 @@ groups::start_lakehouse() {
   superset::start
 }
 
+groups::start_quality() {
+  gx::start
+  jupyter::start
+}
+
+groups::start_observability() {
+  lineage::start
+  monitoring::start
+}
+
 groups::start_full_platform() {
   groups::start_etl
   groups::start_databases
   groups::start_lakehouse
+  groups::start_quality
+  groups::start_observability
 }
 
 groups::stop_etl() {
+  kafka_connect::stop || true
+  schema_registry::stop || true
   airflow::stop || true
   kafka::stop || true
   hive::stop || true
@@ -57,7 +73,19 @@ groups::stop_lakehouse() {
   minio::stop || true
 }
 
+groups::stop_quality() {
+  jupyter::stop || true
+  gx::stop || true
+}
+
+groups::stop_observability() {
+  monitoring::stop || true
+  lineage::stop || true
+}
+
 groups::stop_full_platform() {
+  groups::stop_observability
+  groups::stop_quality
   groups::stop_lakehouse
   groups::stop_databases
   groups::stop_etl
@@ -72,6 +100,8 @@ groups::_restart_component() {
 
 groups::restart_etl() {
   groups::_restart_component airflow::stop airflow::start
+  kafka_connect::stop || true
+  schema_registry::stop || true
   kafka::stop || true
   hive::stop || true
   spark::stop || true
@@ -80,6 +110,8 @@ groups::restart_etl() {
   spark::start
   hive::prepare_cli
   kafka::start
+  schema_registry::start
+  kafka_connect::start
 }
 
 groups::restart_databases() {
@@ -99,8 +131,20 @@ groups::restart_lakehouse() {
   groups::_restart_component superset::stop superset::start
 }
 
+groups::restart_quality() {
+  groups::_restart_component gx::stop gx::start
+  groups::_restart_component jupyter::stop jupyter::start
+}
+
+groups::restart_observability() {
+  groups::_restart_component lineage::stop lineage::start
+  groups::_restart_component monitoring::stop monitoring::start
+}
+
 groups::restart_full_platform() {
   groups::restart_etl
   groups::restart_databases
   groups::restart_lakehouse
+  groups::restart_quality
+  groups::restart_observability
 }

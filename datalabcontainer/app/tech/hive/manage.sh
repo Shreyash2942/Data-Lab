@@ -6,10 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 source "${SCRIPT_DIR}/../hadoop/manage.sh"
 
-HIVE_HS2_LOG_FILE="${HIVE_LOG_DIR}/hiveserver2-http.log"
-# Hive writes both http and legacy PID files; manage both to avoid stale blocks.
+HIVE_HS2_LOG_FILE="${HIVE_LOG_DIR}/hiveserver2.log"
+# Keep backward-compatible cleanup for older HTTP-era PID files.
+HIVE_HS2_PID_FILE="${HIVE_PID_DIR}/hiveserver2.pid"
 HIVE_HS2_HTTP_PID_FILE="${HIVE_PID_DIR}/hiveserver2-http.pid"
-HIVE_HS2_LEGACY_PID_FILE="${HIVE_PID_DIR}/hiveserver2.pid"
 HIVE_METASTORE_PORT="${HIVE_METASTORE_PORT:-9083}"
 HIVE_METASTORE_LOG_FILE="${HIVE_LOG_DIR}/metastore.log"
 HIVE_METASTORE_PID_FILE="${HIVE_PID_DIR}/metastore.pid"
@@ -112,18 +112,18 @@ PY
 
 hive::cleanup_stale_hs2() {
   local pidfile
-  for pidfile in "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"; do
+  for pidfile in "${HIVE_HS2_PID_FILE}" "${HIVE_HS2_HTTP_PID_FILE}"; do
     if [[ -f "${pidfile}" ]] && ! kill -0 "$(cat "${pidfile}")" 2>/dev/null; then
       rm -f "${pidfile}"
     fi
   done
 
   if pgrep -f "hive.*hiveserver2" >/dev/null 2>&1; then
-    if ! hive::port_open localhost "${HIVE_SERVER2_HTTP_PORT}"; then
+    if ! hive::port_open localhost "${HIVE_SERVER2_THRIFT_PORT}"; then
       echo "[*] Removing stale HiveServer2 processes..."
       pkill -f "hive.*hiveserver2" || true
       sleep 1
-      rm -f "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"
+      rm -f "${HIVE_HS2_PID_FILE}" "${HIVE_HS2_HTTP_PID_FILE}"
     fi
   fi
 }
@@ -189,10 +189,10 @@ hive::start_metastore() {
 }
 
 hive::hs2_running() {
-  if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_HTTP_PID_FILE}")" 2>/dev/null; then
+  if [[ -f "${HIVE_HS2_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_PID_FILE}")" 2>/dev/null; then
     return 0
   fi
-  [[ -f "${HIVE_HS2_LEGACY_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_LEGACY_PID_FILE}")" 2>/dev/null
+  [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]] && kill -0 "$(cat "${HIVE_HS2_HTTP_PID_FILE}")" 2>/dev/null
 }
 
 hive::start_hs2() {
@@ -202,21 +202,21 @@ hive::start_hs2() {
   fi
 
   if hive::hs2_running; then
-    if hive::port_open localhost "${HIVE_SERVER2_HTTP_PORT}"; then
+    if hive::port_open localhost "${HIVE_SERVER2_THRIFT_PORT}"; then
       local running_pid="<unknown>"
-      if [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]]; then
+      if [[ -f "${HIVE_HS2_PID_FILE}" ]]; then
+        running_pid="$(cat "${HIVE_HS2_PID_FILE}")"
+      elif [[ -f "${HIVE_HS2_HTTP_PID_FILE}" ]]; then
         running_pid="$(cat "${HIVE_HS2_HTTP_PID_FILE}")"
-      elif [[ -f "${HIVE_HS2_LEGACY_PID_FILE}" ]]; then
-        running_pid="$(cat "${HIVE_HS2_LEGACY_PID_FILE}")"
       fi
       echo "[*] HiveServer2 already running (PID ${running_pid})."
       return
     fi
-    echo "[*] HiveServer2 PID detected but port ${HIVE_SERVER2_HTTP_PORT} is closed; restarting..."
+    echo "[*] HiveServer2 PID detected but port ${HIVE_SERVER2_THRIFT_PORT} is closed; restarting..."
     hive::stop_hs2 || true
   fi
 
-  echo "[*] Starting HiveServer2 (HTTP) on 0.0.0.0:${HIVE_SERVER2_HTTP_PORT}/${HIVE_SERVER2_HTTP_PATH}..."
+  echo "[*] Starting HiveServer2 (binary) on 0.0.0.0:${HIVE_SERVER2_THRIFT_PORT}..."
   HIVE_CONF_DIR="${HIVE_HOME}/conf" \
   HADOOP_CONF_DIR="${HADOOP_HOME}/etc/hadoop" \
   HIVE_AUX_JARS_PATH="${HIVE_AUX_JARS_PATH}" \
@@ -224,25 +224,21 @@ hive::start_hs2() {
   HIVESERVER2_PID_DIR="${HIVE_PID_DIR}" \
   JAVA_HOME=${JAVA_HOME} \
     nohup "${HIVE_HOME}/bin/hiveserver2" \
-      --hiveconf hive.server2.authentication=NOSASL \
-      --hiveconf hive.server2.transport.mode=http \
-      --hiveconf hive.server2.thrift.http.port="${HIVE_SERVER2_HTTP_PORT}" \
-      --hiveconf hive.server2.thrift.http.path="${HIVE_SERVER2_HTTP_PATH}" \
+      --hiveconf hive.server2.authentication=NONE \
+      --hiveconf hive.server2.transport.mode=binary \
+      --hiveconf hive.server2.thrift.port="${HIVE_SERVER2_THRIFT_PORT}" \
       --hiveconf hive.notification.event.poll.interval=0 \
       --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
       --hiveconf hive.aux.jars.path="${HIVE_AUX_JARS_PATH}" \
       > "${HIVE_HS2_LOG_FILE}" 2>&1 &
-  echo $! > "${HIVE_HS2_HTTP_PID_FILE}"
-  if ! HS2_WAIT_SERVICE="HiveServer2" hive::wait_for_port localhost "${HIVE_SERVER2_HTTP_PORT}" "HiveServer2"; then
-    echo "[!] HiveServer2 failed to open port ${HIVE_SERVER2_HTTP_PORT}. Recent log lines:" >&2
+  echo $! > "${HIVE_HS2_PID_FILE}"
+  if ! HS2_WAIT_SERVICE="HiveServer2" hive::wait_for_port localhost "${HIVE_SERVER2_THRIFT_PORT}" "HiveServer2"; then
+    echo "[!] HiveServer2 failed to open port ${HIVE_SERVER2_THRIFT_PORT}. Recent log lines:" >&2
     tail -n 40 "${HIVE_HS2_LOG_FILE}" >&2 || true
     return 1
   fi
   echo "[+] HiveServer2 listening (log: ${HIVE_HS2_LOG_FILE})."
-  # Remove stale legacy PID file if Hive created it (Hive writes both names on some versions).
-  if [[ -f "${HIVE_HS2_LEGACY_PID_FILE}" ]] && ! kill -0 "$(cat "${HIVE_HS2_LEGACY_PID_FILE}")" 2>/dev/null; then
-    rm -f "${HIVE_HS2_LEGACY_PID_FILE}"
-  fi
+  rm -f "${HIVE_HS2_HTTP_PID_FILE}"
 }
 
 hive::stop_hs2() {
@@ -251,9 +247,8 @@ hive::stop_hs2() {
     return
   fi
   echo "[*] Stopping HiveServer2..."
-  # Prefer the HTTP PID file, fall back to legacy if needed.
   local pid=""; local pidfile=""
-  for pidfile in "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"; do
+  for pidfile in "${HIVE_HS2_PID_FILE}" "${HIVE_HS2_HTTP_PID_FILE}"; do
     if [[ -f "${pidfile}" ]]; then
       pid="$(cat "${pidfile}")"
       break
@@ -262,7 +257,8 @@ hive::stop_hs2() {
   if [[ -n "${pid}" ]]; then
     kill "${pid}" 2>/dev/null || true
   fi
-  rm -f "${HIVE_HS2_HTTP_PID_FILE}" "${HIVE_HS2_LEGACY_PID_FILE}"
+  pkill -f "org.apache.hive.service.server.HiveServer2" 2>/dev/null || true
+  rm -f "${HIVE_HS2_PID_FILE}" "${HIVE_HS2_HTTP_PID_FILE}"
 }
 
 hive::stop_metastore() {
@@ -307,7 +303,7 @@ hive::prepare_cli() {
 Run either helper:
   hive        # classic Hive CLI prompt
   hivecli     # classic Hive CLI prompt
-  hivebeeline # Beeline wrapper (HS2 HTTP)
+  hivebeeline # Beeline wrapper (HS2 binary)
 
 Spark SQL entrypoint:
   spark-sql -e 'SHOW DATABASES;'
