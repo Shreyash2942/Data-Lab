@@ -471,6 +471,9 @@ trino::setup_simple_demo() {
   TRINO_CATALOG="hive" trino::cli_exec "SHOW TABLES FROM demo_iceberg"
   TRINO_CATALOG="hive" trino::cli_exec "SHOW TABLES FROM demo_delta"
   TRINO_CATALOG="hive" trino::cli_exec "SHOW TABLES FROM demo_hudi"
+  if declare -F superset::sync_lakehouse_demo_datasets >/dev/null 2>&1; then
+    superset::sync_lakehouse_demo_datasets || true
+  fi
   echo "[+] Lakehouse SQL assets setup completed."
 }
 

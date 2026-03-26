@@ -34,6 +34,7 @@ SUPERSET_BIN="${SUPERSET_VENV}/bin/superset"
 : "${SUPERSET_TRINO_NEUTRAL_CATALOG:=hive}"
 : "${SUPERSET_TRINO_NEUTRAL_SCHEMA:=default}"
 : "${SUPERSET_TRINO_GUARD_LATEST_PARTITION:=True}"
+: "${SUPERSET_SYNC_LAKEHOUSE_DEMO_DATASETS:=True}"
 
 superset::ensure_dirs() {
   mkdir -p "${SUPERSET_BASE}" "${SUPERSET_HOME_DIR}" "${SUPERSET_LOG_DIR}" "${SUPERSET_PID_DIR}" "${SUPERSET_DB_DIR}"
@@ -219,10 +220,112 @@ conn.close()
 PY
 }
 
+superset::ensure_metadata_ready() {
+  superset::ensure_dirs
+  superset::write_config
+  superset::bootstrap_metadata
+  superset::ensure_trino_database
+}
+
+superset::run_python() {
+  env \
+    SUPERSET_HOME="${SUPERSET_HOME_DIR}" \
+    SUPERSET_CONFIG_PATH="${SUPERSET_CONFIG_FILE}" \
+    SUPERSET_SECRET_KEY="${SUPERSET_SECRET_KEY}" \
+    "${SUPERSET_VENV}/bin/python" -
+}
+
+superset::sync_lakehouse_demo_datasets_impl() {
+  if [[ "${SUPERSET_SYNC_LAKEHOUSE_DEMO_DATASETS,,}" != "true" ]]; then
+    return 0
+  fi
+  if [[ ! -x "${SUPERSET_VENV}/bin/python" ]]; then
+    echo "[*] Superset Python runtime not found; skipping lakehouse dataset sync."
+    return 0
+  fi
+
+  echo "[*] Syncing Superset lakehouse demo datasets..."
+  superset::run_python <<PY
+from superset.app import create_app
+
+app = create_app()
+app.app_context().push()
+
+from superset.connectors.sqla.models import SqlaTable
+from superset.extensions import db
+from superset.models.core import Database
+from superset.sql_parse import Table
+
+database_name = "${SUPERSET_TRINO_DB_NAME}"
+targets = [
+    ("demo_iceberg", "iceberg_table"),
+    ("demo_delta", "table_delta"),
+    ("demo_hudi", "order_hudi"),
+]
+
+database = db.session.query(Database).filter_by(database_name=database_name).one_or_none()
+if database is None:
+    print("[*] Superset Trino database connection not found; skipping lakehouse dataset sync.")
+    raise SystemExit(0)
+
+catalog = database.get_default_catalog()
+created = []
+refreshed = []
+skipped = []
+
+for schema, table_name in targets:
+    table = Table(table_name, schema, catalog)
+    try:
+        database.get_table(table)
+    except Exception:
+        skipped.append(f"{schema}.{table_name}")
+        continue
+
+    dataset = (
+        db.session.query(SqlaTable)
+        .filter_by(
+            database_id=database.id,
+            catalog=catalog,
+            schema=schema,
+            table_name=table_name,
+        )
+        .one_or_none()
+    )
+
+    if dataset is None:
+        dataset = SqlaTable(
+            database=database,
+            catalog=catalog,
+            schema=schema,
+            table_name=table_name,
+        )
+        db.session.add(dataset)
+        db.session.flush()
+        created.append(f"{schema}.{table_name}")
+    else:
+        refreshed.append(f"{schema}.{table_name}")
+
+    dataset.fetch_metadata()
+
+db.session.commit()
+
+if created:
+    print("[+] Added Superset datasets: " + ", ".join(created))
+if refreshed:
+    print("[+] Refreshed Superset datasets: " + ", ".join(refreshed))
+if skipped:
+    print("[*] Skipped missing lakehouse demo tables: " + ", ".join(skipped))
+PY
+}
+
+superset::sync_lakehouse_demo_datasets() {
+  superset::ensure_metadata_ready
+  superset::sync_lakehouse_demo_datasets_impl
+}
+
 superset::start() {
   superset::ensure_dirs
   superset::cleanup_stale_pid
-  superset::write_config
 
   if [[ ! -x "${SUPERSET_BIN}" ]]; then
     echo "[!] Superset binary not found at ${SUPERSET_BIN}; rebuild image." >&2
@@ -234,8 +337,8 @@ superset::start() {
     return 0
   fi
 
-  superset::bootstrap_metadata
-  superset::ensure_trino_database
+  superset::ensure_metadata_ready
+  superset::sync_lakehouse_demo_datasets_impl || true
   pkill -f "${SUPERSET_VENV}/bin/superset run" >/dev/null 2>&1 || true
   echo "[*] Starting Superset on $(common::ui_url "${SUPERSET_PORT}" "/")..."
   env \

@@ -131,6 +131,18 @@ mongodb::wait_for_port() {
   return 1
 }
 
+mongodb::wait_for_stop() {
+  local deadline=$((SECONDS + 60))
+  while [[ ${SECONDS} -lt ${deadline} ]]; do
+    if ! mongodb::port_open localhost "${MONGO_PORT}" && ! mongodb::pid_alive; then
+      rm -f "${MONGODB_PID_FILE}" 2>/dev/null || true
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 mongodb::bootstrap_auth() {
   MONGO_PORT="${MONGO_PORT}" \
   MONGO_DB="${MONGO_DB}" \
@@ -225,7 +237,10 @@ mongodb::shutdown() {
   if [[ -f "${MONGODB_PID_FILE}" ]]; then
     kill "$(cat "${MONGODB_PID_FILE}")" >/dev/null 2>&1 || true
   fi
-  rm -f "${MONGODB_PID_FILE}"
+  if ! mongodb::wait_for_stop; then
+    echo "[!] MongoDB did not stop cleanly within 60s." >&2
+    return 1
+  fi
 }
 
 mongodb::start() {

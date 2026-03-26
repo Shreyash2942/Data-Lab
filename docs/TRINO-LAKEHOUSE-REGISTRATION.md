@@ -84,6 +84,8 @@ For Delta on HDFS, write with Spark and register in Trino (`delta.system.registe
   - `demo_iceberg.iceberg_table`
   - `demo_delta.table_delta`
   - `demo_hudi.order_hudi`
+- After `datalab_app --setup-lakehouse-demo`, the project also syncs those three
+  physical demo tables into Superset's dataset metadata when Superset is available.
 - This works through Hive catalog redirection:
   - `hive.iceberg-catalog-name=iceberg`
   - `hive.delta-lake-catalog-name=delta`

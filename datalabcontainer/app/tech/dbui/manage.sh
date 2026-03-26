@@ -182,6 +182,7 @@ dbui::ensure_node_packages() {
 }
 
 dbui::start_mongo_express() {
+  dbui::ensure_dirs
   dbui::cleanup_stale_pid "${MONGO_EXPRESS_PID_FILE}"
   if dbui::pid_alive "${MONGO_EXPRESS_PID_FILE}" && (dbui::port_open localhost "${MONGO_EXPRESS_PORT}" || dbui::port_listening "${MONGO_EXPRESS_PORT}"); then
     echo "[*] Mongo Express already running (PID $(cat "${MONGO_EXPRESS_PID_FILE}"))."
@@ -206,8 +207,14 @@ dbui::start_mongo_express() {
     export ME_CONFIG_MONGODB_ENABLE_ADMIN="true"
     export ME_CONFIG_MONGODB_URL="${mongo_url}"
     export ME_CONFIG_BASICAUTH="${MONGO_EXPRESS_BASICAUTH}"
-    export ME_CONFIG_BASICAUTH_USERNAME="${MONGO_EXPRESS_USERNAME}"
-    export ME_CONFIG_BASICAUTH_PASSWORD="${MONGO_EXPRESS_PASSWORD}"
+    if [[ "${MONGO_EXPRESS_BASICAUTH,,}" == "true" ]]; then
+      export ME_CONFIG_BASICAUTH_USERNAME="${MONGO_EXPRESS_USERNAME}"
+      export ME_CONFIG_BASICAUTH_PASSWORD="${MONGO_EXPRESS_PASSWORD}"
+    else
+      # mongo-express disables basic auth when the username env var is blank.
+      export ME_CONFIG_BASICAUTH_USERNAME=""
+      export ME_CONFIG_BASICAUTH_PASSWORD=""
+    fi
     nohup "${MONGO_EXPRESS_BIN}" > "${MONGO_EXPRESS_LOG_FILE}" 2>&1 &
     echo $! > "${MONGO_EXPRESS_PID_FILE}"
   )
@@ -226,6 +233,7 @@ dbui::start_mongo_express() {
 }
 
 dbui::start_redis_commander() {
+  dbui::ensure_dirs
   dbui::cleanup_stale_pid "${REDIS_COMMANDER_PID_FILE}"
   if dbui::pid_alive "${REDIS_COMMANDER_PID_FILE}" && (dbui::port_open localhost "${REDIS_COMMANDER_PORT}" || dbui::port_listening "${REDIS_COMMANDER_PORT}"); then
     echo "[*] Redis Commander already running (PID $(cat "${REDIS_COMMANDER_PID_FILE}"))."

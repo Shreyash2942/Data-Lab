@@ -1,6 +1,6 @@
 # Airflow Layer
 
-All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/stacks/airflow`). Airflow 2.9 is preinstalled and configured to use PostgreSQL metadata (`datalab` DB) with `LocalExecutor` for parallel task execution in this single-container environment.
+All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/stacks/airflow`). Airflow 2.9 is preinstalled and configured to use PostgreSQL metadata (`datalab` DB) with `LocalExecutor` for parallel task execution in this single-container environment. This project does not use a SQLite fallback for Airflow.
 
 ## Layout
 
@@ -82,6 +82,7 @@ Default Airflow runtime settings in this project:
 - `parallelism=16` (global task slots)
 - `max_active_tasks_per_dag=8`
 - `max_active_runs_per_dag=4`
+- Metadata backend: PostgreSQL only
 
 When Airflow tasks submit Spark jobs, Airflow concurrency and Spark cluster capacity are separate limits:
 
