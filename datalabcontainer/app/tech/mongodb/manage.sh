@@ -60,11 +60,19 @@ mongodb::ensure_dirs() {
 }
 
 mongodb::pid_alive() {
-  local pid=""
+  local pid="" stat="" cmd=""
   [[ -f "${MONGODB_PID_FILE}" ]] || return 1
   pid="$(cat "${MONGODB_PID_FILE}" 2>/dev/null || true)"
   [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
-  kill -0 "${pid}" 2>/dev/null
+  kill -0 "${pid}" 2>/dev/null || return 1
+
+  # Treat zombie or PID-reuse cases as stopped so first-run auth bootstrap
+  # can restart cleanly on fresh runtime volumes.
+  stat="$(ps -o stat= -p "${pid}" 2>/dev/null | tr -d '[:space:]' || true)"
+  [[ "${stat}" == Z* ]] && return 1
+
+  cmd="$(ps -o args= -p "${pid}" 2>/dev/null || true)"
+  [[ "${cmd}" == *mongod* ]]
 }
 
 mongodb::cleanup_stale_pid() {

@@ -127,7 +127,8 @@ function Resolve-ContainerMountPath {
     [string]$DefaultRoot = "/home/datalab"
   )
 
-  $normalized = ($InputPath ?? "").Trim()
+  $normalized = if ($null -eq $InputPath) { "" } else { [string]$InputPath }
+  $normalized = $normalized.Trim()
   if (-not $normalized) {
     return ""
   }
@@ -141,6 +142,21 @@ function Resolve-ContainerMountPath {
   }
 
   return ($normalized -replace "/{2,}", "/")
+}
+
+function Invoke-ContainerShellScript {
+  Param(
+    [string]$ContainerName,
+    [string]$ScriptText,
+    [string]$Shell = "bash",
+    [string]$RemotePath = "/tmp/datalab-copy-bootstrap.sh"
+  )
+
+  $execCommand = "cat > '$RemotePath' && (sed -i 's/\r$//' '$RemotePath' 2>/dev/null || true) && $Shell '$RemotePath'"
+  $ScriptText | docker exec -i $ContainerName $Shell -lc $execCommand 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to run bootstrap script '$RemotePath' in container '$ContainerName'."
+  }
 }
 
 if (-not $NewName) {
@@ -386,7 +402,7 @@ EOF
 sed -i 's/\r$//' $uiMapFile 2>/dev/null || true
 chmod 644 $uiMapFile || true
 "@
-docker exec $NewName sh -lc $uiMapScript 2>$null | Out-Null
+Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $uiMapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-ui-map.sh"
 
 $bootstrapScript = @"
 set -e
@@ -441,7 +457,7 @@ do
   chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
 done
 "@
-docker exec $NewName bash -lc $bootstrapScript 2>$null | Out-Null
+Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $bootstrapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-bootstrap.sh"
 
 Write-Output "Container $NewName started from image $resolvedImage."
 Write-Output "Published ports:"
