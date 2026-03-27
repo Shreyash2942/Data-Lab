@@ -22,6 +22,18 @@
     <value>thrift://localhost:9083</value>
   </property>
   <property>
+    <name>hive.execution.engine</name>
+    <value>mr</value>
+  </property>
+  <property>
+    <name>hive.exec.parallel</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hive.exec.parallel.thread.number</name>
+    <value>2</value>
+  </property>
+  <property>
     <name>hive.aux.jars.path</name>
     <value>/opt/spark/jars/hudi-spark-bundle.jar,/opt/spark/jars/iceberg-spark-runtime.jar,/opt/spark/jars/delta-spark.jar,/opt/spark/jars/delta-storage.jar</value>
   </property>

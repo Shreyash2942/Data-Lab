@@ -86,7 +86,7 @@ dbt run --target spark_session
 dbt test --target spark_session
 ```
 
-This target uses `dbt-spark` in `session` mode. The dbt process creates a local Spark session and inherits the Hive metastore + HDFS settings from the profile.
+This target uses `dbt-spark` in `session` mode. In this project, the dbt process creates a PySpark session that submits to the standalone Spark master at `spark://localhost:7077` while inheriting the Hive metastore + HDFS settings from the profile.
 
 ### Using the helper with non-default targets
 
@@ -115,7 +115,9 @@ You can also supply `--profiles-dir ~/dbt` inline if you do not want to export t
 - Feel free to delete `runtime/dbt` to reset the DuckDB warehouse; dbt recreates it on the next `dbt run`.
 - Add more models under `dbt/models`, plus tests in `dbt/tests` if desired; they will be picked up automatically by `dbt run`/`dbt test`.
 - Hadoop/HDFS is not a direct dbt adapter target. It is the storage layer used under the `hive` and `spark_session` targets.
+- The `hive` and `spark_session` targets both default to `threads: 2`, which is a conservative fit for the single-container runtime while still allowing DBT to schedule more than one model at a time when your project has parallelizable DAG branches.
 - `spark_session` is the safest fit for this container today because it reuses the local Spark runtime directly and does not require a separate Spark Thrift server.
+- The bundled Hive target runs on HiveServer2 with `hive.execution.engine=mr`, `mapreduce.framework.name=yarn`, and `hive.exec.parallel=true` so independent query stages can fan out on the single-node YARN runtime without changing the container topology.
 - The sample model uses `table` materialization on the `hive` target because the bundled `dbt-hive` adapter is reliable for that path in this container, while the default view materialization can fail against vanilla HiveServer2.
 - For repeatable demo runs on the `hive` target, prefer `dbt run --full-refresh --target hive`. The helper script already does this automatically when `DBT_TARGET=hive`.
 

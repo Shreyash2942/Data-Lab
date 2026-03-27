@@ -1,6 +1,6 @@
 # Hive Layer
 
-Hive ships with an embedded Derby metastore (thrift endpoint `thrift://localhost:9083`) and an HDFS warehouse path (`hdfs:///hive/warehouse`). Prepare the CLI from inside the container with:
+Hive ships with an embedded Derby metastore (thrift endpoint `thrift://localhost:9083`) and an HDFS warehouse path (`hdfs:///hive/warehouse`). Queries run through HiveServer2 using MapReduce on the single-node YARN runtime, with `hive.exec.parallel=true` and a conservative `hive.exec.parallel.thread.number=2` so independent stages can overlap without changing the container topology. Prepare the CLI from inside the container with:
 
 ## In-container Hive access helper
 

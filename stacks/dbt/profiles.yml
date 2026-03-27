@@ -11,13 +11,13 @@ data_lab:
       host: localhost
       port: 10000
       schema: default
-      threads: 1
+      threads: 2
     spark_session:
       type: spark
       method: session
       host: localhost
       schema: default
-      threads: 1
+      threads: 2
       server_side_parameters:
         spark.master: spark://localhost:7077
         spark.sql.catalogImplementation: hive
