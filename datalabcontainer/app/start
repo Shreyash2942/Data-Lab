@@ -34,8 +34,14 @@ source "${APP_DIR}/tech/trino/manage.sh"
 source "${APP_DIR}/tech/superset/manage.sh"
 source "${APP_DIR}/tech/service_groups.sh"
 source "${APP_DIR}/tech/cli_flags.sh"
+source "${APP_DIR}/tech/ui_selection.sh"
 
 show_ui_services() {
+  if [[ -n "${DATALAB_SELECTED_UI_SERVICES:-}" ]]; then
+    ui::show_selected_links
+    return 0
+  fi
+
   local ui_cmd="/home/datalab/app/ui_services"
   if [[ -x "${ui_cmd}" ]]; then
     echo
@@ -80,53 +86,196 @@ show_db_access_summary() {
 }
 
 start_db_uis_if_needed() {
+  ui::select_database_stack
   dbui::start
   pgadmin::start
 }
 
 start_postgres_with_ui() {
+  ui::set_selected_services postgres
   postgres::start
   pgadmin::start
 }
 
 start_mongodb_with_ui() {
+  ui::set_selected_services mongodb
   mongodb::start
   dbui::start_mongo_express
 }
 
 start_redis_with_ui() {
+  ui::set_selected_services redis
   redis::start
   dbui::start_redis_commander
 }
 
 start_etl_stack() {
+  ui::select_etl_stack
   groups::start_etl
   echo "[+] ETL stack started (Airflow/Spark/Hadoop/Hive/Kafka + Schema Registry/Kafka Connect)."
 }
 
 start_database_stack() {
+  ui::select_database_stack
   groups::start_databases
   echo "[+] Database stack started (PostgreSQL/MongoDB/Redis + Mongo Express/Redis Commander/pgAdmin)."
 }
 
 start_lakehouse_stack() {
+  ui::select_lakehouse_stack
   groups::start_lakehouse
   echo "[+] Lakehouse stack started (MinIO/Trino/Superset + Hive/Hadoop)."
 }
 
 start_quality_stack() {
+  ui::select_quality_stack
   groups::start_quality
   echo "[+] Quality & dev stack started (Great Expectations Data Docs + JupyterLab)."
 }
 
 start_observability_stack() {
+  ui::select_observability_stack
   groups::start_observability
   echo "[+] Observability stack started (Marquez + Prometheus + Grafana)."
 }
 
 start_full_platform() {
+  ui::select_full_platform
   groups::start_full_platform
   echo "[+] Full platform started (ETL + Databases + Lakehouse + Quality/Dev + Observability)."
+}
+
+start_minio_only() {
+  ui::set_selected_services minio
+  minio::start
+}
+
+start_trino_only() {
+  ui::set_selected_services trino
+  hadoop::ensure_running
+  hive::start_metastore
+  trino::start
+}
+
+start_superset_only() {
+  ui::set_selected_services superset
+  superset::start
+}
+
+run_lakehouse_catalog_tests() {
+  start_trino_only
+  trino::lakehouse_tests
+}
+
+run_lakehouse_demo_setup() {
+  start_trino_only
+  trino::setup_simple_demo
+}
+
+start_airflow_only() {
+  ui::set_selected_services airflow
+  airflow::start
+}
+
+start_spark_only() {
+  ui::set_selected_services spark
+  spark::ensure_running
+}
+
+start_hadoop_only() {
+  ui::set_selected_services hadoop
+  hadoop::start
+}
+
+start_hive_only() {
+  ui::set_selected_services hive
+  hive::prepare_cli
+}
+
+start_kafka_only() {
+  ui::set_selected_services kafka
+  kafka::start
+}
+
+start_schema_registry_only() {
+  ui::set_selected_services schema-registry
+  schema_registry::start
+}
+
+start_kafka_connect_only() {
+  ui::set_selected_services kafka-connect
+  kafka_connect::start
+}
+
+run_postgres_cdc_demo() {
+  ui::set_selected_services postgres kafka schema-registry kafka-connect
+  cdc::setup_postgres_demo
+}
+
+verify_postgres_cdc_demo() {
+  ui::set_selected_services postgres kafka schema-registry kafka-connect
+  cdc::verify_postgres_demo
+}
+
+reset_postgres_cdc_demo() {
+  ui::set_selected_services postgres kafka schema-registry kafka-connect
+  cdc::reset_postgres_demo
+}
+
+start_jupyter_only() {
+  ui::set_selected_services jupyter
+  jupyter::start
+}
+
+start_gx_only() {
+  ui::set_selected_services great-expectations
+  gx::start
+}
+
+run_gx_demo_validation() {
+  ui::set_selected_services great-expectations
+  gx::run_demo_validation
+}
+
+start_lineage_only() {
+  ui::set_selected_services lineage
+  lineage::start
+}
+
+run_lineage_demo() {
+  ui::set_selected_services lineage spark
+  lineage::run_spark_demo
+}
+
+start_prometheus_only() {
+  ui::set_selected_services prometheus
+  monitoring::start_prometheus
+}
+
+start_grafana_only() {
+  ui::set_selected_services grafana
+  monitoring::start_grafana
+}
+
+start_core_services() {
+  ui::set_selected_services spark hadoop hive kafka schema-registry kafka-connect
+  hadoop::ensure_running
+  spark::ensure_running
+  hive::prepare_cli
+  kafka::start
+  schema_registry::start
+  kafka_connect::start
+  echo "[+] Spark, Hadoop, Hive, Kafka, Schema Registry, and Kafka Connect services started."
+}
+
+validate_stack() {
+  ui::set_selected_services airflow
+  run_stack_validation_dag
+}
+
+start_pgadmin_only() {
+  ui::set_selected_services postgres
+  pgadmin::start
 }
 
 run_stack_validation_dag() {
@@ -364,12 +513,12 @@ run_lakehouse_menu() {
   echo "0) Back"
   read -r -p "Select option: " opt
   case "${opt}" in
-    1) minio::start; show_ui_services ;;
-    2) hadoop::ensure_running; hive::start_metastore; trino::start; show_ui_services ;;
-    3) superset::start; show_ui_services ;;
+    1) start_minio_only; show_ui_services ;;
+    2) start_trino_only; show_ui_services ;;
+    3) start_superset_only; show_ui_services ;;
     4) start_lakehouse_stack; show_ui_services ;;
-    5) hadoop::ensure_running; hive::start_metastore; trino::start; trino::lakehouse_tests; show_ui_services ;;
-    6) hadoop::ensure_running; hive::start_metastore; trino::start; trino::setup_simple_demo; show_ui_services ;;
+    5) run_lakehouse_catalog_tests; show_ui_services ;;
+    6) run_lakehouse_demo_setup; show_ui_services ;;
     0) return 0 ;;
     *) echo "Invalid option." ;;
   esac
@@ -423,27 +572,27 @@ run_manage_services_menu() {
   echo "0) Back"
   read -r -p "Select option: " opt
   case "${opt}" in
-    1) airflow::start; show_ui_services ;;
-    2) spark::ensure_running; show_ui_services ;;
-    3) hadoop::start; show_ui_services ;;
-    4) hive::prepare_cli; show_ui_services ;;
-    5) kafka::start; show_ui_services ;;
-    6) schema_registry::start; show_ui_services ;;
-    7) kafka_connect::start; show_ui_services ;;
-    8) minio::start; show_ui_services ;;
-    9) hadoop::ensure_running; hive::start_metastore; trino::start; show_ui_services ;;
-    10) superset::start; show_ui_services ;;
+    1) start_airflow_only; show_ui_services ;;
+    2) start_spark_only; show_ui_services ;;
+    3) start_hadoop_only; show_ui_services ;;
+    4) start_hive_only; show_ui_services ;;
+    5) start_kafka_only; show_ui_services ;;
+    6) start_schema_registry_only; show_ui_services ;;
+    7) start_kafka_connect_only; show_ui_services ;;
+    8) start_minio_only; show_ui_services ;;
+    9) start_trino_only; show_ui_services ;;
+    10) start_superset_only; show_ui_services ;;
     11) start_postgres_with_ui; show_db_access_summary; show_ui_services ;;
     12) start_mongodb_with_ui; show_db_access_summary; show_ui_services ;;
     13) start_redis_with_ui; show_db_access_summary; show_ui_services ;;
-    14) cdc::setup_postgres_demo; show_ui_services ;;
-    15) jupyter::start; show_quality_access_summary; show_ui_services ;;
-    16) gx::start; show_quality_access_summary; show_ui_services ;;
-    17) gx::run_demo_validation; show_quality_access_summary; show_ui_services ;;
-    18) lineage::start; show_observability_access_summary; show_ui_services ;;
-    19) monitoring::start_prometheus; show_observability_access_summary; show_ui_services ;;
-    20) monitoring::start_grafana; show_observability_access_summary; show_ui_services ;;
-    21) lineage::run_spark_demo; show_observability_access_summary; show_ui_services ;;
+    14) run_postgres_cdc_demo; show_ui_services ;;
+    15) start_jupyter_only; show_quality_access_summary; show_ui_services ;;
+    16) start_gx_only; show_quality_access_summary; show_ui_services ;;
+    17) run_gx_demo_validation; show_quality_access_summary; show_ui_services ;;
+    18) start_lineage_only; show_observability_access_summary; show_ui_services ;;
+    19) start_prometheus_only; show_observability_access_summary; show_ui_services ;;
+    20) start_grafana_only; show_observability_access_summary; show_ui_services ;;
+    21) run_lineage_demo; show_observability_access_summary; show_ui_services ;;
     0) return 0 ;;
     *) echo "Invalid option." ;;
   esac
@@ -499,45 +648,39 @@ handle_cli_flag() {
       exit 0
       ;;
     --setup-postgres-cdc)
-      cdc::setup_postgres_demo
+      run_postgres_cdc_demo
       show_ui_services
       exit 0
       ;;
     --verify-postgres-cdc)
-      cdc::verify_postgres_demo
+      verify_postgres_cdc_demo
       show_ui_services
       exit 0
       ;;
     --reset-postgres-cdc)
-      cdc::reset_postgres_demo
+      reset_postgres_cdc_demo
       show_ui_services
       exit 0
       ;;
     --run-great-expectations-demo)
-      gx::run_demo_validation
+      run_gx_demo_validation
       show_quality_access_summary
       show_ui_services
       exit 0
       ;;
     --run-lineage-demo)
-      lineage::run_spark_demo
+      run_lineage_demo
       show_observability_access_summary
       show_ui_services
       exit 0
       ;;
     --test-lakehouse-catalogs)
-      hadoop::ensure_running
-      hive::start_metastore
-      trino::start
-      trino::lakehouse_tests
+      run_lakehouse_catalog_tests
       show_ui_services
       exit 0
       ;;
     --setup-lakehouse-demo)
-      hadoop::ensure_running
-      hive::start_metastore
-      trino::start
-      trino::setup_simple_demo
+      run_lakehouse_demo_setup
       show_ui_services
       exit 0
       ;;
@@ -567,26 +710,17 @@ handle_cli_flag() {
       exit 0
       ;;
     --start-core)
-      hadoop::ensure_running
-      spark::ensure_running
-      hive::prepare_cli
-      kafka::start
-      schema_registry::start
-      kafka_connect::start
-      echo "[+] Spark, Hadoop, Hive, Kafka, Schema Registry, and Kafka Connect services started."
+      start_core_services
       show_ui_services
       exit 0
       ;;
     --validate-stack)
-      run_stack_validation_dag
+      validate_stack
       show_ui_services
       exit 0
       ;;
     --test-lakehouse)
-      hadoop::ensure_running
-      hive::start_metastore
-      trino::start
-      trino::lakehouse_tests
+      run_lakehouse_catalog_tests
       show_ui_services
       exit 0
       ;;
@@ -597,31 +731,31 @@ handle_cli_flag() {
       exit 0
       ;;
     --start-pgadmin)
-      pgadmin::start
+      start_pgadmin_only
       show_db_access_summary
       show_ui_services
       exit 0
       ;;
 
     # Individual starts (unchanged)
-    --start-spark) spark::ensure_running; show_ui_services; exit 0 ;;
-    --start-hadoop) hadoop::start; show_ui_services; exit 0 ;;
-    --start-hive) hive::prepare_cli; show_ui_services; exit 0 ;;
-    --start-kafka) kafka::start; show_ui_services; exit 0 ;;
-    --start-schema-registry) schema_registry::start; show_ui_services; exit 0 ;;
-    --start-kafka-connect) kafka_connect::start; show_ui_services; exit 0 ;;
-    --start-airflow) airflow::start; show_ui_services; exit 0 ;;
+    --start-spark) start_spark_only; show_ui_services; exit 0 ;;
+    --start-hadoop) start_hadoop_only; show_ui_services; exit 0 ;;
+    --start-hive) start_hive_only; show_ui_services; exit 0 ;;
+    --start-kafka) start_kafka_only; show_ui_services; exit 0 ;;
+    --start-schema-registry) start_schema_registry_only; show_ui_services; exit 0 ;;
+    --start-kafka-connect) start_kafka_connect_only; show_ui_services; exit 0 ;;
+    --start-airflow) start_airflow_only; show_ui_services; exit 0 ;;
     --start-postgres) start_postgres_with_ui; show_db_access_summary; show_ui_services; exit 0 ;;
     --start-mongodb) start_mongodb_with_ui; show_db_access_summary; show_ui_services; exit 0 ;;
     --start-redis) start_redis_with_ui; show_db_access_summary; show_ui_services; exit 0 ;;
-    --start-minio) minio::start; show_ui_services; exit 0 ;;
-    --start-jupyter) jupyter::start; show_quality_access_summary; show_ui_services; exit 0 ;;
-    --start-great-expectations) gx::start; show_quality_access_summary; show_ui_services; exit 0 ;;
-    --start-lineage) lineage::start; show_observability_access_summary; show_ui_services; exit 0 ;;
-    --start-prometheus) monitoring::start_prometheus; show_observability_access_summary; show_ui_services; exit 0 ;;
-    --start-grafana) monitoring::start_grafana; show_observability_access_summary; show_ui_services; exit 0 ;;
-    --start-trino) hadoop::ensure_running; hive::start_metastore; trino::start; show_ui_services; exit 0 ;;
-    --start-superset) superset::start; show_ui_services; exit 0 ;;
+    --start-minio) start_minio_only; show_ui_services; exit 0 ;;
+    --start-jupyter) start_jupyter_only; show_quality_access_summary; show_ui_services; exit 0 ;;
+    --start-great-expectations) start_gx_only; show_quality_access_summary; show_ui_services; exit 0 ;;
+    --start-lineage) start_lineage_only; show_observability_access_summary; show_ui_services; exit 0 ;;
+    --start-prometheus) start_prometheus_only; show_observability_access_summary; show_ui_services; exit 0 ;;
+    --start-grafana) start_grafana_only; show_observability_access_summary; show_ui_services; exit 0 ;;
+    --start-trino) start_trino_only; show_ui_services; exit 0 ;;
+    --start-superset) start_superset_only; show_ui_services; exit 0 ;;
 
     # Stop/restart passthrough from datalab_app
     --stop-*)

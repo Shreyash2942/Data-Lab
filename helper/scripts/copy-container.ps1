@@ -370,10 +370,27 @@ foreach ($mapping in $resolvedDefaultPorts) {
 }
 $hostPortMap = $hostPortMapEntries -join ","
 
+$airflowDagsFolder = "/home/datalab/airflow/dags"
+if (-not $SkipDefaultProjectMount) {
+  $medilakeAirflowHostPath = Join-Path $DefaultProjectHostPath "Airflow\dags"
+  if (Test-Path $medilakeAirflowHostPath) {
+    $airflowDagsFolder = (Resolve-ContainerMountPath -InputPath "$DefaultProjectContainerPath/Airflow/dags" -DefaultRoot "/home/datalab")
+  }
+}
+
 $envArgs = @(
   "-e", "CONTAINER_NAME=$NewName",
   "-e", "DATALAB_UI_HOST=$UiHost",
   "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap",
+  "-e", "AIRFLOW_HOME=/home/datalab/runtime/airflow",
+  "-e", "AIRFLOW__CORE__LOAD_EXAMPLES=False",
+  "-e", "AIRFLOW__CORE__EXECUTOR=LocalExecutor",
+  "-e", "AIRFLOW__CORE__PARALLELISM=16",
+  "-e", "AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG=8",
+  "-e", "AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=4",
+  "-e", "AIRFLOW__CORE__DAGS_FOLDER=$airflowDagsFolder",
+  "-e", "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:admin@localhost:5432/datalab",
+  "-e", "DATALAB_AIRFLOW_DAGS_FOLDER=$airflowDagsFolder",
   "-e", "DATALAB_SPARK_VERBOSE=0",
   "-e", "DATALAB_SPARK_LOG_LEVEL=WARN"
 )
@@ -394,17 +411,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $uiMapFile = "/home/datalab/runtime/ui-port-map.env"
-$uiMapScript = @"
-cat > $uiMapFile <<'EOF'
-DATALAB_UI_HOST=$UiHost
-DATALAB_HOST_PORT_MAP=$hostPortMap
+$uiMapScript = @'
+cat > __UI_MAP_FILE__ <<'EOF'
+DATALAB_UI_HOST=__UI_HOST__
+DATALAB_HOST_PORT_MAP=__HOST_PORT_MAP__
 EOF
-sed -i 's/\r$//' $uiMapFile 2>/dev/null || true
-chmod 644 $uiMapFile || true
-"@
+sed -i 's/\r$//' __UI_MAP_FILE__ 2>/dev/null || true
+chmod 644 __UI_MAP_FILE__ || true
+'@
+$uiMapScript = $uiMapScript.Replace("__UI_MAP_FILE__", $uiMapFile).Replace("__UI_HOST__", $UiHost).Replace("__HOST_PORT_MAP__", $hostPortMap)
 Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $uiMapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-ui-map.sh"
 
-$bootstrapScript = @"
+$bootstrapScript = @'
 set -e
 # New copied container should start from a clean Kafka metadata state.
 rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
@@ -421,6 +439,61 @@ mkdir -p \
   /home/datalab/runtime/scala
 chown -R datalab:datalab /home/datalab/runtime 2>/dev/null || true
 chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
+
+# Keep login-shell Airflow defaults aligned with the copied-container topology.
+cat > /etc/profile.d/datalab-path.sh <<'EOF'
+# Data Lab environment and PATH additions (applied to all users)
+export SPARK_HOME=/opt/spark
+export HADOOP_HOME=/opt/hadoop
+export HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native
+export HIVE_HOME=/opt/hive
+export TRINO_HOME=/opt/trino
+export KAFKA_HOME=/opt/kafka
+export APICURIO_REGISTRY_HOME=/opt/apicurio-registry
+export MARQUEZ_HOME=/opt/marquez
+export MARQUEZ_WEB_HOME=/opt/marquez-web
+export PROMETHEUS_HOME=/opt/prometheus
+export GRAFANA_HOME=/opt/grafana
+export OPENLINEAGE_SPARK_HOME=/opt/openlineage-spark
+export MONGO_HOME=/opt/mongodb
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export LD_LIBRARY_PATH="/opt/hadoop/lib/native:${LD_LIBRARY_PATH}"
+export PATH="/home/datalab/app/bin:${PATH}"
+# Force a shared workspace path so root and datalab use the same mounts
+export WORKSPACE="/home/datalab"
+export RUNTIME_ROOT="${WORKSPACE}/runtime"
+export LAKEHOUSE_STACK_ROOT="${WORKSPACE}/lakehouse"
+export AIRFLOW_HOME="${AIRFLOW_HOME:-${RUNTIME_ROOT}/airflow}"
+export DATALAB_AIRFLOW_DAGS_FOLDER="${DATALAB_AIRFLOW_DAGS_FOLDER:-__AIRFLOW_DAGS_FOLDER__}"
+if [ -d "${WORKSPACE}/medilake/Airflow/dags" ]; then
+  export DATALAB_AIRFLOW_DAGS_FOLDER="${WORKSPACE}/medilake/Airflow/dags"
+fi
+export AIRFLOW__CORE__DAGS_FOLDER="${AIRFLOW__CORE__DAGS_FOLDER:-${DATALAB_AIRFLOW_DAGS_FOLDER}}"
+export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
+export AIRFLOW__CORE__EXECUTOR="${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}"
+export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-datalab}}"
+export DBT_PROFILES_DIR="${WORKSPACE}/dbt"
+export DBT_PACKAGE_INSTALL_PATH="${RUNTIME_ROOT}/dbt/dbt_packages"
+export TF_DATA_DIR="${RUNTIME_ROOT}/terraform/.terraform"
+export PATH="$JAVA_HOME/bin:$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
+EOF
+chmod 0644 /etc/profile.d/datalab-path.sh || true
+
+# Seed the persisted Airflow config so copied containers do not fall back to
+# SQLite/SequentialExecutor when users inspect airflow.cfg directly.
+mkdir -p /home/datalab/runtime/airflow
+su - datalab -c "airflow config get-value core executor >/dev/null 2>&1 || airflow version >/dev/null 2>&1 || true"
+cfg=/home/datalab/runtime/airflow/airflow.cfg
+if [ -f "$cfg" ]; then
+  sed -i -E "s|^dags_folder = .*|dags_folder = __AIRFLOW_DAGS_FOLDER__|" "$cfg" || true
+  sed -i -E "s|^executor = .*|executor = LocalExecutor|" "$cfg" || true
+  sed -i -E "s|^parallelism = .*|parallelism = 16|" "$cfg" || true
+  sed -i -E "s|^max_active_tasks_per_dag = .*|max_active_tasks_per_dag = 8|" "$cfg" || true
+  sed -i -E "s|^max_active_runs_per_dag = .*|max_active_runs_per_dag = 4|" "$cfg" || true
+  sed -i -E "s|^load_examples = .*|load_examples = False|" "$cfg" || true
+  sed -i -E "s|^sql_alchemy_conn = .*|sql_alchemy_conn = postgresql+psycopg2://admin:admin@localhost:5432/datalab|" "$cfg" || true
+  chown datalab:datalab "$cfg" 2>/dev/null || true
+fi
 
 # Best-effort ownership fix for mounted Data Lab paths so copied/host-bound
 # files are usable as the datalab user.
@@ -456,7 +529,8 @@ do
   chown -R datalab:datalab "$p" 2>/dev/null || true
   chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
 done
-"@
+'@
+$bootstrapScript = $bootstrapScript.Replace("__AIRFLOW_DAGS_FOLDER__", $airflowDagsFolder)
 Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $bootstrapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-bootstrap.sh"
 
 Write-Output "Container $NewName started from image $resolvedImage."

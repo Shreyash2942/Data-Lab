@@ -3,11 +3,11 @@ set -e
 
 # Ensure shared runtime paths are writable by the datalab user even if the host volume was created by root.
 RUNTIME_ROOT="/home/datalab/runtime"
-AIRFLOW_HOME="/home/datalab/airflow"
+AIRFLOW_HOME="${RUNTIME_ROOT}/airflow"
 
 # Create expected runtime subfolders so services don't fail on missing paths.
 mkdir -p \
-  "${RUNTIME_ROOT}/airflow" "${AIRFLOW_HOME}/logs" "${AIRFLOW_HOME}/pids" \
+  "${AIRFLOW_HOME}/logs" "${AIRFLOW_HOME}/pids" \
   "${RUNTIME_ROOT}/hadoop" "${RUNTIME_ROOT}/kafka" "${RUNTIME_ROOT}/spark" \
   "${RUNTIME_ROOT}/hive" "${RUNTIME_ROOT}/dbt" "${RUNTIME_ROOT}/terraform" \
   "${RUNTIME_ROOT}/lakehouse" "${RUNTIME_ROOT}/java" "${RUNTIME_ROOT}/scala" \

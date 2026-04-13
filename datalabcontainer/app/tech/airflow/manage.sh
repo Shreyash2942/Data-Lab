@@ -22,9 +22,106 @@ AIRFLOW_WEB_PORT="${AIRFLOW_WEB_PORT:-8080}"
 : "${AIRFLOW_CORE_PARALLELISM:=16}"
 : "${AIRFLOW_CORE_MAX_ACTIVE_TASKS_PER_DAG:=8}"
 : "${AIRFLOW_CORE_MAX_ACTIVE_RUNS_PER_DAG:=4}"
+: "${AIRFLOW_HOME:=${RUNTIME_ROOT}/airflow}"
+: "${AIRFLOW_CONFIG:=${AIRFLOW_HOME}/airflow.cfg}"
+
+airflow::resolve_dags_folder() {
+  local candidate
+  local -a candidates=()
+
+  if [[ -n "${DATALAB_AIRFLOW_DAGS_FOLDER:-}" ]]; then
+    printf '%s' "$(strip_cr "${DATALAB_AIRFLOW_DAGS_FOLDER}")"
+    return 0
+  fi
+
+  candidates+=(
+    "${WORKSPACE}/medilake/Airflow/dags"
+    "${WORKSPACE}/airflow/dags"
+    "${AIRFLOW_HOME}/dags"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    candidate="$(strip_cr "${candidate}")"
+    [[ -z "${candidate}" ]] && continue
+    if [[ -d "${candidate}" ]]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+
+  printf '%s' "${WORKSPACE}/airflow/dags"
+}
+
+airflow::ensure_config_file() {
+  mkdir -p "${AIRFLOW_HOME}"
+
+  if [[ ! -f "${AIRFLOW_CONFIG}" ]]; then
+    airflow config get-value core executor >/dev/null 2>&1 || airflow version >/dev/null 2>&1 || true
+  fi
+}
+
+airflow::set_config_value() {
+  local section="$1" key="$2" value="$3"
+  local tmp_config
+
+  airflow::ensure_config_file
+  tmp_config="$(mktemp "${AIRFLOW_HOME}/airflow.cfg.XXXXXX")"
+
+  awk -v section="${section}" -v key="${key}" -v value="${value}" '
+    BEGIN {
+      in_section = 0
+      section_seen = 0
+      key_written = 0
+    }
+
+    /^\[.*\]$/ {
+      if (in_section && !key_written) {
+        print key " = " value
+        key_written = 1
+      }
+      in_section = ($0 == "[" section "]")
+      if (in_section) {
+        section_seen = 1
+      }
+      print
+      next
+    }
+
+    in_section && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") {
+      print key " = " value
+      key_written = 1
+      next
+    }
+
+    { print }
+
+    END {
+      if (!section_seen) {
+        print "[" section "]"
+      }
+      if (!key_written) {
+        print key " = " value
+      }
+    }
+  ' "${AIRFLOW_CONFIG}" > "${tmp_config}"
+
+  mv "${tmp_config}" "${AIRFLOW_CONFIG}"
+}
+
+airflow::persist_runtime_config() {
+  airflow::set_config_value core dags_folder "${AIRFLOW__CORE__DAGS_FOLDER}"
+  airflow::set_config_value core executor "${AIRFLOW__CORE__EXECUTOR}"
+  airflow::set_config_value core parallelism "${AIRFLOW__CORE__PARALLELISM}"
+  airflow::set_config_value core max_active_tasks_per_dag "${AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG}"
+  airflow::set_config_value core max_active_runs_per_dag "${AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG}"
+  airflow::set_config_value core load_examples "${AIRFLOW__CORE__LOAD_EXAMPLES}"
+  airflow::set_config_value database sql_alchemy_conn "${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}"
+}
 
 airflow::configure_runtime() {
+  export AIRFLOW_HOME AIRFLOW_CONFIG
   export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
+  export AIRFLOW__CORE__DAGS_FOLDER="$(airflow::resolve_dags_folder)"
   export AIRFLOW__CORE__PARALLELISM="${AIRFLOW__CORE__PARALLELISM:-${AIRFLOW_CORE_PARALLELISM}}"
   export AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG="${AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG:-${AIRFLOW_CORE_MAX_ACTIVE_TASKS_PER_DAG}}"
   export AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG="${AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG:-${AIRFLOW_CORE_MAX_ACTIVE_RUNS_PER_DAG}}"
@@ -33,6 +130,53 @@ airflow::configure_runtime() {
   postgres::start
   export AIRFLOW__CORE__EXECUTOR="LocalExecutor"
   export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@localhost:${POSTGRES_PORT:-5432}/${AIRFLOW_DB_NAME}"
+  airflow::persist_runtime_config
+}
+
+airflow::resolve_project_bootstrap_script() {
+  local candidate
+  local -a candidates=()
+
+  if [[ -n "${DATALAB_AIRFLOW_BOOTSTRAP_SCRIPT:-}" ]]; then
+    candidate="$(strip_cr "${DATALAB_AIRFLOW_BOOTSTRAP_SCRIPT}")"
+    [[ -f "${candidate}" ]] && printf '%s' "${candidate}"
+    return 0
+  fi
+
+  candidates+=(
+    "${WORKSPACE}/medilake/Airflow/scripts/bootstrap_local_airflow.sh"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    candidate="$(strip_cr "${candidate}")"
+    [[ -z "${candidate}" ]] && continue
+    if [[ -f "${candidate}" ]]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+airflow::ensure_project_metadata() {
+  local bootstrap_script=""
+
+  bootstrap_script="$(airflow::resolve_project_bootstrap_script || true)"
+  if [[ -n "${bootstrap_script}" ]]; then
+    echo "[*] Running project Airflow bootstrap: ${bootstrap_script}"
+    bash "${bootstrap_script}"
+  fi
+
+  # MediLake DAGs use a shared Spark pool. Recreate it idempotently on every
+  # Airflow bootstrap so refreshed/copied containers don't leave tasks stuck in
+  # the scheduled state waiting on a missing pool.
+  if [[ -d "${WORKSPACE}/medilake/Airflow/dags" ]]; then
+    airflow pools set \
+      "${MEDILAKE_SPARK_POOL:-medilake_spark}" \
+      "${MEDILAKE_SPARK_POOL_SIZE:-2}" \
+      "MediLake Spark-backed task capacity" >/dev/null
+  fi
 }
 
 airflow::ensure_dirs() {
@@ -156,6 +300,7 @@ airflow::start() {
   airflow::ensure_dirs
   airflow::cleanup_stale_pids
   airflow::migrate_db
+  airflow::ensure_project_metadata
   airflow::ensure_default_user
   airflow::start_webserver
   airflow::start_scheduler
