@@ -427,6 +427,8 @@ set -e
 # New copied container should start from a clean Kafka metadata state.
 rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
 mkdir -p \
+  /home/datalab/medilake \
+  /home/datalab/dbt_session_profile \
   /home/datalab/runtime/spark/events \
   /home/datalab/runtime/spark/warehouse \
   /home/datalab/runtime/spark/logs \
@@ -437,8 +439,15 @@ mkdir -p \
   /home/datalab/runtime/kafka/zookeeper-data \
   /home/datalab/runtime/java \
   /home/datalab/runtime/scala
-chown -R datalab:datalab /home/datalab/runtime 2>/dev/null || true
-chmod -R u+rwX,go+rX /home/datalab/runtime 2>/dev/null || true
+touch /home/datalab/derby.log 2>/dev/null || true
+for _ in $(seq 1 20); do
+  id datalab >/dev/null 2>&1 && break
+  sleep 1
+done
+if id datalab >/dev/null 2>&1; then
+  chown -R datalab:datalab /home/datalab/runtime /home/datalab/medilake /home/datalab/dbt_session_profile /home/datalab/derby.log 2>/dev/null || true
+  chmod -R u+rwX,go+rX /home/datalab/runtime /home/datalab/medilake /home/datalab/dbt_session_profile /home/datalab/derby.log 2>/dev/null || true
+fi
 
 # Keep login-shell Airflow defaults aligned with the copied-container topology.
 cat > /etc/profile.d/datalab-path.sh <<'EOF'
@@ -523,7 +532,10 @@ for p in \
   /home/datalab/great_expectations \
   /home/datalab/jupyter \
   /home/datalab/superset \
-  /home/datalab/trino
+  /home/datalab/trino \
+  /home/datalab/medilake \
+  /home/datalab/dbt_session_profile \
+  /home/datalab/derby.log
 do
   [ -e "$p" ] || continue
   chown -R datalab:datalab "$p" 2>/dev/null || true

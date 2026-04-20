@@ -63,5 +63,31 @@ docker run -d --name "${NAME}" \
   "${IMAGE}" \
   sleep infinity
 
+docker exec "${NAME}" bash -lc '
+set -e
+mkdir -p \
+  /home/datalab/medilake \
+  /home/datalab/dbt_session_profile \
+  /home/datalab/runtime/spark/events \
+  /home/datalab/runtime/spark/warehouse \
+  /home/datalab/runtime/spark/logs \
+  /home/datalab/runtime/spark/pids \
+  /home/datalab/runtime/kafka/data \
+  /home/datalab/runtime/kafka/logs \
+  /home/datalab/runtime/kafka/pids \
+  /home/datalab/runtime/kafka/zookeeper-data \
+  /home/datalab/runtime/java \
+  /home/datalab/runtime/scala
+touch /home/datalab/derby.log 2>/dev/null || true
+for _ in $(seq 1 20); do
+  id datalab >/dev/null 2>&1 && break
+  sleep 1
+done
+if id datalab >/dev/null 2>&1; then
+  chown -R datalab:datalab /home/datalab/runtime /home/datalab/medilake /home/datalab/dbt_session_profile /home/datalab/derby.log 2>/dev/null || true
+  chmod -R u+rwX,go+rX /home/datalab/runtime /home/datalab/medilake /home/datalab/dbt_session_profile /home/datalab/derby.log 2>/dev/null || true
+fi
+' >/dev/null 2>&1 || true
+
 echo "Container ${NAME} started from ${IMAGE}."
 echo "Enter with: docker exec -it -w / ${NAME} bash"

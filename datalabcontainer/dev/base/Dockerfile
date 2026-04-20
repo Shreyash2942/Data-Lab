@@ -69,6 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-11-jdk openjdk-17-jre-headless \
     libsnappy1v5 libzstd1 libsasl2-2 libkrb5-dev \
     curl wget git ca-certificates \
+    unixodbc unixodbc-dev \
     nodejs npm \
     build-essential \
     php-cli php-pgsql \
@@ -188,6 +189,17 @@ RUN tar -xzf /tmp/mongodb.tgz -C /opt \
     && mv /opt/mongodb-linux-x86_64-ubuntu2204-${MONGO_VERSION} ${MONGO_HOME} \
     && rm /tmp/mongodb.tgz
 
+ENV MONGOSH_VERSION=2.3.2 \
+    MONGOSH_HOME=/opt/mongosh
+
+ARG MONGOSH_TGZ_SHA256=2711b71082897535dd2302f51c8c93233aac1dfe466b6982a70df25187a50933
+ADD https://downloads.mongodb.com/compass/mongosh-${MONGOSH_VERSION}-linux-x64.tgz /tmp/mongosh.tgz
+RUN echo "${MONGOSH_TGZ_SHA256}  /tmp/mongosh.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/mongosh.tgz -C /opt \
+    && mv /opt/mongosh-${MONGOSH_VERSION}-linux-x64 ${MONGOSH_HOME} \
+    && ln -sf ${MONGOSH_HOME}/bin/mongosh /usr/local/bin/mongosh \
+    && rm /tmp/mongosh.tgz
+
 # MinIO server binary (runs as an in-container service)
 RUN curl -fsSL "https://dl.min.io/server/minio/release/linux-amd64/minio" -o /usr/local/bin/minio \
     && chmod +x /usr/local/bin/minio
@@ -225,6 +237,7 @@ RUN pip install \
     "dbt-hive==1.8.0" "dbt-spark==1.8.0" \
     "confluent-kafka==2.5.0" \
     "psycopg2-binary==2.9.9" "pymongo==4.8.0" "redis==5.0.8" \
+    "pyhive==0.7.0" "pyodbc==5.1.0" \
     "pytest" \
     "delta-spark==${DELTA_VERSION}"
 
