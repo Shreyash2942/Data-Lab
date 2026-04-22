@@ -61,8 +61,11 @@ Superset/Trino query model:
 Read-only information menus:
 
 1. Show running services
-2. Show service URLs
-3. Show connection details
+2. Show service health report
+3. Show service URLs
+4. Show connection details
+5. Run full health check
+6. Run fast health check
 
 ## Manage Services
 
@@ -95,8 +98,11 @@ datalab_app --start-full-platform
 
 ```bash
 datalab_app --status-services
+datalab_app --status-health
 datalab_app --status-urls
 datalab_app --status-connections
+datalab_app --health-check
+datalab_app --health-check-fast
 ```
 
 ### Test flag

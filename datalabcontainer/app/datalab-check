@@ -18,6 +18,39 @@ datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER
 
 source "${APP_DIR}/tech/common.sh"
 
+print_usage() {
+  cat <<'EOF'
+Data Lab health check
+
+Usage:
+  datalab-check [--full|--fast|--help]
+
+Options:
+  --full  Run version checks and jar presence checks (default)
+  --fast  Run command-presence checks and jar presence checks
+  --help  Show this help message
+EOF
+}
+
+CHECK_MODE="full"
+case "${1:-}" in
+  ""|--full)
+    CHECK_MODE="full"
+    ;;
+  --fast)
+    CHECK_MODE="fast"
+    ;;
+  --help|-h|help)
+    print_usage
+    exit 0
+    ;;
+  *)
+    echo "[!] Unknown option: ${1}" >&2
+    print_usage >&2
+    exit 2
+    ;;
+esac
+
 # Guard in case strip_cr was not loaded for any reason.
 if ! declare -F strip_cr >/dev/null; then
   strip_cr() {
@@ -30,6 +63,9 @@ fi
 WORKSPACE="$(strip_cr "${WORKSPACE:-/home/datalab}")"
 RUNTIME_ROOT="$(strip_cr "${RUNTIME_ROOT:-${WORKSPACE}/runtime}")"
 DATALAB_CHECK_FAST="$(strip_cr "${DATALAB_CHECK_FAST:-0}")"
+if [[ "${CHECK_MODE}" == "fast" ]]; then
+  DATALAB_CHECK_FAST=1
+fi
 mkdir -p "${RUNTIME_ROOT}"
 
 ok()  { printf '[OK]   %s\n' "$*"; }
@@ -62,6 +98,7 @@ is_truthy() {
 
 echo "=== Data Lab :: Quick Check ==="
 echo "Workspace: ${WORKSPACE}"
+echo "Mode: ${CHECK_MODE}"
 
 if is_truthy "${DATALAB_CHECK_FAST}"; then
   echo "[*] Fast mode enabled: using presence checks for CLI/tooling."

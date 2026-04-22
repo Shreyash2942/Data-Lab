@@ -342,6 +342,57 @@ else:
 PY
 }
 
+http_probe_ok() {
+  local port="$1" path="$2"
+  STATUS_HTTP_PORT="${port}" STATUS_HTTP_PATH="${path}" python3 - <<'PY'
+import os, sys, urllib.error, urllib.request
+port = int(os.environ["STATUS_HTTP_PORT"])
+path = os.environ["STATUS_HTTP_PATH"]
+request = urllib.request.Request(
+    f"http://127.0.0.1:{port}{path}",
+    headers={"User-Agent": "datalab-status-report"},
+)
+try:
+    with urllib.request.urlopen(request, timeout=2) as response:
+        sys.exit(0 if response.status < 500 else 1)
+except urllib.error.HTTPError as exc:
+    sys.exit(0 if exc.code < 500 else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+status_probe_endpoint() {
+  local port="$1" probe="$2" path="${3:-/}"
+  local host mapped_port
+
+  host="${DATALAB_UI_HOST:-localhost}"
+  mapped_port="$(common::mapped_host_port "${port}")"
+
+  if [[ "${probe}" == "http" ]]; then
+    common::ui_url "${port}" "${path}"
+    return 0
+  fi
+
+  case "${port}" in
+    5432)
+      printf 'postgresql://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    27017)
+      printf 'mongodb://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    6379)
+      printf 'redis://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    10000|9083)
+      printf 'thrift://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    *)
+      printf '%s:%s' "${host}" "${mapped_port}"
+      ;;
+  esac
+}
+
 show_running_services() {
   local services=(
     "Airflow:8080"
@@ -387,6 +438,68 @@ show_running_services() {
   done
 }
 
+show_service_health_report() {
+  local -a services=(
+    "Airflow|8080|http|/"
+    "Spark Master|9090|http|/metrics/master/prometheus"
+    "HDFS NameNode|9870|http|/"
+    "HiveServer2|10000|tcp|"
+    "Kafka Broker|9092|tcp|"
+    "Kafka UI|9002|http|/"
+    "Schema Registry|8085|http|/apis/registry/v3/system/info"
+    "Kafka Connect|8086|http|/connectors"
+    "PostgreSQL|5432|tcp|"
+    "MongoDB|27017|tcp|"
+    "Redis|6379|tcp|"
+    "Mongo Express|8083|http|/"
+    "Redis Commander|8084|http|/"
+    "pgAdmin|8181|http|/"
+    "JupyterLab|8888|http|/login"
+    "GX Data Docs|8891|http|/"
+    "Marquez API|5000|http|/api/v1/namespaces"
+    "Marquez UI|3000|http|/healthcheck"
+    "Prometheus|9095|http|/-/healthy"
+    "Grafana|3001|http|/api/health"
+    "MinIO API|9004|http|/minio/health/live"
+    "MinIO Console|9005|http|/"
+    "Trino|8091|http|/v1/info"
+    "Superset|8090|http|/health"
+  )
+  local entry name port probe path endpoint state
+  local healthy_count=0
+  local degraded_count=0
+  local stopped_count=0
+  local exit_code=0
+
+  echo "=== Service Health Report ==="
+  printf '  %-18s %-9s %-6s %s\n' "Service" "State" "Probe" "Endpoint"
+  for entry in "${services[@]}"; do
+    IFS='|' read -r name port probe path <<< "${entry}"
+    endpoint="$(status_probe_endpoint "${port}" "${probe}" "${path}")"
+
+    if port_is_open localhost "${port}"; then
+      if [[ "${probe}" == "http" ]] && ! http_probe_ok "${port}" "${path}"; then
+        state="degraded"
+        degraded_count=$((degraded_count + 1))
+        exit_code=1
+      else
+        state="healthy"
+        healthy_count=$((healthy_count + 1))
+      fi
+    else
+      state="stopped"
+      stopped_count=$((stopped_count + 1))
+      exit_code=1
+    fi
+
+    printf '  %-18s %-9s %-6s %s\n' "${name}" "${state}" "${probe}" "${endpoint}"
+  done
+
+  echo
+  echo "Healthy: ${healthy_count}  Degraded: ${degraded_count}  Stopped: ${stopped_count}"
+  return "${exit_code}"
+}
+
 show_status_urls() {
   echo "=== Service URLs ==="
   bash /home/datalab/app/ui_services --list || true
@@ -413,6 +526,14 @@ show_observability_access_summary() {
   echo "Grafana UI: $(common::ui_url "${GRAFANA_PORT:-3001}" "/") (login: ${GRAFANA_ADMIN_USER:-admin} / ${GRAFANA_ADMIN_PASSWORD:-admin})"
 }
 
+run_health_check() {
+  bash "${APP_DIR}/datalab-check" --full
+}
+
+run_health_check_fast() {
+  bash "${APP_DIR}/datalab-check" --fast
+}
+
 print_usage() {
   cat <<'EOF'
 Data Lab CLI
@@ -434,8 +555,11 @@ Start flags:
   --test-lakehouse-catalogs   Run Trino lakehouse smoke tests
   --setup-lakehouse-demo      Create simple demo schemas/tables (hudi/delta/iceberg)
   --status-services           Show running/stopped service status
+  --status-health             Show per-service health probe report
   --status-urls               Show UI URLs
   --status-connections        Show full connection details
+  --health-check              Run full dependency/tooling health checks
+  --health-check-fast         Run fast dependency/tooling health checks
 
 Manage individual starts:
   --start-airflow --start-spark --start-hadoop --start-hive --start-kafka
@@ -530,14 +654,20 @@ run_status_menu() {
   echo
   echo "=== Status & Access Info ==="
   echo "1) Show running services"
-  echo "2) Show service URLs"
-  echo "3) Show connection details"
+  echo "2) Show service health report"
+  echo "3) Show service URLs"
+  echo "4) Show connection details"
+  echo "5) Run full health check"
+  echo "6) Run fast health check"
   echo "0) Back"
   read -r -p "Select option: " opt
   case "${opt}" in
     1) show_running_services ;;
-    2) show_status_urls ;;
-    3) show_connection_details ;;
+    2) show_service_health_report ;;
+    3) show_status_urls ;;
+    4) show_connection_details ;;
+    5) run_health_check ;;
+    6) run_health_check_fast ;;
     0) return 0 ;;
     *) echo "Invalid option." ;;
   esac
@@ -688,6 +818,10 @@ handle_cli_flag() {
       show_running_services
       exit 0
       ;;
+    --status-health)
+      show_service_health_report
+      exit $?
+      ;;
     --status-urls)
       show_status_urls
       exit 0
@@ -695,6 +829,14 @@ handle_cli_flag() {
     --status-connections)
       show_connection_details
       exit 0
+      ;;
+    --health-check|--doctor)
+      run_health_check
+      exit $?
+      ;;
+    --health-check-fast|--doctor-fast)
+      run_health_check_fast
+      exit $?
       ;;
 
     # Legacy flags kept for compatibility
