@@ -141,6 +141,7 @@ docker run -d --name $Name `
   -e DATALAB_HOST_PORT_MAP="$hostPortMap" `
   $portArgs `
   -v ${datalabDir}\app:/home/datalab/app `
+  -v ${repoRoot}\datalabconfig:/home/datalab/datalabconfig `
   -v ${stacksDir}\python:/home/datalab/python `
   -v ${stacksDir}\spark:/home/datalab/spark `
   -v ${stacksDir}\airflow:/home/datalab/airflow `
@@ -178,6 +179,7 @@ DATALAB_HOST_PORT_MAP=$hostPortMap
 EOF
 chmod 644 $uiMapFile || true
 "@
+$uiMapScript = $uiMapScript -replace "`r", ""
 docker exec $Name sh -lc $uiMapScript 2>$null | Out-Null
 
 $bootstrapScript = @'
@@ -185,8 +187,6 @@ set -e
 # New container should start from a clean Kafka metadata state.
 rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
 bootstrap_paths=(
-  /home/datalab/medilake
-  /home/datalab/dbt_session_profile
   /home/datalab/runtime/spark/events
   /home/datalab/runtime/spark/warehouse
   /home/datalab/runtime/spark/logs
@@ -213,6 +213,7 @@ fi
 # files are usable as the datalab user.
 owned_paths=(
   /home/datalab/app
+  /home/datalab/datalabconfig
   /home/datalab/airflow
   /home/datalab/dbt
   /home/datalab/lakehouse
@@ -238,7 +239,6 @@ owned_paths=(
   /home/datalab/jupyter
   /home/datalab/superset
   /home/datalab/trino
-  /home/datalab/medilake
 )
 for p in "${owned_paths[@]}"; do
   [ -e "$p" ] || continue
@@ -246,6 +246,7 @@ for p in "${owned_paths[@]}"; do
   chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
 done
 '@
+$bootstrapScript = $bootstrapScript -replace "`r", ""
 docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null
 
 Write-Output "Container $Name started from $Image."

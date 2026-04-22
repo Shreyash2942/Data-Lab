@@ -30,6 +30,11 @@ for jar in \
   fi
 done
 : "${HIVE_AUX_JARS_PATH:=${HIVE_AUX_JARS_PATH_DEFAULT}}"
+: "${HIVE_EXEC_PARALLEL:=true}"
+: "${HIVE_EXEC_PARALLEL_THREAD_NUMBER:=2}"
+
+HIVE_EXEC_PARALLEL="$(strip_cr "${HIVE_EXEC_PARALLEL}")"
+HIVE_EXEC_PARALLEL_THREAD_NUMBER="$(strip_cr "${HIVE_EXEC_PARALLEL_THREAD_NUMBER}")"
 
 hive::ensure_dirs() {
   local metastore_parent
@@ -220,6 +225,8 @@ hive::start_hs2() {
   HIVE_CONF_DIR="${HIVE_HOME}/conf" \
   HADOOP_CONF_DIR="${HADOOP_HOME}/etc/hadoop" \
   HIVE_AUX_JARS_PATH="${HIVE_AUX_JARS_PATH}" \
+  HIVE_EXEC_PARALLEL="${HIVE_EXEC_PARALLEL}" \
+  HIVE_EXEC_PARALLEL_THREAD_NUMBER="${HIVE_EXEC_PARALLEL_THREAD_NUMBER}" \
   HIVE_LOG_DIR="${HIVE_LOG_DIR}" \
   HIVESERVER2_PID_DIR="${HIVE_PID_DIR}" \
   JAVA_HOME=${JAVA_HOME} \
@@ -229,6 +236,8 @@ hive::start_hs2() {
       --hiveconf hive.server2.thrift.port="${HIVE_SERVER2_THRIFT_PORT}" \
       --hiveconf hive.notification.event.poll.interval=0 \
       --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
+      --hiveconf hive.exec.parallel="${HIVE_EXEC_PARALLEL}" \
+      --hiveconf hive.exec.parallel.thread.number="${HIVE_EXEC_PARALLEL_THREAD_NUMBER}" \
       --hiveconf hive.aux.jars.path="${HIVE_AUX_JARS_PATH}" \
       > "${HIVE_HS2_LOG_FILE}" 2>&1 &
   echo $! > "${HIVE_HS2_PID_FILE}"

@@ -11,6 +11,7 @@ services:
       - .env
     volumes:
       - ./app:/home/datalab/app
+      - ../datalabconfig:/home/datalab/datalabconfig
       - ../stacks/python:/home/datalab/python
       - ../stacks/spark:/home/datalab/spark
       - ../stacks/airflow:/home/datalab/airflow

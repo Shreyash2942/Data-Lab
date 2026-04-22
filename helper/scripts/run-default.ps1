@@ -62,8 +62,6 @@ if ($LASTEXITCODE -ne 0) {
 $bootstrapScript = @'
 set -e
 bootstrap_paths=(
-  /home/datalab/medilake
-  /home/datalab/dbt_session_profile
   /home/datalab/runtime/spark/events
   /home/datalab/runtime/spark/warehouse
   /home/datalab/runtime/spark/logs
@@ -86,4 +84,5 @@ if id datalab >/dev/null 2>&1; then
   chmod -R u+rwX,go+rX /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
 fi
 '@
+$bootstrapScript = $bootstrapScript -replace "`r", ""
 docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null

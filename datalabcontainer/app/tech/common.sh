@@ -76,6 +76,99 @@ common::init_workdir() {
 
 common::init_workdir
 
+: "${DATALAB_RUNTIME_CONFIG_DIR:=${RUNTIME_ROOT}/config}"
+: "${DATALAB_RUNTIME_OVERRIDE_FILE:=${DATALAB_RUNTIME_CONFIG_DIR}/datalab-overrides.env}"
+: "${DATALAB_SPARK_CPU_LIMIT_PERCENT:=60}"
+mkdir -p "${DATALAB_RUNTIME_CONFIG_DIR}"
+export DATALAB_RUNTIME_CONFIG_DIR DATALAB_RUNTIME_OVERRIDE_FILE DATALAB_SPARK_CPU_LIMIT_PERCENT
+
+common::load_runtime_overrides() {
+  local override_file="${DATALAB_RUNTIME_OVERRIDE_FILE}"
+  if [[ ! -f "${override_file}" ]]; then
+    return 0
+  fi
+
+  set -a
+  # shellcheck source=/dev/null
+  source "${override_file}"
+  set +a
+}
+
+common::load_runtime_overrides
+
+common::detect_effective_cpu() {
+  python3 - <<'PY'
+import math
+import os
+
+def read_first(path):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+host_cpu = max(1, os.cpu_count() or 1)
+limit_cpu = None
+
+cpu_max = read_first("/sys/fs/cgroup/cpu.max")
+if cpu_max:
+    parts = cpu_max.split()
+    if len(parts) == 2 and parts[0] != "max":
+        quota = int(parts[0])
+        period = int(parts[1])
+        if quota > 0 and period > 0:
+            limit_cpu = max(1, math.floor(quota / period))
+
+if limit_cpu is None:
+    quota = read_first("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+    period = read_first("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+    if quota and period and quota != "-1":
+        quota_i = int(quota)
+        period_i = int(period)
+        if quota_i > 0 and period_i > 0:
+            limit_cpu = max(1, math.floor(quota_i / period_i))
+
+effective_cpu = min(host_cpu, limit_cpu) if limit_cpu is not None else host_cpu
+print(effective_cpu)
+PY
+}
+
+common::spark_worker_core_cap() {
+  local effective_cpu
+  effective_cpu="$(common::detect_effective_cpu)"
+  EFFECTIVE_CPU_RAW="$(strip_cr "${effective_cpu}")"
+  if [[ ! "${EFFECTIVE_CPU_RAW}" =~ ^[0-9]+$ ]] || [[ "${EFFECTIVE_CPU_RAW}" -le 0 ]]; then
+    EFFECTIVE_CPU_RAW=1
+  fi
+  local cap=$(( (EFFECTIVE_CPU_RAW * DATALAB_SPARK_CPU_LIMIT_PERCENT) / 100 ))
+  if [[ "${cap}" -lt 1 ]]; then
+    cap=1
+  fi
+  printf '%s' "${cap}"
+}
+
+common::enforce_runtime_limits() {
+  local spark_core_cap
+  spark_core_cap="$(common::spark_worker_core_cap)"
+
+  if [[ -n "${SPARK_WORKER_CORES:-}" ]] && [[ "${SPARK_WORKER_CORES}" =~ ^[0-9]+$ ]] && [[ "${SPARK_WORKER_CORES}" -gt "${spark_core_cap}" ]]; then
+    echo "[!] SPARK_WORKER_CORES=${SPARK_WORKER_CORES} exceeds ${DATALAB_SPARK_CPU_LIMIT_PERCENT}% CPU limit. Clamping to ${spark_core_cap}." >&2
+    SPARK_WORKER_CORES="${spark_core_cap}"
+    export SPARK_WORKER_CORES
+  fi
+
+  if [[ -n "${DATALAB_SPARK_APP_MAX_CORES:-}" ]] && [[ "${DATALAB_SPARK_APP_MAX_CORES}" =~ ^[0-9]+$ ]] && \
+     [[ -n "${SPARK_WORKER_CORES:-}" ]] && [[ "${SPARK_WORKER_CORES}" =~ ^[0-9]+$ ]] && \
+     [[ "${DATALAB_SPARK_APP_MAX_CORES}" -gt "${SPARK_WORKER_CORES}" ]]; then
+    echo "[!] DATALAB_SPARK_APP_MAX_CORES=${DATALAB_SPARK_APP_MAX_CORES} exceeds SPARK_WORKER_CORES=${SPARK_WORKER_CORES}. Clamping app max cores to ${SPARK_WORKER_CORES}." >&2
+    DATALAB_SPARK_APP_MAX_CORES="${SPARK_WORKER_CORES}"
+    export DATALAB_SPARK_APP_MAX_CORES
+  fi
+}
+
+common::enforce_runtime_limits
+
 : "${SPARK_HOME:=/opt/spark}"
 : "${HADOOP_HOME:=/opt/hadoop}"
 : "${HADOOP_COMMON_LIB_NATIVE_DIR:=${HADOOP_HOME}/lib/native}"
@@ -138,12 +231,13 @@ common::ensure_cli_shortcuts() {
   local rc_file="${HOME}/.bashrc"
   local export_line='export PATH="'"${WORKSPACE}"'/app/bin:$PATH"'
   local hive_alias="alias hive='bash \"${WORKSPACE}/app/bin/hive\"'"
+  local dbt_alias="alias dbt='bash \"${WORKSPACE}/app/bin/dbt\"'"
   local spark_submit_alias="alias spark-submit='bash \"${WORKSPACE}/app/bin/spark-submit\"'"
   local spark_sql_alias="alias spark-sql='bash \"${WORKSPACE}/app/bin/spark-sql\"'"
   local profile_file="${HOME}/.profile"
 
   if [ ! -e "${rc_file}" ]; then
-    printf '# Data Lab CLI shortcuts\n%s\n%s\n%s\n%s\n' "${export_line}" "${hive_alias}" "${spark_submit_alias}" "${spark_sql_alias}" > "${rc_file}" 2>/dev/null || true
+    printf '# Data Lab CLI shortcuts\n%s\n%s\n%s\n%s\n%s\n' "${export_line}" "${hive_alias}" "${dbt_alias}" "${spark_submit_alias}" "${spark_sql_alias}" > "${rc_file}" 2>/dev/null || true
     return
   fi
 
@@ -154,6 +248,9 @@ common::ensure_cli_shortcuts() {
   if [ -w "${rc_file}" ] && ! grep -Fq "${hive_alias}" "${rc_file}" 2>/dev/null; then
     printf '%s\n' "${hive_alias}" >> "${rc_file}" 2>/dev/null || true
   fi
+  if [ -w "${rc_file}" ] && ! grep -Fq "${dbt_alias}" "${rc_file}" 2>/dev/null; then
+    printf '%s\n' "${dbt_alias}" >> "${rc_file}" 2>/dev/null || true
+  fi
   if [ -w "${rc_file}" ] && ! grep -Fq "${spark_submit_alias}" "${rc_file}" 2>/dev/null; then
     printf '%s\n' "${spark_submit_alias}" >> "${rc_file}" 2>/dev/null || true
   fi
@@ -163,13 +260,16 @@ common::ensure_cli_shortcuts() {
 
   # Ensure login shells also pick up the alias/PATH
   if [ ! -e "${profile_file}" ]; then
-    printf '%s\n%s\n%s\n%s\n' "${export_line}" "${hive_alias}" "${spark_submit_alias}" "${spark_sql_alias}" > "${profile_file}" 2>/dev/null || true
+    printf '%s\n%s\n%s\n%s\n%s\n' "${export_line}" "${hive_alias}" "${dbt_alias}" "${spark_submit_alias}" "${spark_sql_alias}" > "${profile_file}" 2>/dev/null || true
   else
     if [ -w "${profile_file}" ] && ! grep -Fq 'app/bin' "${profile_file}" 2>/dev/null; then
       printf '%s\n' "${export_line}" >> "${profile_file}" 2>/dev/null || true
     fi
     if [ -w "${profile_file}" ] && ! grep -Fq "${hive_alias}" "${profile_file}" 2>/dev/null; then
       printf '%s\n' "${hive_alias}" >> "${profile_file}" 2>/dev/null || true
+    fi
+    if [ -w "${profile_file}" ] && ! grep -Fq "${dbt_alias}" "${profile_file}" 2>/dev/null; then
+      printf '%s\n' "${dbt_alias}" >> "${profile_file}" 2>/dev/null || true
     fi
     if [ -w "${profile_file}" ] && ! grep -Fq "${spark_submit_alias}" "${profile_file}" 2>/dev/null; then
       printf '%s\n' "${spark_submit_alias}" >> "${profile_file}" 2>/dev/null || true

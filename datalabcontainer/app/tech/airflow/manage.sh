@@ -35,7 +35,6 @@ airflow::resolve_dags_folder() {
   fi
 
   candidates+=(
-    "${WORKSPACE}/medilake/Airflow/dags"
     "${WORKSPACE}/airflow/dags"
     "${AIRFLOW_HOME}/dags"
   )
@@ -135,26 +134,12 @@ airflow::configure_runtime() {
 
 airflow::resolve_project_bootstrap_script() {
   local candidate
-  local -a candidates=()
 
   if [[ -n "${DATALAB_AIRFLOW_BOOTSTRAP_SCRIPT:-}" ]]; then
     candidate="$(strip_cr "${DATALAB_AIRFLOW_BOOTSTRAP_SCRIPT}")"
     [[ -f "${candidate}" ]] && printf '%s' "${candidate}"
     return 0
   fi
-
-  candidates+=(
-    "${WORKSPACE}/medilake/Airflow/scripts/bootstrap_local_airflow.sh"
-  )
-
-  for candidate in "${candidates[@]}"; do
-    candidate="$(strip_cr "${candidate}")"
-    [[ -z "${candidate}" ]] && continue
-    if [[ -f "${candidate}" ]]; then
-      printf '%s' "${candidate}"
-      return 0
-    fi
-  done
 
   return 1
 }
@@ -166,16 +151,6 @@ airflow::ensure_project_metadata() {
   if [[ -n "${bootstrap_script}" ]]; then
     echo "[*] Running project Airflow bootstrap: ${bootstrap_script}"
     bash "${bootstrap_script}"
-  fi
-
-  # MediLake DAGs use a shared Spark pool. Recreate it idempotently on every
-  # Airflow bootstrap so refreshed/copied containers don't leave tasks stuck in
-  # the scheduled state waiting on a missing pool.
-  if [[ -d "${WORKSPACE}/medilake/Airflow/dags" ]]; then
-    airflow pools set \
-      "${MEDILAKE_SPARK_POOL:-medilake_spark}" \
-      "${MEDILAKE_SPARK_POOL_SIZE:-2}" \
-      "MediLake Spark-backed task capacity" >/dev/null
   fi
 }
 

@@ -10,6 +10,8 @@ HS2_DB="${HIVE_CLI_DB:-default}"
 HS2_USER="${HIVE_CLI_USER:-datalab}"
 HS2_PASS="${HIVE_CLI_PASS:-}"
 HIVE_RC_FILE="${HIVE_RC_FILE:-${HOME}/.hiverc}"
+HIVE_EXEC_PARALLEL="${HIVE_EXEC_PARALLEL:-true}"
+HIVE_EXEC_PARALLEL_THREAD_NUMBER="${HIVE_EXEC_PARALLEL_THREAD_NUMBER:-2}"
 
 if ! command -v "${HIVE_BIN}" >/dev/null 2>&1; then
   echo "[!] Hive binary not found at ${HIVE_BIN}." >&2
@@ -83,4 +85,6 @@ echo "[*] Launching classic Hive CLI session."
 exec "${HIVE_BIN}" --service cli \
   "${INIT_ARGS[@]}" \
   --hiveconf hive.cli.print.current.db=true \
+  --hiveconf hive.exec.parallel="${HIVE_EXEC_PARALLEL}" \
+  --hiveconf hive.exec.parallel.thread.number="${HIVE_EXEC_PARALLEL_THREAD_NUMBER}" \
   "$@"

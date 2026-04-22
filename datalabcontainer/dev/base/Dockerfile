@@ -332,6 +332,7 @@ LABEL com.docker.compose.project="" \
 USER root
 # Copy only the required project folders into the image (preserving folder names)
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/app /home/${LAB_APP_USER}/app
+COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabconfig /home/${LAB_APP_USER}/datalabconfig
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/airflow /home/${LAB_APP_USER}/airflow
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/dbt /home/${LAB_APP_USER}/dbt
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/hadoop /home/${LAB_APP_USER}/hadoop
@@ -359,7 +360,8 @@ COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} stacks/jupyter /home/${LAB_APP_USER
 COPY --chown=${LAB_APP_USER}:${LAB_APP_USER} datalabcontainer/runtime /home/${LAB_APP_USER}/runtime
 RUN find /home/${LAB_APP_USER}/app/bin -type f -exec chmod +x {} \; \
     && find /home/${LAB_APP_USER}/app/tech -type f -name "*.sh" -exec chmod +x {} \; \
-    && find /home/${LAB_APP_USER}/app/scripts -type f -name "*.sh" -exec chmod +x {} \;
+    && find /home/${LAB_APP_USER}/app/scripts -type f -name "*.sh" -exec chmod +x {} \; \
+    && find /home/${LAB_APP_USER}/datalabconfig -type f -name "*.sh" -exec chmod +x {} \;
 
 RUN install -d /etc/profile.d
 
@@ -386,9 +388,6 @@ export WORKSPACE="/home/datalab"
 export RUNTIME_ROOT="${WORKSPACE}/runtime"
 export LAKEHOUSE_STACK_ROOT="${WORKSPACE}/lakehouse"
 export AIRFLOW_HOME="${AIRFLOW_HOME:-${RUNTIME_ROOT}/airflow}"
-if [ -z "${DATALAB_AIRFLOW_DAGS_FOLDER:-}" ] && [ -d "${WORKSPACE}/medilake/Airflow/dags" ]; then
-  export DATALAB_AIRFLOW_DAGS_FOLDER="${WORKSPACE}/medilake/Airflow/dags"
-fi
 export AIRFLOW__CORE__DAGS_FOLDER="${AIRFLOW__CORE__DAGS_FOLDER:-${DATALAB_AIRFLOW_DAGS_FOLDER:-${WORKSPACE}/airflow/dags}}"
 export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
 export AIRFLOW__CORE__EXECUTOR="${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}"
@@ -439,6 +438,15 @@ exec bash /home/datalab/app/ui_services "$@"
 EOF
 RUN sed -i 's/\r$//' /usr/local/bin/ui_services \
     && chmod +x /usr/local/bin/ui_services
+
+RUN cat <<'EOF' >/usr/local/bin/datalab_config
+#!/usr/bin/env bash
+set -e
+
+exec bash /home/datalab/datalabconfig/manage.sh "$@"
+EOF
+RUN sed -i 's/\r$//' /usr/local/bin/datalab_config \
+    && chmod +x /usr/local/bin/datalab_config
 ENTRYPOINT ["/usr/local/bin/datalab-entrypoint.sh"]
 
 USER ${LAB_APP_USER}

@@ -6,6 +6,7 @@ Data Lab is a single-container data engineering environment for Spark, Hadoop, H
 
 ## Repository Layout
 - `datalabcontainer/`: container build/runtime assets
+- `datalabconfig/`: runtime tuning and configuration command layer
 - `stacks/`: stack examples and stack-level READMEs
 - `helper/scripts/`: host-side helper scripts for build/run/copy/access
 - `docs/`: architecture and detailed documentation
@@ -45,7 +46,13 @@ su - datalab
 Service control:
 ```bash
 datalab_app
+datalab_config show
+datalab_config detect
+datalab_config recommend
+datalab_config apply balanced
 datalab_app --start-core
+datalab_app --status-health
+datalab_app --health-check-fast
 ```
 
 CDC demo:

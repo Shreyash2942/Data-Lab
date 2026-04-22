@@ -11,13 +11,13 @@ data_lab:
       host: localhost
       port: 10000
       schema: default
-      threads: 2
+      threads: "{{ env_var('DBT_HIVE_THREADS', '2') | int }}"
     spark_session:
       type: spark
       method: session
       host: localhost
       schema: default
-      threads: 2
+      threads: "{{ env_var('DBT_SPARK_THREADS', '2') | int }}"
       server_side_parameters:
         spark.master: spark://localhost:7077
         spark.sql.catalogImplementation: hive

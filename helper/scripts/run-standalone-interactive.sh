@@ -65,6 +65,7 @@ done
 
 volume_flags=(
   -v "${DATALAB_DIR}/app:/home/datalab/app"
+  -v "${REPO_ROOT}/datalabconfig:/home/datalab/datalabconfig"
   -v "${STACKS_DIR}/python:/home/datalab/python"
   -v "${STACKS_DIR}/spark:/home/datalab/spark"
   -v "${STACKS_DIR}/airflow:/home/datalab/airflow"
@@ -102,8 +103,6 @@ docker run -d --name "${NAME}" \
 docker exec "${NAME}" bash -lc '
 set -e
 bootstrap_paths=(
-  /home/datalab/medilake
-  /home/datalab/dbt_session_profile
   /home/datalab/runtime/spark/events
   /home/datalab/runtime/spark/warehouse
   /home/datalab/runtime/spark/logs
@@ -125,6 +124,12 @@ if id datalab >/dev/null 2>&1; then
   chown -R datalab:datalab /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
   chmod -R u+rwX,go+rX /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
 fi
+
+for p in /home/datalab/app /home/datalab/datalabconfig; do
+  [ -e "$p" ] || continue
+  chown -R datalab:datalab "$p" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
+done
 ' >/dev/null 2>&1 || true
 
 echo "Container ${NAME} started from ${IMAGE}."

@@ -9,8 +9,8 @@ Param(
   [switch]$BindProjectFiles,
   [switch]$IncludeLakehousePorts,
   [switch]$ExcludeLakehousePorts,
-  [string]$DefaultProjectHostPath = "D:\GitHub\MediLake",
-  [string]$DefaultProjectContainerPath = "/home/datalab/medilake",
+  [string]$DefaultProjectHostPath = "",
+  [string]$DefaultProjectContainerPath = "/home/datalab/project",
   [switch]$SkipDefaultProjectMount,
   [switch]$NoPromptVolumes
 )
@@ -254,6 +254,7 @@ if ($BindProjectFiles) {
   Invoke-LinuxLineEndingFix -RootPath $datalabDir
   $defaultVolumes = @(
     "$datalabDir\app:/home/datalab/app",
+    "$repoRoot\datalabconfig:/home/datalab/datalabconfig",
     "$stacksDir\python:/home/datalab/python",
     "$stacksDir\spark:/home/datalab/spark",
     "$stacksDir\airflow:/home/datalab/airflow",
@@ -281,7 +282,7 @@ if ($BindProjectFiles) {
   )
 }
 
-if (-not $SkipDefaultProjectMount) {
+if (-not $SkipDefaultProjectMount -and $DefaultProjectHostPath) {
   if (Test-Path $DefaultProjectHostPath) {
     $defaultVolumes += "$DefaultProjectHostPath`:$DefaultProjectContainerPath"
     Write-Host "Auto-mounted project path: $DefaultProjectHostPath -> $DefaultProjectContainerPath"
@@ -371,9 +372,9 @@ foreach ($mapping in $resolvedDefaultPorts) {
 $hostPortMap = $hostPortMapEntries -join ","
 
 $airflowDagsFolder = "/home/datalab/airflow/dags"
-if (-not $SkipDefaultProjectMount) {
-  $medilakeAirflowHostPath = Join-Path $DefaultProjectHostPath "Airflow\dags"
-  if (Test-Path $medilakeAirflowHostPath) {
+if (-not $SkipDefaultProjectMount -and $DefaultProjectHostPath) {
+  $projectAirflowHostPath = Join-Path $DefaultProjectHostPath "Airflow\dags"
+  if (Test-Path $projectAirflowHostPath) {
     $airflowDagsFolder = (Resolve-ContainerMountPath -InputPath "$DefaultProjectContainerPath/Airflow/dags" -DefaultRoot "/home/datalab")
   }
 }
@@ -427,8 +428,6 @@ set -e
 # New copied container should start from a clean Kafka metadata state.
 rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
 bootstrap_paths=(
-  /home/datalab/medilake
-  /home/datalab/dbt_session_profile
   /home/datalab/runtime/spark/events
   /home/datalab/runtime/spark/warehouse
   /home/datalab/runtime/spark/logs
@@ -476,9 +475,6 @@ export RUNTIME_ROOT="${WORKSPACE}/runtime"
 export LAKEHOUSE_STACK_ROOT="${WORKSPACE}/lakehouse"
 export AIRFLOW_HOME="${AIRFLOW_HOME:-${RUNTIME_ROOT}/airflow}"
 export DATALAB_AIRFLOW_DAGS_FOLDER="${DATALAB_AIRFLOW_DAGS_FOLDER:-__AIRFLOW_DAGS_FOLDER__}"
-if [ -d "${WORKSPACE}/medilake/Airflow/dags" ]; then
-  export DATALAB_AIRFLOW_DAGS_FOLDER="${WORKSPACE}/medilake/Airflow/dags"
-fi
 export AIRFLOW__CORE__DAGS_FOLDER="${AIRFLOW__CORE__DAGS_FOLDER:-${DATALAB_AIRFLOW_DAGS_FOLDER}}"
 export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
 export AIRFLOW__CORE__EXECUTOR="${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}"
@@ -510,6 +506,7 @@ fi
 # files are usable as the datalab user.
 owned_paths=(
   /home/datalab/app
+  /home/datalab/datalabconfig
   /home/datalab/airflow
   /home/datalab/dbt
   /home/datalab/lakehouse
@@ -535,8 +532,6 @@ owned_paths=(
   /home/datalab/jupyter
   /home/datalab/superset
   /home/datalab/trino
-  /home/datalab/medilake
-  /home/datalab/dbt_session_profile
   /home/datalab/derby.log
 )
 for p in "${owned_paths[@]}"; do
@@ -546,6 +541,7 @@ for p in "${owned_paths[@]}"; do
 done
 '@
 $bootstrapScript = $bootstrapScript.Replace("__AIRFLOW_DAGS_FOLDER__", $airflowDagsFolder)
+$bootstrapScript = $bootstrapScript -replace "`r", ""
 Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $bootstrapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-bootstrap.sh"
 
 Write-Output "Container $NewName started from image $resolvedImage."

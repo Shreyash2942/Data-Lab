@@ -10,6 +10,8 @@ HS2_PROMPT="${HIVE_CLI_PROMPT:-hive (!d)> }"
 HIVE_RC_FILE="${HIVE_RC_FILE:-${HOME}/.hiverc}"
 BEELINE_SILENT="${HIVE_CLI_SILENT:-true}"
 BEELINE_VERBOSE="${HIVE_CLI_VERBOSE:-false}"
+HIVE_EXEC_PARALLEL="${HIVE_EXEC_PARALLEL:-true}"
+HIVE_EXEC_PARALLEL_THREAD_NUMBER="${HIVE_EXEC_PARALLEL_THREAD_NUMBER:-2}"
 
 JDBC_URL="jdbc:hive2://${HS2_HOST}:${HS2_PORT}/${HS2_DB}"
 
@@ -76,4 +78,6 @@ exec beeline \
   "${BEELINE_OPTS[@]}" \
   --hiveconf beeline.prompt="${HS2_PROMPT}" \
   --hiveconf hive.cli.print.current.db=true \
+  --hiveconf hive.exec.parallel="${HIVE_EXEC_PARALLEL}" \
+  --hiveconf hive.exec.parallel.thread.number="${HIVE_EXEC_PARALLEL_THREAD_NUMBER}" \
   -u "${JDBC_URL}" -n "${HS2_USER}" -p "${HS2_PASS}" "$@"
