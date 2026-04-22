@@ -52,9 +52,9 @@ port_flags=(
   -p 10000:10000
   -p 10001:10001
   -p 9002:9002
+  -p 8181:8181
   -p 8083:8083
   -p 8084:8084
-  -p 8181:8181
   -p 5432:5432
   -p 27017:27017
   -p 6379:6379
@@ -65,6 +65,7 @@ done
 
 volume_flags=(
   -v "${DATALAB_DIR}/app:/home/datalab/app"
+  -v "${REPO_ROOT}/datalabconfig:/home/datalab/datalabconfig"
   -v "${STACKS_DIR}/python:/home/datalab/python"
   -v "${STACKS_DIR}/spark:/home/datalab/spark"
   -v "${STACKS_DIR}/airflow:/home/datalab/airflow"
@@ -78,9 +79,7 @@ volume_flags=(
   -v "${STACKS_DIR}/mongodb:/home/datalab/mongodb"
   -v "${STACKS_DIR}/postgres:/home/datalab/postgres"
   -v "${STACKS_DIR}/redis:/home/datalab/redis"
-  -v "${STACKS_DIR}/hudi:/home/datalab/hudi"
-  -v "${STACKS_DIR}/iceberg:/home/datalab/iceberg"
-  -v "${STACKS_DIR}/delta:/home/datalab/delta"
+  -v "${STACKS_DIR}/lakehouse:/home/datalab/lakehouse"
   -v "${DATALAB_DIR}/runtime:/home/datalab/runtime"
 )
 for m in "${extra_mounts[@]}"; do
@@ -100,6 +99,38 @@ docker run -d --name "${NAME}" \
   "${volume_flags[@]}" \
   "${IMAGE}" \
   sleep infinity
+
+docker exec "${NAME}" bash -lc '
+set -e
+bootstrap_paths=(
+  /home/datalab/runtime/spark/events
+  /home/datalab/runtime/spark/warehouse
+  /home/datalab/runtime/spark/logs
+  /home/datalab/runtime/spark/pids
+  /home/datalab/runtime/kafka/data
+  /home/datalab/runtime/kafka/logs
+  /home/datalab/runtime/kafka/pids
+  /home/datalab/runtime/kafka/zookeeper-data
+  /home/datalab/runtime/java
+  /home/datalab/runtime/scala
+)
+mkdir -p "${bootstrap_paths[@]}"
+touch /home/datalab/derby.log 2>/dev/null || true
+for _ in $(seq 1 20); do
+  id datalab >/dev/null 2>&1 && break
+  sleep 1
+done
+if id datalab >/dev/null 2>&1; then
+  chown -R datalab:datalab /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+  chmod -R u+rwX,go+rX /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+fi
+
+for p in /home/datalab/app /home/datalab/datalabconfig; do
+  [ -e "$p" ] || continue
+  chown -R datalab:datalab "$p" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
+done
+' >/dev/null 2>&1 || true
 
 echo "Container ${NAME} started from ${IMAGE}."
 if [[ ${#extra_ports[@]} -gt 0 ]]; then

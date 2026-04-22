@@ -1,12 +1,18 @@
 Param(
   [string]$SourceName = "datalab",
   [string]$NewName = "",
-  [string]$Image = "shreyash42/data-lab:latest",
+  [string]$Image = "",
   [switch]$UseSourceImage,
   [switch]$ForcePull,
   [string[]]$ExtraPorts = @(),
   [string]$UiHost = "localhost",
-  [switch]$BindProjectFiles
+  [switch]$BindProjectFiles,
+  [switch]$IncludeLakehousePorts,
+  [switch]$ExcludeLakehousePorts,
+  [string]$DefaultProjectHostPath = "",
+  [string]$DefaultProjectContainerPath = "/home/datalab/project",
+  [switch]$SkipDefaultProjectMount,
+  [switch]$NoPromptVolumes
 )
 
 Set-StrictMode -Version Latest
@@ -106,6 +112,53 @@ function Invoke-LinuxLineEndingFix {
   }
 }
 
+function Get-SafeVolumeSuffix {
+  Param([string]$Name)
+  $safe = ($Name -replace "[^a-zA-Z0-9_.-]", "-").ToLowerInvariant()
+  if (-not $safe) {
+    $safe = "default"
+  }
+  return $safe
+}
+
+function Resolve-ContainerMountPath {
+  Param(
+    [string]$InputPath,
+    [string]$DefaultRoot = "/home/datalab"
+  )
+
+  $normalized = if ($null -eq $InputPath) { "" } else { [string]$InputPath }
+  $normalized = $normalized.Trim()
+  if (-not $normalized) {
+    return ""
+  }
+
+  $normalized = $normalized.Replace("\", "/")
+
+  if ($normalized.StartsWith("~/")) {
+    $normalized = "$DefaultRoot/" + $normalized.Substring(2)
+  } elseif (-not $normalized.StartsWith("/")) {
+    $normalized = "$DefaultRoot/" + ($normalized.TrimStart(".","/"))
+  }
+
+  return ($normalized -replace "/{2,}", "/")
+}
+
+function Invoke-ContainerShellScript {
+  Param(
+    [string]$ContainerName,
+    [string]$ScriptText,
+    [string]$Shell = "bash",
+    [string]$RemotePath = "/tmp/datalab-copy-bootstrap.sh"
+  )
+
+  $execCommand = "cat > '$RemotePath' && (sed -i 's/\r$//' '$RemotePath' 2>/dev/null || true) && $Shell '$RemotePath'"
+  $ScriptText | docker exec -i $ContainerName $Shell -lc $execCommand 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to run bootstrap script '$RemotePath' in container '$ContainerName'."
+  }
+}
+
 if (-not $NewName) {
   $NewName = Read-Host "New container name"
 }
@@ -113,6 +166,8 @@ if (-not $NewName) {
   throw "Container name is required."
 }
 
+$preferredLocalImage = "data-lab:latest"
+$publishedFallbackImage = "shreyash42/data-lab:latest"
 $resolvedImage = $Image
 if ($UseSourceImage) {
   $exists = docker container inspect $SourceName 2>$null
@@ -128,7 +183,13 @@ if ($UseSourceImage) {
   Write-Host "Using source image: $resolvedImage"
 } else {
   if (-not $resolvedImage) {
-    throw "Image is required. Pass -Image <repo/image:tag>."
+    if (Test-ImageExists -ImageRef $preferredLocalImage) {
+      $resolvedImage = $preferredLocalImage
+      Write-Host "Using local rebuilt image by default: $resolvedImage"
+    } else {
+      $resolvedImage = $publishedFallbackImage
+      Write-Host "Local '$preferredLocalImage' not found. Falling back to published image: $resolvedImage"
+    }
   }
 
   $imageExistsLocally = Test-ImageExists -ImageRef $resolvedImage
@@ -148,9 +209,20 @@ if ($UseSourceImage) {
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084", "8085:8085", "8086:8086",
+  "8888:8888", "8891:8891", "5000:5000", "3000:3000", "9095:9095", "3001:3001",
   "5432:5432", "27017:27017", "6379:6379"
 )
+
+# Include lakehouse/analytics ports by default so copied containers expose the
+# full platform with conflict-free dynamic host mappings.
+$includeLakehouseByDefault = $true
+if ($ExcludeLakehousePorts -and -not $IncludeLakehousePorts) {
+  $includeLakehouseByDefault = $false
+}
+if ($includeLakehouseByDefault) {
+  $defaultPorts += @("8090:8090", "8091:8091", "9004:9004", "9005:9005")
+}
 
 $resolvedDefaultPorts = @()
 $reservedPorts = @()
@@ -182,6 +254,7 @@ if ($BindProjectFiles) {
   Invoke-LinuxLineEndingFix -RootPath $datalabDir
   $defaultVolumes = @(
     "$datalabDir\app:/home/datalab/app",
+    "$repoRoot\datalabconfig:/home/datalab/datalabconfig",
     "$stacksDir\python:/home/datalab/python",
     "$stacksDir\spark:/home/datalab/spark",
     "$stacksDir\airflow:/home/datalab/airflow",
@@ -192,31 +265,59 @@ if ($BindProjectFiles) {
     "$stacksDir\hive:/home/datalab/hive",
     "$stacksDir\hadoop:/home/datalab/hadoop",
     "$stacksDir\kafka:/home/datalab/kafka",
+    "$stacksDir\kafka_connect:/home/datalab/kafka_connect",
     "$stacksDir\mongodb:/home/datalab/mongodb",
+    "$stacksDir\minio:/home/datalab/minio",
+    "$stacksDir\marquez:/home/datalab/marquez",
     "$stacksDir\postgres:/home/datalab/postgres",
+    "$stacksDir\prometheus:/home/datalab/prometheus",
     "$stacksDir\redis:/home/datalab/redis",
-    "$stacksDir\hudi:/home/datalab/hudi",
-    "$stacksDir\iceberg:/home/datalab/iceberg",
-    "$stacksDir\delta:/home/datalab/delta"
+    "$stacksDir\schema_registry:/home/datalab/schema_registry",
+    "$stacksDir\lakehouse:/home/datalab/lakehouse",
+    "$stacksDir\grafana:/home/datalab/grafana",
+    "$stacksDir\great_expectations:/home/datalab/great_expectations",
+    "$stacksDir\jupyter:/home/datalab/jupyter",
+    "$stacksDir\superset:/home/datalab/superset",
+    "$stacksDir\trino:/home/datalab/trino"
   )
 }
 
+if (-not $SkipDefaultProjectMount -and $DefaultProjectHostPath) {
+  if (Test-Path $DefaultProjectHostPath) {
+    $defaultVolumes += "$DefaultProjectHostPath`:$DefaultProjectContainerPath"
+    Write-Host "Auto-mounted project path: $DefaultProjectHostPath -> $DefaultProjectContainerPath"
+  } else {
+    Write-Warning "Default project path '$DefaultProjectHostPath' was not found. Skipping auto-mount."
+  }
+}
+
 $collectedVolumes = @()
-while ($true) {
-  $hostPath = Read-Host "Host path to bind (blank to finish)"
-  if (-not $hostPath) { break }
-  if (-not (Test-Path $hostPath)) {
-    Write-Host "Path '$hostPath' does not exist. Try again."
-    continue
-  }
+if (-not $NoPromptVolumes) {
+  $defaultContainerMountRoot = "/home/datalab"
+  while ($true) {
+    $hostPath = Read-Host "Host path to bind (blank to finish)"
+    if (-not $hostPath) { break }
+    if (-not (Test-Path $hostPath)) {
+      Write-Host "Path '$hostPath' does not exist. Try again."
+      continue
+    }
 
-  $containerPath = Read-Host "Container path for this mount (e.g., /home/datalab/data)"
-  if (-not $containerPath) {
-    Write-Host "Container path is required. Try again."
-    continue
-  }
+    $containerPathInput = Read-Host "Container path/name for this mount (relative paths go under $defaultContainerMountRoot)"
+    if (-not $containerPathInput) {
+      Write-Host "Container path is required. Try again."
+      continue
+    }
 
-  $collectedVolumes += "$hostPath`:$containerPath"
+    $containerPath = Resolve-ContainerMountPath -InputPath $containerPathInput -DefaultRoot $defaultContainerMountRoot
+    if (-not $containerPath) {
+      Write-Host "Container path is required. Try again."
+      continue
+    }
+
+    Write-Host "Using container path: $containerPath"
+
+    $collectedVolumes += "$hostPath`:$containerPath"
+  }
 }
 
 while (Test-ContainerExists $NewName) {
@@ -244,13 +345,14 @@ while (Test-ContainerExists $NewName) {
   }
 }
 
-$runtimeCopyDir = $null
-if ($BindProjectFiles) {
-  $runtimeCopiesRoot = Join-Path $datalabDir "runtime-copies"
-  $runtimeCopyDir = Join-Path $runtimeCopiesRoot $NewName
-  New-Item -ItemType Directory -Force -Path $runtimeCopyDir | Out-Null
-  $defaultVolumes += "${runtimeCopyDir}:/home/datalab/runtime"
+$runtimeVolumeSuffix = Get-SafeVolumeSuffix -Name $NewName
+$runtimeVolumeName = "datalab-runtime-$runtimeVolumeSuffix"
+$existingVolumes = @(docker volume ls --format "{{.Name}}" 2>$null)
+if ($existingVolumes -contains $runtimeVolumeName) {
+  docker volume rm $runtimeVolumeName 1>$null 2>$null
 }
+docker volume create $runtimeVolumeName 1>$null | Out-Null
+$defaultVolumes += "${runtimeVolumeName}:/home/datalab/runtime"
 
 $portArgs = @()
 foreach ($p in $resolvedDefaultPorts) { $portArgs += @("-p", $p) }
@@ -269,9 +371,29 @@ foreach ($mapping in $resolvedDefaultPorts) {
 }
 $hostPortMap = $hostPortMapEntries -join ","
 
+$airflowDagsFolder = "/home/datalab/airflow/dags"
+if (-not $SkipDefaultProjectMount -and $DefaultProjectHostPath) {
+  $projectAirflowHostPath = Join-Path $DefaultProjectHostPath "Airflow\dags"
+  if (Test-Path $projectAirflowHostPath) {
+    $airflowDagsFolder = (Resolve-ContainerMountPath -InputPath "$DefaultProjectContainerPath/Airflow/dags" -DefaultRoot "/home/datalab")
+  }
+}
+
 $envArgs = @(
+  "-e", "CONTAINER_NAME=$NewName",
   "-e", "DATALAB_UI_HOST=$UiHost",
-  "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap"
+  "-e", "DATALAB_HOST_PORT_MAP=$hostPortMap",
+  "-e", "AIRFLOW_HOME=/home/datalab/runtime/airflow",
+  "-e", "AIRFLOW__CORE__LOAD_EXAMPLES=False",
+  "-e", "AIRFLOW__CORE__EXECUTOR=LocalExecutor",
+  "-e", "AIRFLOW__CORE__PARALLELISM=16",
+  "-e", "AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG=8",
+  "-e", "AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG=4",
+  "-e", "AIRFLOW__CORE__DAGS_FOLDER=$airflowDagsFolder",
+  "-e", "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:admin@localhost:5432/datalab",
+  "-e", "DATALAB_AIRFLOW_DAGS_FOLDER=$airflowDagsFolder",
+  "-e", "DATALAB_SPARK_VERBOSE=0",
+  "-e", "DATALAB_SPARK_LOG_LEVEL=WARN"
 )
 
 $dockerArgs = @(
@@ -290,15 +412,137 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $uiMapFile = "/home/datalab/runtime/ui-port-map.env"
-$uiMapScript = @"
-cat > $uiMapFile <<'EOF'
-DATALAB_UI_HOST=$UiHost
-DATALAB_HOST_PORT_MAP=$hostPortMap
+$uiMapScript = @'
+cat > __UI_MAP_FILE__ <<'EOF'
+DATALAB_UI_HOST=__UI_HOST__
+DATALAB_HOST_PORT_MAP=__HOST_PORT_MAP__
 EOF
-sed -i 's/\r$//' $uiMapFile 2>/dev/null || true
-chmod 644 $uiMapFile || true
-"@
-docker exec $NewName sh -lc $uiMapScript 2>$null | Out-Null
+sed -i 's/\r$//' __UI_MAP_FILE__ 2>/dev/null || true
+chmod 644 __UI_MAP_FILE__ || true
+'@
+$uiMapScript = $uiMapScript.Replace("__UI_MAP_FILE__", $uiMapFile).Replace("__UI_HOST__", $UiHost).Replace("__HOST_PORT_MAP__", $hostPortMap)
+Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $uiMapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-ui-map.sh"
+
+$bootstrapScript = @'
+set -e
+# New copied container should start from a clean Kafka metadata state.
+rm -rf /home/datalab/runtime/kafka/data/* /home/datalab/runtime/kafka/zookeeper-data/* 2>/dev/null || true
+bootstrap_paths=(
+  /home/datalab/runtime/spark/events
+  /home/datalab/runtime/spark/warehouse
+  /home/datalab/runtime/spark/logs
+  /home/datalab/runtime/spark/pids
+  /home/datalab/runtime/kafka/data
+  /home/datalab/runtime/kafka/logs
+  /home/datalab/runtime/kafka/pids
+  /home/datalab/runtime/kafka/zookeeper-data
+  /home/datalab/runtime/java
+  /home/datalab/runtime/scala
+)
+mkdir -p "${bootstrap_paths[@]}"
+touch /home/datalab/derby.log 2>/dev/null || true
+for _ in $(seq 1 20); do
+  id datalab >/dev/null 2>&1 && break
+  sleep 1
+done
+if id datalab >/dev/null 2>&1; then
+  chown -R datalab:datalab /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+  chmod -R u+rwX,go+rX /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+fi
+
+# Keep login-shell Airflow defaults aligned with the copied-container topology.
+cat > /etc/profile.d/datalab-path.sh <<'EOF'
+# Data Lab environment and PATH additions (applied to all users)
+export SPARK_HOME=/opt/spark
+export HADOOP_HOME=/opt/hadoop
+export HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native
+export HIVE_HOME=/opt/hive
+export TRINO_HOME=/opt/trino
+export KAFKA_HOME=/opt/kafka
+export APICURIO_REGISTRY_HOME=/opt/apicurio-registry
+export MARQUEZ_HOME=/opt/marquez
+export MARQUEZ_WEB_HOME=/opt/marquez-web
+export PROMETHEUS_HOME=/opt/prometheus
+export GRAFANA_HOME=/opt/grafana
+export OPENLINEAGE_SPARK_HOME=/opt/openlineage-spark
+export MONGO_HOME=/opt/mongodb
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export LD_LIBRARY_PATH="/opt/hadoop/lib/native:${LD_LIBRARY_PATH}"
+export PATH="/home/datalab/app/bin:${PATH}"
+# Force a shared workspace path so root and datalab use the same mounts
+export WORKSPACE="/home/datalab"
+export RUNTIME_ROOT="${WORKSPACE}/runtime"
+export LAKEHOUSE_STACK_ROOT="${WORKSPACE}/lakehouse"
+export AIRFLOW_HOME="${AIRFLOW_HOME:-${RUNTIME_ROOT}/airflow}"
+export DATALAB_AIRFLOW_DAGS_FOLDER="${DATALAB_AIRFLOW_DAGS_FOLDER:-__AIRFLOW_DAGS_FOLDER__}"
+export AIRFLOW__CORE__DAGS_FOLDER="${AIRFLOW__CORE__DAGS_FOLDER:-${DATALAB_AIRFLOW_DAGS_FOLDER}}"
+export AIRFLOW__CORE__LOAD_EXAMPLES="${AIRFLOW__CORE__LOAD_EXAMPLES:-False}"
+export AIRFLOW__CORE__EXECUTOR="${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}"
+export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN="${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin}@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-datalab}}"
+export DBT_PROFILES_DIR="${WORKSPACE}/dbt"
+export DBT_PACKAGE_INSTALL_PATH="${RUNTIME_ROOT}/dbt/dbt_packages"
+export TF_DATA_DIR="${RUNTIME_ROOT}/terraform/.terraform"
+export PATH="$JAVA_HOME/bin:$PATH:${SPARK_HOME}/bin:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${KAFKA_HOME}/bin:${MONGO_HOME}/bin"
+EOF
+chmod 0644 /etc/profile.d/datalab-path.sh || true
+
+# Seed the persisted Airflow config so copied containers do not fall back to
+# SQLite/SequentialExecutor when users inspect airflow.cfg directly.
+mkdir -p /home/datalab/runtime/airflow
+su - datalab -c "airflow config get-value core executor >/dev/null 2>&1 || airflow version >/dev/null 2>&1 || true"
+cfg=/home/datalab/runtime/airflow/airflow.cfg
+if [ -f "$cfg" ]; then
+  sed -i -E "s|^dags_folder = .*|dags_folder = __AIRFLOW_DAGS_FOLDER__|" "$cfg" || true
+  sed -i -E "s|^executor = .*|executor = LocalExecutor|" "$cfg" || true
+  sed -i -E "s|^parallelism = .*|parallelism = 16|" "$cfg" || true
+  sed -i -E "s|^max_active_tasks_per_dag = .*|max_active_tasks_per_dag = 8|" "$cfg" || true
+  sed -i -E "s|^max_active_runs_per_dag = .*|max_active_runs_per_dag = 4|" "$cfg" || true
+  sed -i -E "s|^load_examples = .*|load_examples = False|" "$cfg" || true
+  sed -i -E "s|^sql_alchemy_conn = .*|sql_alchemy_conn = postgresql+psycopg2://admin:admin@localhost:5432/datalab|" "$cfg" || true
+  chown datalab:datalab "$cfg" 2>/dev/null || true
+fi
+
+# Best-effort ownership fix for mounted Data Lab paths so copied/host-bound
+# files are usable as the datalab user.
+owned_paths=(
+  /home/datalab/app
+  /home/datalab/datalabconfig
+  /home/datalab/airflow
+  /home/datalab/dbt
+  /home/datalab/lakehouse
+  /home/datalab/hadoop
+  /home/datalab/hive
+  /home/datalab/java
+  /home/datalab/kafka
+  /home/datalab/kafka_connect
+  /home/datalab/mongodb
+  /home/datalab/minio
+  /home/datalab/marquez
+  /home/datalab/postgres
+  /home/datalab/prometheus
+  /home/datalab/python
+  /home/datalab/redis
+  /home/datalab/schema_registry
+  /home/datalab/runtime
+  /home/datalab/scala
+  /home/datalab/spark
+  /home/datalab/terraform
+  /home/datalab/grafana
+  /home/datalab/great_expectations
+  /home/datalab/jupyter
+  /home/datalab/superset
+  /home/datalab/trino
+  /home/datalab/derby.log
+)
+for p in "${owned_paths[@]}"; do
+  [ -e "$p" ] || continue
+  chown -R datalab:datalab "$p" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
+done
+'@
+$bootstrapScript = $bootstrapScript.Replace("__AIRFLOW_DAGS_FOLDER__", $airflowDagsFolder)
+$bootstrapScript = $bootstrapScript -replace "`r", ""
+Invoke-ContainerShellScript -ContainerName $NewName -ScriptText $bootstrapScript -Shell "bash" -RemotePath "/tmp/datalab-copy-bootstrap.sh"
 
 Write-Output "Container $NewName started from image $resolvedImage."
 Write-Output "Published ports:"
@@ -313,9 +557,8 @@ if ($normalizedExtraPorts.Count -gt 0) {
 if ($collectedVolumes.Count -gt 0) {
   Write-Output "Mounted: $($collectedVolumes -join ', ')"
 }
-if ($BindProjectFiles -and $runtimeCopyDir) {
-  Write-Output "Runtime mount: ${runtimeCopyDir}:/home/datalab/runtime"
-} else {
+Write-Output "Runtime volume: ${runtimeVolumeName}:/home/datalab/runtime"
+if (-not $BindProjectFiles) {
   Write-Output "Mode: isolated (no auto bind mounts from this project)."
 }
 
@@ -326,11 +569,20 @@ $serviceMap = @{
   4040  = @{ Name = "Spark App UI";    Path = "/" }
   9870  = @{ Name = "HDFS NameNode";   Path = "/" }
   8088  = @{ Name = "YARN ResourceMgr";Path = "/" }
-  10001 = @{ Name = "HiveServer2 HTTP";Path = "/cliservice" }
   9002  = @{ Name = "Kafka UI";        Path = "/" }
-  8083  = @{ Name = "Mongo Express UI";Path = "/" }
-  8084  = @{ Name = "Redis Commander UI"; Path = "/" }
   8181  = @{ Name = "pgAdmin UI"; Path = "/" }
+  8083  = @{ Name = "Mongo Express UI"; Path = "/" }
+  8084  = @{ Name = "Redis Commander UI"; Path = "/" }
+  8085  = @{ Name = "Schema Registry API"; Path = "/apis/registry/v3" }
+  8086  = @{ Name = "Kafka Connect API"; Path = "/connectors" }
+  8091  = @{ Name = "Trino"; Path = "/" }
+  8090  = @{ Name = "Superset"; Path = "/" }
+  5000  = @{ Name = "Marquez API"; Path = "/api/v1/namespaces" }
+  3000  = @{ Name = "Marquez UI"; Path = "/" }
+  9095  = @{ Name = "Prometheus UI"; Path = "/" }
+  3001  = @{ Name = "Grafana UI"; Path = "/" }
+  9004  = @{ Name = "MinIO API"; Path = "/" }
+  9005  = @{ Name = "MinIO Console"; Path = "/" }
 }
 
 Write-Output "UI URLs (dynamic host ports):"
@@ -349,7 +601,9 @@ foreach ($mapping in $resolvedDefaultPorts) {
   $containerPort = [int]$parts[1]
   if ($containerPort -eq 9083) {
     Write-Output ("  - Hive Metastore: thrift://{0}:{1}" -f $UiHost, $hostPort)
-    break
+  }
+  if ($containerPort -eq 10000) {
+    Write-Output ("  - HiveServer2 Thrift: thrift://{0}:{1}" -f $UiHost, $hostPort)
   }
 }
 

@@ -12,11 +12,44 @@ APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${APP_DIR}/scripts/host_exec.sh"
+source "${APP_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
-source "${APP_DIR}/scripts/common.sh"
+source "${APP_DIR}/tech/common.sh"
+
+print_usage() {
+  cat <<'EOF'
+Data Lab health check
+
+Usage:
+  datalab-check [--full|--fast|--help]
+
+Options:
+  --full  Run version checks and jar presence checks (default)
+  --fast  Run command-presence checks and jar presence checks
+  --help  Show this help message
+EOF
+}
+
+CHECK_MODE="full"
+case "${1:-}" in
+  ""|--full)
+    CHECK_MODE="full"
+    ;;
+  --fast)
+    CHECK_MODE="fast"
+    ;;
+  --help|-h|help)
+    print_usage
+    exit 0
+    ;;
+  *)
+    echo "[!] Unknown option: ${1}" >&2
+    print_usage >&2
+    exit 2
+    ;;
+esac
 
 # Guard in case strip_cr was not loaded for any reason.
 if ! declare -F strip_cr >/dev/null; then
@@ -29,6 +62,10 @@ fi
 
 WORKSPACE="$(strip_cr "${WORKSPACE:-/home/datalab}")"
 RUNTIME_ROOT="$(strip_cr "${RUNTIME_ROOT:-${WORKSPACE}/runtime}")"
+DATALAB_CHECK_FAST="$(strip_cr "${DATALAB_CHECK_FAST:-0}")"
+if [[ "${CHECK_MODE}" == "fast" ]]; then
+  DATALAB_CHECK_FAST=1
+fi
 mkdir -p "${RUNTIME_ROOT}"
 
 ok()  { printf '[OK]   %s\n' "$*"; }
@@ -48,20 +85,47 @@ run_check() {
   fi
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 echo "=== Data Lab :: Quick Check ==="
 echo "Workspace: ${WORKSPACE}"
+echo "Mode: ${CHECK_MODE}"
 
-run_check "Python" python --version
-run_check "Airflow CLI" airflow version
-run_check "Spark CLI" spark-submit --version
-run_check "Hadoop CLI" hadoop version
-run_check "Hive CLI" hive --version
-run_check "Kafka CLI" "${KAFKA_HOME}/bin/kafka-topics.sh" --version
-run_check "PostgreSQL CLI" psql --version
-run_check "MongoDB daemon" mongod --version
-run_check "Redis CLI" redis-cli --version
-run_check "dbt" dbt --version
-run_check "Terraform" terraform version
+if is_truthy "${DATALAB_CHECK_FAST}"; then
+  echo "[*] Fast mode enabled: using presence checks for CLI/tooling."
+  run_check "Python" command -v python
+  run_check "Airflow CLI" command -v airflow
+  run_check "Spark CLI" command -v spark-submit
+  run_check "Hadoop CLI" command -v hadoop
+  run_check "Hive CLI" command -v hive
+  run_check "Kafka CLI" test -x "${KAFKA_HOME}/bin/kafka-topics.sh"
+  run_check "PostgreSQL CLI" command -v psql
+  run_check "MongoDB daemon" command -v mongod
+  run_check "Redis CLI" command -v redis-cli
+  run_check "dbt" command -v dbt
+  run_check "Terraform" command -v terraform
+else
+  run_check "Python" python --version
+  run_check "Airflow CLI" airflow version
+  run_check "Spark CLI" spark-submit --version
+  run_check "Hadoop CLI" hadoop version
+  run_check "Hive CLI" hive --version
+  run_check "Kafka CLI" "${KAFKA_HOME}/bin/kafka-topics.sh" --version
+  run_check "PostgreSQL CLI" psql --version
+  run_check "MongoDB daemon" mongod --version
+  run_check "Redis CLI" redis-cli --version
+  run_check "dbt" dbt --version
+  run_check "Terraform" terraform version
+fi
 run_check "Hudi jar" test -f "${SPARK_HOME}/jars/hudi-spark-bundle.jar"
 run_check "Iceberg jar" test -f "${SPARK_HOME}/jars/iceberg-spark-runtime.jar"
 run_check "Delta jar" test -f "${SPARK_HOME}/jars/delta-spark.jar"

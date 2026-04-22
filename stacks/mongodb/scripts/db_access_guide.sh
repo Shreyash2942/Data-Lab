@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prints DB UI + IDE connection values using dynamic host-port mapping.
+# Prints DB + IDE connection values using dynamic host-port mapping.
 # Intended to run inside the Data Lab container from ~/mongodb/scripts/.
 
 UI_HOST="${DATALAB_UI_HOST:-localhost}"
@@ -52,8 +52,6 @@ prompt_default() {
 pg_port="$(mapped_port 5432)"
 mongo_port="$(mapped_port 27017)"
 redis_port="$(mapped_port 6379)"
-mongo_express_port="$(mapped_port 8083)"
-redis_commander_port="$(mapped_port 8084)"
 
 echo "=== Data Lab DB Access Guide ==="
 echo "This guide shows host-side URLs and IDE connection values."
@@ -61,14 +59,12 @@ echo ""
 
 pg_user="$(prompt_default "PostgreSQL username" "admin")"
 pg_pass="$(prompt_default "PostgreSQL password" "admin")"
-mongo_user="$(prompt_default "MongoDB username" "datalab")"
-mongo_pass="$(prompt_default "MongoDB password" "datalab")"
+mongo_user="$(prompt_default "MongoDB username" "admin")"
+mongo_pass="$(prompt_default "MongoDB password" "admin")"
 redis_pass="$(prompt_default "Redis password (blank if none)" "")"
 
 echo ""
 echo "=== Browser UIs (host machine) ==="
-echo "Mongo Express:         http://${UI_HOST}:${mongo_express_port}/"
-echo "Redis Commander:       http://${UI_HOST}:${redis_commander_port}/"
 echo "pgAdmin (if started):  http://${UI_HOST}:8181/"
 echo ""
 

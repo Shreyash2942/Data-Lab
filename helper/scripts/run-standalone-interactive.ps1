@@ -51,7 +51,7 @@ if ($ExtraVolumes.Count -gt 0) {
 $defaultPorts = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
-  "10001:10001", "9002:9002", "8083:8083", "8084:8084", "8181:8181",
+  "10001:10001", "9002:9002", "8181:8181", "8083:8083", "8084:8084",
   "5432:5432", "27017:27017", "6379:6379"
 )
 
@@ -61,6 +61,7 @@ $datalabDir = Join-Path $repoRoot "datalabcontainer"
 $stacksDir = Join-Path $repoRoot "stacks"
 $defaultVolumes = @(
   "$datalabDir\app:/home/datalab/app",
+  "$repoRoot\datalabconfig:/home/datalab/datalabconfig",
   "$stacksDir\python:/home/datalab/python",
   "$stacksDir\spark:/home/datalab/spark",
   "$stacksDir\airflow:/home/datalab/airflow",
@@ -74,9 +75,7 @@ $defaultVolumes = @(
   "$stacksDir\mongodb:/home/datalab/mongodb",
   "$stacksDir\postgres:/home/datalab/postgres",
   "$stacksDir\redis:/home/datalab/redis",
-  "$stacksDir\hudi:/home/datalab/hudi",
-  "$stacksDir\iceberg:/home/datalab/iceberg",
-  "$stacksDir\delta:/home/datalab/delta",
+  "$stacksDir\lakehouse:/home/datalab/lakehouse",
   "$datalabDir\runtime:/home/datalab/runtime"
 )
 
@@ -107,6 +106,40 @@ if ($LASTEXITCODE -ne 0) {
   docker rm -f $Name 2>$null | Out-Null
   throw "docker run failed for '$Name'."
 }
+
+$bootstrapScript = @'
+set -e
+bootstrap_paths=(
+  /home/datalab/runtime/spark/events
+  /home/datalab/runtime/spark/warehouse
+  /home/datalab/runtime/spark/logs
+  /home/datalab/runtime/spark/pids
+  /home/datalab/runtime/kafka/data
+  /home/datalab/runtime/kafka/logs
+  /home/datalab/runtime/kafka/pids
+  /home/datalab/runtime/kafka/zookeeper-data
+  /home/datalab/runtime/java
+  /home/datalab/runtime/scala
+)
+mkdir -p "${bootstrap_paths[@]}"
+touch /home/datalab/derby.log 2>/dev/null || true
+for _ in $(seq 1 20); do
+  id datalab >/dev/null 2>&1 && break
+  sleep 1
+done
+if id datalab >/dev/null 2>&1; then
+  chown -R datalab:datalab /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+  chmod -R u+rwX,go+rX /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+fi
+
+for p in /home/datalab/app /home/datalab/datalabconfig; do
+  [ -e "$p" ] || continue
+  chown -R datalab:datalab "$p" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$p" 2>/dev/null || true
+done
+'@
+$bootstrapScript = $bootstrapScript -replace "`r", ""
+docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null
 
 Write-Output "Container $Name started from $Image."
 if ($collectedPorts.Count -gt 0) {

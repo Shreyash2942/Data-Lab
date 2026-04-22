@@ -16,5 +16,19 @@ services:
       - "27017:27017"  # MongoDB
       - "6379:6379"    # Redis
       - "9002:9002"    # Kafka UI (Kafdrop)
+      - "8083:8083"    # Mongo Express UI
+      - "8084:8084"    # Redis Commander UI
+      - "8085:8085"    # Schema Registry API
+      - "8086:8086"    # Kafka Connect API
+      - "8888:8888"    # JupyterLab
+      - "8891:8891"    # Great Expectations Data Docs
+      - "5000:5000"    # Marquez API
+      - "3000:3000"    # Marquez UI
+      - "9095:9095"    # Prometheus UI
+      - "3001:3001"    # Grafana UI
+      - "8091:8091"    # Trino HTTP
+      - "8090:8090"    # Superset UI
+      - "9000:9000"    # MinIO API
+      - "9001:9001"    # MinIO Console
       - "18080:18080"  # Spark history
     command: ["sleep", "infinity"]  # keep container alive; start services with app/start inside

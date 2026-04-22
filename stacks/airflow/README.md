@@ -1,6 +1,6 @@
 # Airflow Layer
 
-All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/stacks/airflow`). Airflow 2.9 is preinstalled and configured for a local SQLite metadata database plus a filesystem executor for lightweight demos.
+All DAGs, plugins, and supporting files live under `~/airflow` inside the container (mirrors `repo_root/stacks/airflow`). Airflow 2.9 is preinstalled and configured to use PostgreSQL metadata (`datalab` DB) with `LocalExecutor` for parallel task execution in this single-container environment. This project does not use a SQLite fallback for Airflow.
 
 ## Layout
 
@@ -31,12 +31,38 @@ Stop services when finished:
 bash ~/app/stop --stop-airflow
 ```
 
+### Validate all stacks with one command
+
+After creating a new container, run the built-in validation DAG end-to-end:
+
+```bash
+datalab_app --validate-stack
+```
+
+This starts Airflow if needed and runs:
+
+- DAG: `data_lab_stack_validation`
+- Command used: `airflow dags test data_lab_stack_validation <today>`
+
+Validation cleanup removes only temporary CDC demo artifacts. It does not shut down your running services after the DAG finishes.
+
+You can also run the same action from `datalab_app` start menu option `12`.
+
 ### DAG dependency map (`data_lab_stack_validation`)
 
-- Serial core chain: `start_core_services -> hadoop_demo -> hive_demo_databases -> spark_demo -> {kafka_demo, hudi_quickstart, iceberg_quickstart, delta_quickstart}`
-- Independent demos off start: `{python_example, java_example, scala_example, terraform_demo}`
-- Database validation branch: `start_database_services -> {postgres_demo, mongodb_demo, redis_demo, db_ui_smoke_check}`
-- All flow into `stop_core_services` (trigger_rule=`all_success`)
+- Fast chain: `preflight_checks -> database_stack_health -> etl_stack_health -> lakehouse_stack_health -> quality_stack_health -> observability_stack_health -> ui_services_dynamic_port_mapping -> cleanup_validation_artifacts`
+- Cleanup task uses `trigger_rule=all_done`
+
+The validation DAG is optimized for a fast smoke pass, not a full demo marathon. It checks:
+
+- Database stack: PostgreSQL, MongoDB, Redis, pgAdmin, Mongo Express, Redis Commander
+- ETL stack: Hadoop, Hive, Spark, Kafka, Schema Registry, Kafka Connect, CDC plugin/converter readiness
+- Lakehouse stack: MinIO, Trino, Superset
+- Quality/dev stack: Great Expectations, JupyterLab
+- Observability stack: Marquez/OpenLineage, Prometheus, Grafana
+- Copied-container URL rendering: `ui_services --json` dynamic port mapping logic
+
+Longer lakehouse demo jobs and optional sample workflows remain available through their dedicated helpers; they are intentionally not part of the default validation DAG so `datalab_app --validate-stack` finishes quickly.
 
 ## Common commands
 
@@ -47,6 +73,28 @@ airflow dags test example_dag 2024-01-01
 ```
 
 You can also invoke option `8` in `~/app/services_demo.sh` (`--check-airflow`) for a quick version check.
+
+## Parallelism and Spark queue behavior
+
+Default Airflow runtime settings in this project:
+
+- `executor=LocalExecutor`
+- `parallelism=16` (global task slots)
+- `max_active_tasks_per_dag=8`
+- `max_active_runs_per_dag=4`
+- Metadata backend: PostgreSQL only
+
+When Airflow tasks submit Spark jobs, Airflow concurrency and Spark cluster capacity are separate limits:
+
+- Airflow can mark tasks as `running` up to its configured slots.
+- Spark may run fewer jobs immediately and queue the rest based on available worker resources.
+
+Example with 12 Spark tasks in one DAG (current defaults):
+
+- Airflow can run 8 tasks from that DAG at once.
+- Spark worker (2 cores) with `spark.cores.max=1` can execute about 2 Spark apps at once.
+- Remaining submitted Spark apps wait in Spark queue even though their Airflow tasks are already `running`.
+- Remaining DAG tasks stay `queued` in Airflow until DAG slots free up.
 
 ## Notes
 

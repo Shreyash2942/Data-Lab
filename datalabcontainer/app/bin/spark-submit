@@ -4,8 +4,26 @@ set -euo pipefail
 RUNTIME_ROOT="${RUNTIME_ROOT:-${HOME}/runtime}"
 SPARK_CONF_DIR_DEFAULT="${RUNTIME_ROOT}/spark/conf"
 SPARK_BIN="${SPARK_HOME:-/opt/spark}/bin/spark-submit"
+HADOOP_HOME="${HADOOP_HOME:-/opt/hadoop}"
+HADOOP_COMMON_LIB_NATIVE_DIR="${HADOOP_COMMON_LIB_NATIVE_DIR:-${HADOOP_HOME}/lib/native}"
 LOG_LEVEL="${DATALAB_SPARK_LOG_LEVEL:-ERROR}"
 LOG_LEVEL="$(printf '%s' "${LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+HUDI_LOG_LEVEL="${DATALAB_HUDI_LOG_LEVEL:-ERROR}"
+HUDI_LOG_LEVEL="$(printf '%s' "${HUDI_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+JETTY_LOG_LEVEL="${DATALAB_JETTY_LOG_LEVEL:-ERROR}"
+JETTY_LOG_LEVEL="$(printf '%s' "${JETTY_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+JAVALIN_LOG_LEVEL="${DATALAB_JAVALIN_LOG_LEVEL:-ERROR}"
+JAVALIN_LOG_LEVEL="$(printf '%s' "${JAVALIN_LOG_LEVEL}" | tr '[:lower:]' '[:upper:]')"
+VERBOSE_MODE="${DATALAB_SPARK_VERBOSE:-0}"
+MAX_TO_STRING_FIELDS="${DATALAB_SPARK_MAX_TO_STRING_FIELDS:-1000}"
+FILTER_JOL_WARNINGS="${DATALAB_FILTER_JOL_WARNINGS:-1}"
+SPARK_DEFAULT_MASTER="${DATALAB_SPARK_SUBMIT_MASTER:-spark://localhost:7077}"
+SPARK_APP_MAX_CORES="${DATALAB_SPARK_APP_MAX_CORES:-1}"
+SPARK_SCHEDULER_MODE="${DATALAB_SPARK_SCHEDULER_MODE:-FAIR}"
+OPENLINEAGE_MODE="${DATALAB_OPENLINEAGE_ENABLED:-auto}"
+OPENLINEAGE_NAMESPACE="${DATALAB_OPENLINEAGE_NAMESPACE:-${CONTAINER_NAME:-datalab}}"
+OPENLINEAGE_URL="${DATALAB_OPENLINEAGE_URL:-http://127.0.0.1:5000/api/v1/lineage}"
+OPENLINEAGE_LIB_DIR="${OPENLINEAGE_SPARK_HOME:-/opt/openlineage-spark}/lib"
 
 LOG4J_FILE="${SPARK_CONF_DIR_DEFAULT}/log4j2.properties"
 if ! mkdir -p "${SPARK_CONF_DIR_DEFAULT}" 2>/dev/null; then
@@ -45,27 +63,73 @@ set_log_level() {
     printf 'rootLogger.level = %s\n' "${LOG_LEVEL}" >> "${file}" 2>/dev/null || true
   fi
 
-  if grep -q "logger.spark.level" "${file}" 2>/dev/null; then
-    sed -E "s/logger\\.spark\\.level[[:space:]]*=[[:space:]]*[A-Za-z]+/logger.spark.level = ${LOG_LEVEL}/" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
-  else
-    printf 'logger.spark.name = org.apache.spark\nlogger.spark.level = %s\n' "${LOG_LEVEL}" >> "${file}" 2>/dev/null || true
-  fi
+  upsert_logger() {
+    local key="$1"
+    local name="$2"
+    local level="$3"
+
+    if grep -q "logger\\.${key}\\.name" "${file}" 2>/dev/null; then
+      sed -E "s|logger\\.${key}\\.name[[:space:]]*=[[:space:]]*.*$|logger.${key}.name = ${name}|" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
+    else
+      printf 'logger.%s.name = %s\n' "${key}" "${name}" >> "${file}" 2>/dev/null || true
+    fi
+
+    if grep -q "logger\\.${key}\\.level" "${file}" 2>/dev/null; then
+      sed -E "s/logger\\.${key}\\.level[[:space:]]*=[[:space:]]*[A-Za-z]+/logger.${key}.level = ${level}/" "${file}" > "${file}.tmp" 2>/dev/null && mv "${file}.tmp" "${file}" 2>/dev/null || true
+    else
+      printf 'logger.%s.level = %s\n' "${key}" "${level}" >> "${file}" 2>/dev/null || true
+    fi
+  }
+
+  upsert_logger "spark" "org.apache.spark" "${LOG_LEVEL}"
+  upsert_logger "hudi" "org.apache.hudi" "${HUDI_LOG_LEVEL}"
+  upsert_logger "hadoop" "org.apache.hadoop" "${LOG_LEVEL}"
+  upsert_logger "jetty" "org.eclipse.jetty" "${JETTY_LOG_LEVEL}"
+  upsert_logger "javalin" "io.javalin" "${JAVALIN_LOG_LEVEL}"
 }
 
 ensure_log4j
 set_log_level "${LOG4J_FILE}" || true
 
 export SPARK_CONF_DIR="${SPARK_CONF_DIR:-${SPARK_CONF_DIR_DEFAULT}}"
+export HADOOP_HOME HADOOP_COMMON_LIB_NATIVE_DIR
+export LD_LIBRARY_PATH="${HADOOP_COMMON_LIB_NATIVE_DIR}:${LD_LIBRARY_PATH:-}"
 
 DEFAULT_SUBMIT_OPTS=(
   "-Dlog4j.configurationFile=${LOG4J_FILE}"
+  "-Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
   "-Divy.message.logger.level=1"
+  "-Ddfs.client.block.write.replace-datanode-on-failure.enable=false"
+  "-Ddfs.client.block.write.replace-datanode-on-failure.policy=NEVER"
 )
 export SPARK_SUBMIT_OPTS="${DEFAULT_SUBMIT_OPTS[*]} ${SPARK_SUBMIT_OPTS:-}"
 
-QUIET_ARGS=(
-  "--conf" "spark.ui.showConsoleProgress=false"
-)
+DRIVER_EXTRA_JAVA_OPTS="-Dlog4j.configurationFile=${LOG4J_FILE} -Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
+EXECUTOR_EXTRA_JAVA_OPTS="-Dlog4j.configurationFile=${LOG4J_FILE} -Djava.library.path=${HADOOP_COMMON_LIB_NATIVE_DIR}"
+
+# Allow self-attach so JOL/agent probing won't emit warning noise in most container runs.
+DRIVER_EXTRA_JAVA_OPTS="${DRIVER_EXTRA_JAVA_OPTS} -Djdk.attach.allowAttachSelf=true"
+EXECUTOR_EXTRA_JAVA_OPTS="${EXECUTOR_EXTRA_JAVA_OPTS} -Djdk.attach.allowAttachSelf=true"
+
+QUIET_ARGS=()
+if [[ "${VERBOSE_MODE}" != "1" ]]; then
+  QUIET_ARGS+=(
+    "--conf" "spark.ui.showConsoleProgress=false"
+    "--conf" "spark.driver.extraJavaOptions=${DRIVER_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.executor.extraJavaOptions=${EXECUTOR_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.sql.debug.maxToStringFields=${MAX_TO_STRING_FIELDS}"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.enable=false"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.policy=NEVER"
+  )
+else
+  QUIET_ARGS+=(
+    "--conf" "spark.driver.extraJavaOptions=${DRIVER_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.executor.extraJavaOptions=${EXECUTOR_EXTRA_JAVA_OPTS}"
+    "--conf" "spark.sql.debug.maxToStringFields=${MAX_TO_STRING_FIELDS}"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.enable=false"
+    "--conf" "spark.hadoop.dfs.client.block.write.replace-datanode-on-failure.policy=NEVER"
+  )
+fi
 
 # If shared runtime paths are root-owned, fall back to user-writable paths so
 # `spark-submit` still works for the `datalab` user.
@@ -75,7 +139,35 @@ USER_EVENT_DIR="${HOME}/.datalab/spark/events"
 USER_WAREHOUSE_DIR="${HOME}/.datalab/spark/warehouse"
 EXTRA_CONF_ARGS=()
 
-if ! mkdir -p "${EVENT_DIR}" 2>/dev/null || [[ ! -w "${EVENT_DIR}" ]]; then
+can_write_dir() {
+  local dir="$1"
+  local probe="${dir}/.write_test_$$"
+  mkdir -p "${dir}" 2>/dev/null || return 1
+  : > "${probe}" 2>/dev/null || return 1
+  rm -f "${probe}" 2>/dev/null || true
+  return 0
+}
+
+port_open() {
+  local host="$1"
+  local port="$2"
+  SPARK_WAIT_HOST="${host}" SPARK_WAIT_PORT="${port}" python3 - <<'PY'
+import os, socket, sys
+host = os.environ["SPARK_WAIT_HOST"]
+port = int(os.environ["SPARK_WAIT_PORT"])
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect((host, port))
+except OSError:
+    sys.exit(1)
+else:
+    s.close()
+    sys.exit(0)
+PY
+}
+
+if ! can_write_dir "${EVENT_DIR}"; then
   mkdir -p "${USER_EVENT_DIR}"
   EXTRA_CONF_ARGS+=(
     "--conf" "spark.eventLog.enabled=true"
@@ -84,11 +176,81 @@ if ! mkdir -p "${EVENT_DIR}" 2>/dev/null || [[ ! -w "${EVENT_DIR}" ]]; then
   )
 fi
 
-if ! mkdir -p "${WAREHOUSE_DIR}" 2>/dev/null || [[ ! -w "${WAREHOUSE_DIR}" ]]; then
+if ! can_write_dir "${WAREHOUSE_DIR}"; then
   mkdir -p "${USER_WAREHOUSE_DIR}"
   EXTRA_CONF_ARGS+=(
     "--conf" "spark.sql.warehouse.dir=${USER_WAREHOUSE_DIR}"
   )
 fi
 
-exec "${SPARK_BIN}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "$@"
+detect_master_arg() {
+  local prev="" arg
+  for arg in "$@"; do
+    if [[ "${prev}" == "--master" ]]; then
+      printf '%s' "${arg}"
+      return 0
+    fi
+    case "${arg}" in
+      --master)
+        prev="--master"
+        ;;
+      --master=*)
+        printf '%s' "${arg#--master=}"
+        return 0
+        ;;
+      *)
+        prev=""
+        ;;
+    esac
+  done
+  return 1
+}
+
+MASTER_ARGS=()
+CLUSTER_CONF_ARGS=()
+REQUESTED_MASTER="$(detect_master_arg "$@" || true)"
+if [[ -z "${REQUESTED_MASTER}" ]]; then
+  REQUESTED_MASTER="${SPARK_DEFAULT_MASTER}"
+  MASTER_ARGS=(--master "${REQUESTED_MASTER}")
+fi
+
+if [[ "${REQUESTED_MASTER}" == spark://* ]]; then
+  CLUSTER_CONF_ARGS+=(--conf "spark.scheduler.mode=${SPARK_SCHEDULER_MODE}")
+  if [[ "${SPARK_APP_MAX_CORES}" =~ ^[0-9]+$ ]] && [[ "${SPARK_APP_MAX_CORES}" -gt 0 ]]; then
+    CLUSTER_CONF_ARGS+=(--conf "spark.cores.max=${SPARK_APP_MAX_CORES}")
+  fi
+fi
+
+OPENLINEAGE_CONF_ARGS=()
+openlineage_enabled=0
+if compgen -G "${OPENLINEAGE_LIB_DIR}/*.jar" > /dev/null; then
+  case "${OPENLINEAGE_MODE}" in
+    1|true|TRUE|yes|YES|on|ON)
+      openlineage_enabled=1
+      ;;
+    auto|AUTO)
+      if port_open 127.0.0.1 5000; then
+        openlineage_enabled=1
+      fi
+      ;;
+  esac
+fi
+
+if [[ "${openlineage_enabled}" -eq 1 ]]; then
+  OPENLINEAGE_JARS="$(printf '%s\n' "${OPENLINEAGE_LIB_DIR}"/*.jar | paste -sd, -)"
+  OPENLINEAGE_CONF_ARGS+=(
+    "--jars" "${OPENLINEAGE_JARS}"
+    "--conf" "spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener"
+    "--conf" "spark.openlineage.transport.type=http"
+    "--conf" "spark.openlineage.transport.url=${OPENLINEAGE_URL}"
+    "--conf" "spark.openlineage.namespace=${OPENLINEAGE_NAMESPACE}"
+  )
+fi
+
+if [[ "${FILTER_JOL_WARNINGS}" == "1" ]]; then
+  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "${OPENLINEAGE_CONF_ARGS[@]}" "$@" \
+    > >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)') \
+    2> >(grep -E -v '^# WARNING: Unable to (get Instrumentation|attach Serviceability Agent)' >&2)
+else
+  exec "${SPARK_BIN}" "${MASTER_ARGS[@]}" "${QUIET_ARGS[@]}" "${EXTRA_CONF_ARGS[@]}" "${CLUSTER_CONF_ARGS[@]}" "${OPENLINEAGE_CONF_ARGS[@]}" "$@"
+fi

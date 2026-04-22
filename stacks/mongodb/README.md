@@ -11,7 +11,7 @@ bash ~/mongodb/scripts/db_access_guide.sh
 ```
 
 This prompts for username/password and prints:
-- Browser UI URLs (host-side)
+- Optional pgAdmin URL (PostgreSQL)
 - PostgreSQL, MongoDB, Redis connection values for IDEs
 - Ready-to-use MongoDB/Redis URI examples
 
@@ -31,8 +31,12 @@ This prompts for username/password and prints:
    ```
 4. In that output, find:
    - `MongoDB (DB): mongodb://localhost:<port>`
-   - `Mongo Express UI: http://localhost:<port>/`
-5. Open `Mongo Express UI` in browser.
+5. Use the MongoDB URI in Compass / VS Code / PyCharm.
+
+## Important behavior
+
+- MongoDB is NoSQL, so there is no SQL-style `schema.table` creation flow.
+- Use collections/documents (`db.collection.insertOne(...)`) instead of SQL DDL.
 
 Default Mongo credentials:
 

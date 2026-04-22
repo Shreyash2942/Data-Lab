@@ -11,9 +11,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${SCRIPT_DIR}/scripts/host_exec.sh"
+source "${SCRIPT_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
+source "${SCRIPT_DIR}/tech/common.sh"
 
 strip_cr() {
   local value="${1:-}"
@@ -48,6 +49,23 @@ REDIS_PORT="$(strip_cr "${REDIS_PORT:-6379}")"
 HADOOP_BIN="${HADOOP_HOME}/bin/hadoop"
 HIVE_BIN="${HIVE_HOME}/bin/hive"
 
+resolve_lakehouse_demo_script() {
+  local format="${1:-}"
+  local root script_path
+  if [[ -z "${format}" ]]; then
+    echo "[!] Missing lakehouse format for demo script resolution." >&2
+    return 1
+  fi
+
+  root="$(common::require_lakehouse_root)" || return 1
+  script_path="${root}/${format}/${format}_example.py"
+  if [[ ! -f "${script_path}" ]]; then
+    echo "[!] ${format} demo script not found: ${script_path}" >&2
+    return 1
+  fi
+  printf '%s' "${script_path}"
+}
+
 run_python_example() {
   python "${WORKSPACE}/python/example.py"
 }
@@ -57,9 +75,15 @@ run_spark_example() {
 }
 
 run_dbt_project() {
+  local target="${DBT_TARGET:-duckdb}"
   (
     cd "${WORKSPACE}/dbt"
-    dbt debug && dbt run
+    echo "[*] Running dbt target: ${target}"
+    if [[ "${target}" == "hive" ]]; then
+      dbt debug --target "${target}" && dbt run --full-refresh --target "${target}"
+    else
+      dbt debug --target "${target}" && dbt run --target "${target}"
+    fi
   )
 }
 
@@ -97,15 +121,21 @@ check_hive_cli() {
 }
 
 run_hudi_demo() {
-  python "${WORKSPACE}/hudi/hudi_example.py"
+  local script_path
+  script_path="$(resolve_lakehouse_demo_script "hudi")" || return 1
+  python "${script_path}"
 }
 
 run_iceberg_demo() {
-  python "${WORKSPACE}/iceberg/iceberg_example.py"
+  local script_path
+  script_path="$(resolve_lakehouse_demo_script "iceberg")" || return 1
+  python "${script_path}"
 }
 
 run_delta_demo() {
-  python "${WORKSPACE}/delta/delta_example.py"
+  local script_path
+  script_path="$(resolve_lakehouse_demo_script "delta")" || return 1
+  python "${script_path}"
 }
 
 run_postgres_demo() {
@@ -124,6 +154,10 @@ run_mongodb_demo() {
 
 run_redis_demo() {
   REDIS_PORT="${REDIS_PORT}" python "${WORKSPACE}/redis/example_redis.py"
+}
+
+run_gx_demo() {
+  bash "${WORKSPACE}/app/tech/great_expectations/manage.sh" run-demo
 }
 
 run_hdfs_smoke_test() {
@@ -180,6 +214,9 @@ run_all_demos() {
   echo "[*] Running Redis demo..."
   run_redis_demo || echo "Redis demo failed."
 
+  echo "[*] Running Great Expectations demo..."
+  run_gx_demo || echo "Great Expectations demo failed."
+
   echo "[+] Demo run completed."
 }
 
@@ -203,6 +240,7 @@ handle_cli_flag() {
     --run-postgres-demo) run_postgres_demo; exit 0 ;;
     --run-mongodb-demo) run_mongodb_demo; exit 0 ;;
     --run-redis-demo) run_redis_demo; exit 0 ;;
+    --run-gx-demo|--run-great-expectations-demo) run_gx_demo; exit 0 ;;
     --run-all-demos) run_all_demos; exit 0 ;;
   esac
 }
@@ -212,7 +250,7 @@ handle_cli_flag "$1"
 echo "=== Data Lab :: DEMO MENU ==="
 echo "1) Python example"
 echo "2) Spark example"
-echo "3) dbt project"
+echo "3) dbt project (set DBT_TARGET=duckdb|hive|spark_session)"
 echo "4) Kafka demo"
 echo "5) Java example"
 echo "6) Scala example"
@@ -229,6 +267,7 @@ echo "16) Hive demo databases (create + show tables)"
 echo "17) PostgreSQL demo"
 echo "18) MongoDB demo"
 echo "19) Redis demo"
+echo "20) Great Expectations demo"
 echo "0) Exit"
 read -p "Select option: " opt
 
@@ -252,6 +291,7 @@ case "$opt" in
   17) run_postgres_demo ;;
   18) run_mongodb_demo ;;
   19) run_redis_demo ;;
+  20) run_gx_demo ;;
   0) echo "Bye." ;;
   *) echo "Invalid option."; exit 1 ;;
 esac

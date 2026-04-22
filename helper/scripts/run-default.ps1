@@ -20,10 +20,10 @@ $ports = @(
   "4040:4040",   # Spark UI
   "8080:8080",   # Airflow UI
   "8088:8088",   # YARN RM
-  "8083:8083",   # Mongo Express UI
-  "8084:8084",   # Redis Commander UI
   "8181:8181",   # pgAdmin UI
   "9002:9002",   # Kafka UI (Kafdrop)
+  "8083:8083",   # Mongo Express UI
+  "8084:8084",   # Redis Commander UI
   "9090:9090",   # Spark master UI
   "9092:9092",   # Kafka broker
   "9870:9870",   # HDFS UI
@@ -58,3 +58,31 @@ if ($LASTEXITCODE -ne 0) {
   docker rm -f $Name 2>$null | Out-Null
   throw "docker run failed for '$Name'."
 }
+
+$bootstrapScript = @'
+set -e
+bootstrap_paths=(
+  /home/datalab/runtime/spark/events
+  /home/datalab/runtime/spark/warehouse
+  /home/datalab/runtime/spark/logs
+  /home/datalab/runtime/spark/pids
+  /home/datalab/runtime/kafka/data
+  /home/datalab/runtime/kafka/logs
+  /home/datalab/runtime/kafka/pids
+  /home/datalab/runtime/kafka/zookeeper-data
+  /home/datalab/runtime/java
+  /home/datalab/runtime/scala
+)
+mkdir -p "${bootstrap_paths[@]}"
+touch /home/datalab/derby.log 2>/dev/null || true
+for _ in $(seq 1 20); do
+  id datalab >/dev/null 2>&1 && break
+  sleep 1
+done
+if id datalab >/dev/null 2>&1; then
+  chown -R datalab:datalab /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+  chmod -R u+rwX,go+rX /home/datalab/runtime "${bootstrap_paths[@]}" /home/datalab/derby.log 2>/dev/null || true
+fi
+'@
+$bootstrapScript = $bootstrapScript -replace "`r", ""
+docker exec $Name bash -lc $bootstrapScript 2>$null | Out-Null

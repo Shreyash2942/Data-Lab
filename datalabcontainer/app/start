@@ -6,24 +6,42 @@ APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${APP_DIR}/scripts/host_exec.sh"
+source "${APP_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
-source "${APP_DIR}/scripts/common.sh"
-source "${APP_DIR}/scripts/logs/manage.sh"
-source "${APP_DIR}/scripts/hadoop/manage.sh"
-source "${APP_DIR}/scripts/hive/manage.sh"
-source "${APP_DIR}/scripts/airflow/manage.sh"
-source "${APP_DIR}/scripts/kafka/manage.sh"
-source "${APP_DIR}/scripts/postgres/manage.sh"
-source "${APP_DIR}/scripts/mongodb/manage.sh"
-source "${APP_DIR}/scripts/redis/manage.sh"
-source "${APP_DIR}/scripts/dbui/manage.sh"
-source "${APP_DIR}/scripts/pgadmin/manage.sh"
-source "${APP_DIR}/scripts/spark/manage.sh"
+source "${APP_DIR}/tech/common.sh"
+source "${APP_DIR}/tech/logs/manage.sh"
+source "${APP_DIR}/tech/hadoop/manage.sh"
+source "${APP_DIR}/tech/hive/manage.sh"
+source "${APP_DIR}/tech/airflow/manage.sh"
+source "${APP_DIR}/tech/kafka/manage.sh"
+source "${APP_DIR}/tech/kafka_connect/manage.sh"
+source "${APP_DIR}/tech/cdc/manage.sh"
+source "${APP_DIR}/tech/postgres/manage.sh"
+source "${APP_DIR}/tech/schema_registry/manage.sh"
+source "${APP_DIR}/tech/mongodb/manage.sh"
+source "${APP_DIR}/tech/redis/manage.sh"
+source "${APP_DIR}/tech/dbui/manage.sh"
+source "${APP_DIR}/tech/pgadmin/manage.sh"
+source "${APP_DIR}/tech/great_expectations/manage.sh"
+source "${APP_DIR}/tech/jupyter/manage.sh"
+source "${APP_DIR}/tech/lineage/manage.sh"
+source "${APP_DIR}/tech/monitoring/manage.sh"
+source "${APP_DIR}/tech/spark/manage.sh"
+source "${APP_DIR}/tech/minio/manage.sh"
+source "${APP_DIR}/tech/trino/manage.sh"
+source "${APP_DIR}/tech/superset/manage.sh"
+source "${APP_DIR}/tech/service_groups.sh"
+source "${APP_DIR}/tech/cli_flags.sh"
+source "${APP_DIR}/tech/ui_selection.sh"
 
 show_ui_services() {
+  if [[ -n "${DATALAB_SELECTED_UI_SERVICES:-}" ]]; then
+    ui::show_selected_links
+    return 0
+  fi
+
   local ui_cmd="/home/datalab/app/ui_services"
   if [[ -x "${ui_cmd}" ]]; then
     echo
@@ -35,7 +53,7 @@ show_ui_services() {
 show_db_access_summary() {
   local server_label="${CONTAINER_NAME:-datalab}"
   local pg_host pg_port mongo_host mongo_port redis_host redis_port
-  local mongo_express_url redis_commander_url pgadmin_url
+  local pgadmin_url mongo_ui_url redis_ui_url
   local pg_db pg_user pg_password mongo_db mongo_user mongo_password redis_password
 
   pg_host="${DATALAB_UI_HOST:-localhost}"
@@ -44,9 +62,9 @@ show_db_access_summary() {
   pg_port="$(common::mapped_host_port "${POSTGRES_PORT:-5432}")"
   mongo_port="$(common::mapped_host_port "${MONGO_PORT:-27017}")"
   redis_port="$(common::mapped_host_port "${REDIS_PORT:-6379}")"
-  mongo_express_url="$(common::ui_url "${MONGO_EXPRESS_PORT:-8083}" "/")"
-  redis_commander_url="$(common::ui_url "${REDIS_COMMANDER_PORT:-8084}" "/")"
   pgadmin_url="$(common::ui_url "${PGADMIN_PORT:-8181}" "/")"
+  mongo_ui_url="$(common::ui_url "${MONGO_EXPRESS_PORT:-8083}" "/")"
+  redis_ui_url="$(common::ui_url "${REDIS_COMMANDER_PORT:-8084}" "/")"
 
   pg_db="${POSTGRES_DB:-datalab}"
   pg_user="${POSTGRES_USER:-admin}"
@@ -62,178 +80,861 @@ show_db_access_summary() {
   echo "PostgreSQL: host=${pg_host} port=${pg_port} db=${pg_db} username=${pg_user} password=${pg_password}"
   echo "MongoDB:    host=${mongo_host} port=${mongo_port} db=${mongo_db} username=${mongo_user} password=${mongo_password} authDb=admin"
   echo "Redis:      host=${redis_host} port=${redis_port} username=default password=${redis_password}"
-  echo "Mongo UI:   ${mongo_express_url}"
-  echo "Redis UI:   ${redis_commander_url}"
+  echo "MongoDB UI: ${mongo_ui_url}"
+  echo "Redis UI:   ${redis_ui_url}"
   echo "pgAdmin UI: ${pgadmin_url} (login: ${PGADMIN_EMAIL:-admin@admin.com} / ${PGADMIN_PASSWORD:-admin})"
 }
 
 start_db_uis_if_needed() {
+  ui::select_database_stack
   dbui::start
   pgadmin::start
 }
 
+start_postgres_with_ui() {
+  ui::set_selected_services postgres
+  postgres::start
+  pgadmin::start
+}
+
+start_mongodb_with_ui() {
+  ui::set_selected_services mongodb
+  mongodb::start
+  dbui::start_mongo_express
+}
+
+start_redis_with_ui() {
+  ui::set_selected_services redis
+  redis::start
+  dbui::start_redis_commander
+}
+
+start_etl_stack() {
+  ui::select_etl_stack
+  groups::start_etl
+  echo "[+] ETL stack started (Airflow/Spark/Hadoop/Hive/Kafka + Schema Registry/Kafka Connect)."
+}
+
+start_database_stack() {
+  ui::select_database_stack
+  groups::start_databases
+  echo "[+] Database stack started (PostgreSQL/MongoDB/Redis + Mongo Express/Redis Commander/pgAdmin)."
+}
+
+start_lakehouse_stack() {
+  ui::select_lakehouse_stack
+  groups::start_lakehouse
+  echo "[+] Lakehouse stack started (MinIO/Trino/Superset + Hive/Hadoop)."
+}
+
+start_quality_stack() {
+  ui::select_quality_stack
+  groups::start_quality
+  echo "[+] Quality & dev stack started (Great Expectations Data Docs + JupyterLab)."
+}
+
+start_observability_stack() {
+  ui::select_observability_stack
+  groups::start_observability
+  echo "[+] Observability stack started (Marquez + Prometheus + Grafana)."
+}
+
+start_full_platform() {
+  ui::select_full_platform
+  groups::start_full_platform
+  echo "[+] Full platform started (ETL + Databases + Lakehouse + Quality/Dev + Observability)."
+}
+
+start_minio_only() {
+  ui::set_selected_services minio
+  minio::start
+}
+
+start_trino_only() {
+  ui::set_selected_services trino
+  hadoop::ensure_running
+  hive::start_metastore
+  trino::start
+}
+
+start_superset_only() {
+  ui::set_selected_services superset
+  superset::start
+}
+
+run_lakehouse_catalog_tests() {
+  start_trino_only
+  trino::lakehouse_tests
+}
+
+run_lakehouse_demo_setup() {
+  start_trino_only
+  trino::setup_simple_demo
+}
+
+start_airflow_only() {
+  ui::set_selected_services airflow
+  airflow::start
+}
+
+start_spark_only() {
+  ui::set_selected_services spark
+  spark::ensure_running
+}
+
+start_hadoop_only() {
+  ui::set_selected_services hadoop
+  hadoop::start
+}
+
+start_hive_only() {
+  ui::set_selected_services hive
+  hive::prepare_cli
+}
+
+start_kafka_only() {
+  ui::set_selected_services kafka
+  kafka::start
+}
+
+start_schema_registry_only() {
+  ui::set_selected_services schema-registry
+  schema_registry::start
+}
+
+start_kafka_connect_only() {
+  ui::set_selected_services kafka-connect
+  kafka_connect::start
+}
+
+run_postgres_cdc_demo() {
+  ui::set_selected_services postgres kafka schema-registry kafka-connect
+  cdc::setup_postgres_demo
+}
+
+verify_postgres_cdc_demo() {
+  ui::set_selected_services postgres kafka schema-registry kafka-connect
+  cdc::verify_postgres_demo
+}
+
+reset_postgres_cdc_demo() {
+  ui::set_selected_services postgres kafka schema-registry kafka-connect
+  cdc::reset_postgres_demo
+}
+
+start_jupyter_only() {
+  ui::set_selected_services jupyter
+  jupyter::start
+}
+
+start_gx_only() {
+  ui::set_selected_services great-expectations
+  gx::start
+}
+
+run_gx_demo_validation() {
+  ui::set_selected_services great-expectations
+  gx::run_demo_validation
+}
+
+start_lineage_only() {
+  ui::set_selected_services lineage
+  lineage::start
+}
+
+run_lineage_demo() {
+  ui::set_selected_services lineage spark
+  lineage::run_spark_demo
+}
+
+start_prometheus_only() {
+  ui::set_selected_services prometheus
+  monitoring::start_prometheus
+}
+
+start_grafana_only() {
+  ui::set_selected_services grafana
+  monitoring::start_grafana
+}
+
+start_core_services() {
+  ui::set_selected_services spark hadoop hive kafka schema-registry kafka-connect
+  hadoop::ensure_running
+  spark::ensure_running
+  hive::prepare_cli
+  kafka::start
+  schema_registry::start
+  kafka_connect::start
+  echo "[+] Spark, Hadoop, Hive, Kafka, Schema Registry, and Kafka Connect services started."
+}
+
+validate_stack() {
+  ui::set_selected_services airflow
+  run_stack_validation_dag
+}
+
+start_pgadmin_only() {
+  ui::set_selected_services postgres
+  pgadmin::start
+}
+
+run_stack_validation_dag() {
+  local dag_id="data_lab_stack_validation"
+  local exec_date
+  airflow::start
+  exec_date="$(date +%F)"
+  echo "[*] Running Airflow DAG '${dag_id}' for date ${exec_date}..."
+  if airflow dags test "${dag_id}" "${exec_date}"; then
+    if ! VALIDATION_DAG_ID="${dag_id}" python3 - <<'PY'
+from airflow.models import DagRun, TaskInstance
+from airflow.utils.session import create_session
+
+dag_id = __import__("os").environ["VALIDATION_DAG_ID"]
+with create_session() as session:
+    dag_run = (
+        session.query(DagRun)
+        .filter(DagRun.dag_id == dag_id)
+        .order_by(DagRun.execution_date.desc())
+        .first()
+    )
+    if dag_run is None:
+        raise SystemExit(f"No DagRun found for {dag_id}")
+
+    task_instances = (
+        session.query(TaskInstance)
+        .filter(TaskInstance.dag_id == dag_id, TaskInstance.run_id == dag_run.run_id)
+        .all()
+    )
+    failures = [
+        ti for ti in task_instances
+        if ti.state != "success" and ti.task_id != "cleanup_validation_artifacts"
+    ]
+    if failures:
+        details = ", ".join(f"{ti.task_id}={ti.state}" for ti in failures)
+        raise SystemExit(f"Validation DAG had failed or skipped tasks: {details}")
+PY
+    then
+      echo "[!] Airflow DAG '${dag_id}' finished with failed or skipped tasks." >&2
+      return 1
+    fi
+    echo "[+] Airflow DAG '${dag_id}' completed successfully."
+  else
+    echo "[!] Airflow DAG '${dag_id}' failed. Check Airflow task logs for details." >&2
+    return 1
+  fi
+}
+
+port_is_open() {
+  local host="$1" port="$2"
+  STATUS_WAIT_HOST="${host}" STATUS_WAIT_PORT="${port}" python3 - <<'PY'
+import os, socket, sys
+host = os.environ["STATUS_WAIT_HOST"]
+port = int(os.environ["STATUS_WAIT_PORT"])
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect((host, port))
+except OSError:
+    sys.exit(1)
+else:
+    s.close()
+    sys.exit(0)
+PY
+}
+
+http_probe_ok() {
+  local port="$1" path="$2"
+  STATUS_HTTP_PORT="${port}" STATUS_HTTP_PATH="${path}" python3 - <<'PY'
+import os, sys, urllib.error, urllib.request
+port = int(os.environ["STATUS_HTTP_PORT"])
+path = os.environ["STATUS_HTTP_PATH"]
+request = urllib.request.Request(
+    f"http://127.0.0.1:{port}{path}",
+    headers={"User-Agent": "datalab-status-report"},
+)
+try:
+    with urllib.request.urlopen(request, timeout=2) as response:
+        sys.exit(0 if response.status < 500 else 1)
+except urllib.error.HTTPError as exc:
+    sys.exit(0 if exc.code < 500 else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+status_probe_endpoint() {
+  local port="$1" probe="$2" path="${3:-/}"
+  local host mapped_port
+
+  host="${DATALAB_UI_HOST:-localhost}"
+  mapped_port="$(common::mapped_host_port "${port}")"
+
+  if [[ "${probe}" == "http" ]]; then
+    common::ui_url "${port}" "${path}"
+    return 0
+  fi
+
+  case "${port}" in
+    5432)
+      printf 'postgresql://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    27017)
+      printf 'mongodb://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    6379)
+      printf 'redis://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    10000|9083)
+      printf 'thrift://%s:%s' "${host}" "${mapped_port}"
+      ;;
+    *)
+      printf '%s:%s' "${host}" "${mapped_port}"
+      ;;
+  esac
+}
+
+show_running_services() {
+  local services=(
+    "Airflow:8080"
+    "Spark Master:9090"
+    "Hadoop NameNode:9870"
+    "HiveServer2:10000"
+    "Kafka UI:9002"
+    "Schema Registry:8085"
+    "Kafka Connect:8086"
+    "PostgreSQL:5432"
+    "MongoDB:27017"
+    "Redis:6379"
+    "Mongo Express:8083"
+    "Redis Commander:8084"
+    "JupyterLab:8888"
+    "GX Data Docs:8891"
+    "Marquez API:5000"
+    "Marquez UI:3000"
+    "Prometheus:9095"
+    "Grafana:3001"
+    "MinIO:${MINIO_API_PORT}"
+    "Trino:8091"
+    "Superset:8090"
+  )
+  local entry name port status
+
+  echo "=== Running Services ==="
+  for entry in "${services[@]}"; do
+    name="${entry%%:*}"
+    port="${entry##*:}"
+    if [[ "${name}" == "MinIO" ]]; then
+      if minio::is_running; then
+        status="running"
+      else
+        status="stopped"
+      fi
+    elif port_is_open localhost "${port}"; then
+      status="running"
+    else
+      status="stopped"
+    fi
+    printf '  %-18s %s\n' "${name}:" "${status}"
+  done
+}
+
+show_service_health_report() {
+  local -a services=(
+    "Airflow|8080|http|/"
+    "Spark Master|9090|http|/metrics/master/prometheus"
+    "HDFS NameNode|9870|http|/"
+    "HiveServer2|10000|tcp|"
+    "Kafka Broker|9092|tcp|"
+    "Kafka UI|9002|http|/"
+    "Schema Registry|8085|http|/apis/registry/v3/system/info"
+    "Kafka Connect|8086|http|/connectors"
+    "PostgreSQL|5432|tcp|"
+    "MongoDB|27017|tcp|"
+    "Redis|6379|tcp|"
+    "Mongo Express|8083|http|/"
+    "Redis Commander|8084|http|/"
+    "pgAdmin|8181|http|/"
+    "JupyterLab|8888|http|/login"
+    "GX Data Docs|8891|http|/"
+    "Marquez API|5000|http|/api/v1/namespaces"
+    "Marquez UI|3000|http|/healthcheck"
+    "Prometheus|9095|http|/-/healthy"
+    "Grafana|3001|http|/api/health"
+    "MinIO API|9004|http|/minio/health/live"
+    "MinIO Console|9005|http|/"
+    "Trino|8091|http|/v1/info"
+    "Superset|8090|http|/health"
+  )
+  local entry name port probe path endpoint state
+  local healthy_count=0
+  local degraded_count=0
+  local stopped_count=0
+  local exit_code=0
+
+  echo "=== Service Health Report ==="
+  printf '  %-18s %-9s %-6s %s\n' "Service" "State" "Probe" "Endpoint"
+  for entry in "${services[@]}"; do
+    IFS='|' read -r name port probe path <<< "${entry}"
+    endpoint="$(status_probe_endpoint "${port}" "${probe}" "${path}")"
+
+    if port_is_open localhost "${port}"; then
+      if [[ "${probe}" == "http" ]] && ! http_probe_ok "${port}" "${path}"; then
+        state="degraded"
+        degraded_count=$((degraded_count + 1))
+        exit_code=1
+      else
+        state="healthy"
+        healthy_count=$((healthy_count + 1))
+      fi
+    else
+      state="stopped"
+      stopped_count=$((stopped_count + 1))
+      exit_code=1
+    fi
+
+    printf '  %-18s %-9s %-6s %s\n' "${name}" "${state}" "${probe}" "${endpoint}"
+  done
+
+  echo
+  echo "Healthy: ${healthy_count}  Degraded: ${degraded_count}  Stopped: ${stopped_count}"
+  return "${exit_code}"
+}
+
+show_status_urls() {
+  echo "=== Service URLs ==="
+  bash /home/datalab/app/ui_services --list || true
+}
+
+show_connection_details() {
+  echo "=== Connection Details ==="
+  bash /home/datalab/app/ui_services --all || true
+}
+
+show_quality_access_summary() {
+  echo
+  echo "=== Quality & Dev Access ==="
+  echo "JupyterLab: $(common::ui_url "${JUPYTER_PORT:-8888}" "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+  echo "Great Expectations Data Docs: $(common::ui_url "${GX_DOCS_PORT:-8891}" "/")"
+}
+
+show_observability_access_summary() {
+  echo
+  echo "=== Observability Access ==="
+  echo "Marquez UI: $(common::ui_url "${MARQUEZ_WEB_PORT:-3000}" "/")"
+  echo "Marquez API: $(common::ui_url "${MARQUEZ_API_PORT:-5000}" "/api/v1/namespaces")"
+  echo "Prometheus UI: $(common::ui_url "${PROMETHEUS_PORT:-9095}" "/")"
+  echo "Grafana UI: $(common::ui_url "${GRAFANA_PORT:-3001}" "/") (login: ${GRAFANA_ADMIN_USER:-admin} / ${GRAFANA_ADMIN_PASSWORD:-admin})"
+}
+
+run_health_check() {
+  bash "${APP_DIR}/datalab-check" --full
+}
+
+run_health_check_fast() {
+  bash "${APP_DIR}/datalab-check" --fast
+}
+
+print_usage() {
+  cat <<'EOF'
+Data Lab CLI
+
+Start flags:
+  --start-etl-stack           Start Airflow + Spark + Hadoop + Hive + Kafka
+  --start-database-stack      Start PostgreSQL + MongoDB + Redis (+ Mongo Express/Redis Commander/pgAdmin)
+  --start-lakehouse-stack     Start MinIO + Trino + Superset + Hive/Hadoop
+  --start-quality-stack       Start Great Expectations Data Docs + JupyterLab
+  --start-observability-stack Start Marquez + Prometheus + Grafana
+  --start-full-platform       Start ETL + Databases + Lakehouse + Quality/Dev + Observability
+  --setup-postgres-cdc       Start PostgreSQL/Kafka/Schema Registry/Kafka Connect and register Debezium demo
+                            Set CDC_SOURCE_MODE=registry for Schema Registry-backed messages
+  --verify-postgres-cdc      Show Debezium connector status and sample CDC messages
+  --reset-postgres-cdc       Remove the demo connector and source table for the selected CDC_SOURCE_MODE
+  --run-great-expectations-demo
+                            Generate the demo quality dataset, validation result, and Data Docs
+  --run-lineage-demo         Start Marquez/Spark and emit a sample OpenLineage Spark run
+  --test-lakehouse-catalogs   Run Trino lakehouse smoke tests
+  --setup-lakehouse-demo      Create simple demo schemas/tables (hudi/delta/iceberg)
+  --status-services           Show running/stopped service status
+  --status-health             Show per-service health probe report
+  --status-urls               Show UI URLs
+  --status-connections        Show full connection details
+  --health-check              Run full dependency/tooling health checks
+  --health-check-fast         Run fast dependency/tooling health checks
+
+Manage individual starts:
+  --start-airflow --start-spark --start-hadoop --start-hive --start-kafka
+  --start-schema-registry --start-kafka-connect
+  --start-minio --start-trino --start-superset
+  --start-jupyter --start-great-expectations
+  --start-lineage --start-prometheus --start-grafana
+  --start-postgres --start-mongodb --start-redis
+
+Stop/Restart:
+  Use stop/restart flags directly from datalab_app, for example:
+  --stop-lakehouse-stack
+  --restart-database-stack
+
+Legacy flags are still supported for compatibility.
+EOF
+}
+
+run_quick_start_menu() {
+  local opt
+  echo
+  echo "=== Quick Start ==="
+  echo "1) Start ETL Stack"
+  echo "2) Start Database Stack"
+  echo "3) Start Lakehouse Stack"
+  echo "4) Start Quality & Dev Stack"
+  echo "5) Start Observability Stack"
+  echo "6) Start Full Platform"
+  echo "0) Back"
+  read -r -p "Select option: " opt
+  case "${opt}" in
+    1) start_etl_stack; show_ui_services ;;
+    2) start_database_stack; show_db_access_summary; show_ui_services ;;
+    3) start_lakehouse_stack; show_ui_services ;;
+    4) start_quality_stack; show_quality_access_summary; show_ui_services ;;
+    5) start_observability_stack; show_observability_access_summary; show_ui_services ;;
+    6) start_full_platform; show_db_access_summary; show_quality_access_summary; show_observability_access_summary; show_ui_services ;;
+    0) return 0 ;;
+    *) echo "Invalid option." ;;
+  esac
+  return 0
+}
+
+run_databases_menu() {
+  local opt
+  echo
+  echo "=== Databases ==="
+  echo "1) PostgreSQL (with pgAdmin)"
+  echo "2) MongoDB"
+  echo "3) Redis"
+  echo "4) All Databases (+ pgAdmin for PostgreSQL)"
+  echo "0) Back"
+  read -r -p "Select option: " opt
+  case "${opt}" in
+    1) start_postgres_with_ui; show_db_access_summary; show_ui_services ;;
+    2) start_mongodb_with_ui; show_db_access_summary; show_ui_services ;;
+    3) start_redis_with_ui; show_db_access_summary; show_ui_services ;;
+    4) start_database_stack; show_db_access_summary; show_ui_services ;;
+    0) return 0 ;;
+    *) echo "Invalid option." ;;
+  esac
+  return 0
+}
+
+run_lakehouse_menu() {
+  local opt
+  echo
+  echo "=== Lakehouse & Analytics ==="
+  echo "1) MinIO"
+  echo "2) Trino"
+  echo "3) Superset"
+  echo "4) Full Lakehouse Stack"
+  echo "5) Test Lakehouse Catalogs"
+  echo "6) Setup Simple Demo (hudi/delta/iceberg)"
+  echo "0) Back"
+  read -r -p "Select option: " opt
+  case "${opt}" in
+    1) start_minio_only; show_ui_services ;;
+    2) start_trino_only; show_ui_services ;;
+    3) start_superset_only; show_ui_services ;;
+    4) start_lakehouse_stack; show_ui_services ;;
+    5) run_lakehouse_catalog_tests; show_ui_services ;;
+    6) run_lakehouse_demo_setup; show_ui_services ;;
+    0) return 0 ;;
+    *) echo "Invalid option." ;;
+  esac
+  return 0
+}
+
+run_status_menu() {
+  local opt
+  echo
+  echo "=== Status & Access Info ==="
+  echo "1) Show running services"
+  echo "2) Show service health report"
+  echo "3) Show service URLs"
+  echo "4) Show connection details"
+  echo "5) Run full health check"
+  echo "6) Run fast health check"
+  echo "0) Back"
+  read -r -p "Select option: " opt
+  case "${opt}" in
+    1) show_running_services ;;
+    2) show_service_health_report ;;
+    3) show_status_urls ;;
+    4) show_connection_details ;;
+    5) run_health_check ;;
+    6) run_health_check_fast ;;
+    0) return 0 ;;
+    *) echo "Invalid option." ;;
+  esac
+  return 0
+}
+
+run_manage_services_menu() {
+  local opt
+  echo
+  echo "=== Manage Services (Start) ==="
+  echo "1) Airflow"
+  echo "2) Spark"
+  echo "3) Hadoop"
+  echo "4) Hive"
+  echo "5) Kafka"
+  echo "6) Schema Registry"
+  echo "7) Kafka Connect"
+  echo "8) MinIO"
+  echo "9) Trino"
+  echo "10) Superset"
+  echo "11) PostgreSQL (with pgAdmin)"
+  echo "12) MongoDB"
+  echo "13) Redis"
+  echo "14) PostgreSQL CDC Demo"
+  echo "15) JupyterLab"
+  echo "16) Great Expectations Data Docs"
+  echo "17) Great Expectations Demo Validation"
+  echo "18) Marquez (API + UI)"
+  echo "19) Prometheus"
+  echo "20) Grafana"
+  echo "21) Spark Lineage Demo"
+  echo "0) Back"
+  read -r -p "Select option: " opt
+  case "${opt}" in
+    1) start_airflow_only; show_ui_services ;;
+    2) start_spark_only; show_ui_services ;;
+    3) start_hadoop_only; show_ui_services ;;
+    4) start_hive_only; show_ui_services ;;
+    5) start_kafka_only; show_ui_services ;;
+    6) start_schema_registry_only; show_ui_services ;;
+    7) start_kafka_connect_only; show_ui_services ;;
+    8) start_minio_only; show_ui_services ;;
+    9) start_trino_only; show_ui_services ;;
+    10) start_superset_only; show_ui_services ;;
+    11) start_postgres_with_ui; show_db_access_summary; show_ui_services ;;
+    12) start_mongodb_with_ui; show_db_access_summary; show_ui_services ;;
+    13) start_redis_with_ui; show_db_access_summary; show_ui_services ;;
+    14) run_postgres_cdc_demo; show_ui_services ;;
+    15) start_jupyter_only; show_quality_access_summary; show_ui_services ;;
+    16) start_gx_only; show_quality_access_summary; show_ui_services ;;
+    17) run_gx_demo_validation; show_quality_access_summary; show_ui_services ;;
+    18) start_lineage_only; show_observability_access_summary; show_ui_services ;;
+    19) start_prometheus_only; show_observability_access_summary; show_ui_services ;;
+    20) start_grafana_only; show_observability_access_summary; show_ui_services ;;
+    21) run_lineage_demo; show_observability_access_summary; show_ui_services ;;
+    0) return 0 ;;
+    *) echo "Invalid option." ;;
+  esac
+  return 0
+}
+
 handle_cli_flag() {
   case "$1" in
-    --prune-logs) logs::prune_if_needed; exit 0 ;;
-    --start-spark) spark::start; exit 0 ;;
-    --start-hadoop) hadoop::start; exit 0 ;;
-    --start-hive) hive::prepare_cli; exit 0 ;;
-    --start-kafka) kafka::start; exit 0 ;;
-    --start-airflow) airflow::start; exit 0 ;;
-    --start-postgres)
-      postgres::start
-      start_db_uis_if_needed
+    --help|-h|help)
+      print_usage
+      exit 0
+      ;;
+    --prune-logs)
+      logs::prune_if_needed
+      exit 0
+      ;;
+
+    # New stack-level flags
+    --start-etl-stack|--quick-start-etl)
+      start_etl_stack
+      show_ui_services
+      exit 0
+      ;;
+    --start-database-stack|--quick-start-databases)
+      start_database_stack
       show_db_access_summary
       show_ui_services
       exit 0
       ;;
-    --start-mongodb)
-      mongodb::start
-      start_db_uis_if_needed
-      show_db_access_summary
+    --start-lakehouse-stack|--quick-start-lakehouse)
+      start_lakehouse_stack
       show_ui_services
       exit 0
       ;;
-    --start-redis)
-      redis::start
-      start_db_uis_if_needed
-      show_db_access_summary
+    --start-quality-stack|--quick-start-quality)
+      start_quality_stack
+      show_quality_access_summary
       show_ui_services
       exit 0
       ;;
+    --start-observability-stack|--quick-start-observability)
+      start_observability_stack
+      show_observability_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --start-full-platform|--quick-start-full-platform)
+      start_full_platform
+      show_db_access_summary
+      show_quality_access_summary
+      show_observability_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --setup-postgres-cdc)
+      run_postgres_cdc_demo
+      show_ui_services
+      exit 0
+      ;;
+    --verify-postgres-cdc)
+      verify_postgres_cdc_demo
+      show_ui_services
+      exit 0
+      ;;
+    --reset-postgres-cdc)
+      reset_postgres_cdc_demo
+      show_ui_services
+      exit 0
+      ;;
+    --run-great-expectations-demo)
+      run_gx_demo_validation
+      show_quality_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --run-lineage-demo)
+      run_lineage_demo
+      show_observability_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --test-lakehouse-catalogs)
+      run_lakehouse_catalog_tests
+      show_ui_services
+      exit 0
+      ;;
+    --setup-lakehouse-demo)
+      run_lakehouse_demo_setup
+      show_ui_services
+      exit 0
+      ;;
+    --status-services)
+      show_running_services
+      exit 0
+      ;;
+    --status-health)
+      show_service_health_report
+      exit $?
+      ;;
+    --status-urls)
+      show_status_urls
+      exit 0
+      ;;
+    --status-connections)
+      show_connection_details
+      exit 0
+      ;;
+    --health-check|--doctor)
+      run_health_check
+      exit $?
+      ;;
+    --health-check-fast|--doctor-fast)
+      run_health_check_fast
+      exit $?
+      ;;
+
+    # Legacy flags kept for compatibility
     --start-databases)
-      postgres::start
-      mongodb::start
-      redis::start
-      start_db_uis_if_needed
-      echo "[+] PostgreSQL, MongoDB, and Redis services started."
+      start_database_stack
       show_db_access_summary
+      show_ui_services
+      exit 0
+      ;;
+    --start-lakehouse)
+      start_lakehouse_stack
+      show_ui_services
+      exit 0
+      ;;
+    --start-core)
+      start_core_services
+      show_ui_services
+      exit 0
+      ;;
+    --validate-stack)
+      validate_stack
+      show_ui_services
+      exit 0
+      ;;
+    --test-lakehouse)
+      run_lakehouse_catalog_tests
       show_ui_services
       exit 0
       ;;
     --start-db-uis)
-      dbui::start
-      pgadmin::start
+      start_db_uis_if_needed
       show_db_access_summary
       show_ui_services
       exit 0
       ;;
     --start-pgadmin)
-      pgadmin::start
+      start_pgadmin_only
       show_db_access_summary
       show_ui_services
       exit 0
       ;;
-    --start-core)
-      hadoop::ensure_running
-      spark::start
-      hive::prepare_cli
-      kafka::start
-      echo "[+] Spark, Hadoop, Hive, and Kafka services started."
-      show_ui_services
-      exit 0
+
+    # Individual starts (unchanged)
+    --start-spark) start_spark_only; show_ui_services; exit 0 ;;
+    --start-hadoop) start_hadoop_only; show_ui_services; exit 0 ;;
+    --start-hive) start_hive_only; show_ui_services; exit 0 ;;
+    --start-kafka) start_kafka_only; show_ui_services; exit 0 ;;
+    --start-schema-registry) start_schema_registry_only; show_ui_services; exit 0 ;;
+    --start-kafka-connect) start_kafka_connect_only; show_ui_services; exit 0 ;;
+    --start-airflow) start_airflow_only; show_ui_services; exit 0 ;;
+    --start-postgres) start_postgres_with_ui; show_db_access_summary; show_ui_services; exit 0 ;;
+    --start-mongodb) start_mongodb_with_ui; show_db_access_summary; show_ui_services; exit 0 ;;
+    --start-redis) start_redis_with_ui; show_db_access_summary; show_ui_services; exit 0 ;;
+    --start-minio) start_minio_only; show_ui_services; exit 0 ;;
+    --start-jupyter) start_jupyter_only; show_quality_access_summary; show_ui_services; exit 0 ;;
+    --start-great-expectations) start_gx_only; show_quality_access_summary; show_ui_services; exit 0 ;;
+    --start-lineage) start_lineage_only; show_observability_access_summary; show_ui_services; exit 0 ;;
+    --start-prometheus) start_prometheus_only; show_observability_access_summary; show_ui_services; exit 0 ;;
+    --start-grafana) start_grafana_only; show_observability_access_summary; show_ui_services; exit 0 ;;
+    --start-trino) start_trino_only; show_ui_services; exit 0 ;;
+    --start-superset) start_superset_only; show_ui_services; exit 0 ;;
+
+    # Stop/restart passthrough from datalab_app
+    --stop-*)
+      exec bash /home/datalab/app/stop "$1"
+      ;;
+    --restart-*)
+      exec bash /home/datalab/app/restart "$1"
       ;;
   esac
 }
 
-if [[ "${1:-}" == "--prune-logs" ]]; then
-  handle_cli_flag "${1}"
+CLI_FLAG="$(cli::normalize_flag "${1:-}")"
+
+if [[ "${CLI_FLAG}" == "--prune-logs" ]]; then
+  handle_cli_flag "${CLI_FLAG}"
 fi
 
 logs::prune_if_needed
+if [[ -n "${CLI_FLAG}" ]]; then
+  handle_cli_flag "${CLI_FLAG}"
+fi
 
-handle_cli_flag "${1:-}" || true
-
-echo "=== Data Lab :: START MENU ==="
-echo "1) Start Spark services"
-echo "2) Start Hadoop services"
-echo "3) Prepare Hive CLI (Hadoop + metastore + HS2)"
-echo "4) Start Kafka services"
-echo "5) Start Airflow webserver & scheduler"
-echo "6) Start ALL core services (Spark/Hadoop/Hive/Kafka)"
-echo "7) Start PostgreSQL service"
-echo "8) Start MongoDB service"
-echo "9) Start Redis service"
-echo "10) Start all databases (PostgreSQL/MongoDB/Redis)"
-echo "11) Start database browser UIs (Mongo Express/Redis Commander/pgAdmin)"
-echo "12) Start pgAdmin UI"
+echo
+echo "=== Data Lab ==="
+echo "1) Quick Start"
+echo "2) Databases"
+echo "3) Lakehouse & Analytics"
+echo "4) Status & Access Info"
+echo "5) Manage Services"
 echo "0) Exit"
-read -p "Select option: " opt
-
-case "$opt" in
-  1)
-    spark::start
-    echo "[+] Spark services started."
-    ;;
-  2)
-    hadoop::start
-    echo "[+] Hadoop services started."
-    ;;
-  3)
-    hive::prepare_cli
-    ;;
-  4)
-    kafka::start
-    echo "[+] Kafka services started."
-    ;;
-  5)
-    airflow::start
-    echo "[+] Airflow services started."
-    ;;
-  6)
-    hadoop::ensure_running
-    spark::start
-    hive::prepare_cli
-    kafka::start
-    echo "[+] Spark, Hadoop, Hive, and Kafka services started."
-    show_ui_services
-    ;;
-  7)
-    postgres::start
-    start_db_uis_if_needed
-    echo "[+] PostgreSQL service started."
-    show_db_access_summary
-    show_ui_services
-    ;;
-  8)
-    mongodb::start
-    start_db_uis_if_needed
-    echo "[+] MongoDB service started."
-    show_db_access_summary
-    show_ui_services
-    ;;
-  9)
-    redis::start
-    start_db_uis_if_needed
-    echo "[+] Redis service started."
-    show_db_access_summary
-    show_ui_services
-    ;;
-  10)
-    postgres::start
-    mongodb::start
-    redis::start
-    start_db_uis_if_needed
-    echo "[+] PostgreSQL, MongoDB, and Redis services started."
-    show_db_access_summary
-    show_ui_services
-    ;;
-  11)
-    dbui::start
-    pgadmin::start
-    show_db_access_summary
-    show_ui_services
-    ;;
-  12)
-    pgadmin::start
-    show_db_access_summary
-    show_ui_services
-    ;;
-  0)
-    echo "Bye."
-    ;;
-  *)
-    echo "Invalid option."
-    exit 1
-    ;;
+read -r -p "Select option: " opt
+case "${opt}" in
+  1) run_quick_start_menu ;;
+  2) run_databases_menu ;;
+  3) run_lakehouse_menu ;;
+  4) run_status_menu ;;
+  5) run_manage_services_menu ;;
+  0) echo "Bye."; exit 0 ;;
+  *) echo "Invalid option." ;;
 esac

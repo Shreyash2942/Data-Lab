@@ -80,7 +80,7 @@ $serversJson = @"
 {
   "Servers": {
     "1": {
-      "Name": "DataLab PostgreSQL ($TargetContainer)",
+      "Name": "$TargetContainer",
       "Group": "Servers",
       "Host": "host.docker.internal",
       "Port": $dbPort,
@@ -121,5 +121,5 @@ if ($resolvedPgAdminPort -ne $PgAdminPort) {
 Write-Output "URL: http://localhost:$resolvedPgAdminPort/"
 Write-Output "Login: $PgAdminEmail"
 Write-Output "Password: $PgAdminPassword"
-Write-Output "Preconfigured server: DataLab PostgreSQL ($TargetContainer) -> host.docker.internal:$dbPort"
+Write-Output "Preconfigured server: $TargetContainer -> host.docker.internal:$dbPort"
 Write-Output "If prompted for DB password, use your PostgreSQL password (default: admin)."

@@ -11,9 +11,9 @@
 | PostgreSQL | `stacks/postgres` | `stacks/postgres/example_postgres.sql` |
 | MongoDB | `stacks/mongodb` | `stacks/mongodb/example_mongodb.py` |
 | Redis | `stacks/redis` | `stacks/redis/example_redis.py` |
-| Hudi | `stacks/hudi` | `stacks/hudi/hudi_example.py` |
-| Iceberg | `stacks/iceberg` | `stacks/iceberg/iceberg_example.py` |
-| Delta | `stacks/delta` | `stacks/delta/delta_example.py` |
+| Hudi | `stacks/lakehouse/hudi` | `stacks/lakehouse/hudi/hudi_example.py` |
+| Iceberg | `stacks/lakehouse/iceberg` | `stacks/lakehouse/iceberg/iceberg_example.py` |
+| Delta | `stacks/lakehouse/delta` | `stacks/lakehouse/delta/delta_example.py` |
 | Python | `stacks/python` | `stacks/python/example.py` |
 | Java | `stacks/java` | `stacks/java/Example.java` |
 | Scala | `stacks/scala` | `stacks/scala/example.scala` |

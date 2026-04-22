@@ -6,21 +6,40 @@ APP_REPO_ROOT="$(cd "${APP_DIR}/.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-data-lab}"
 CONTAINER_NAME="${CONTAINER_NAME:-datalab}"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "${APP_DIR}/scripts/host_exec.sh"
+source "${APP_DIR}/tech/host_exec.sh"
 
 datalab::ensure_inside_or_exec "${APP_REPO_ROOT}" "${SERVICE_NAME}" "${CONTAINER_NAME}" "/home/datalab/app/${SCRIPT_NAME}" "$@"
 
-source "${APP_DIR}/scripts/common.sh"
-source "${APP_DIR}/scripts/logs/manage.sh"
-source "${APP_DIR}/scripts/hadoop/manage.sh"
-source "${APP_DIR}/scripts/hive/manage.sh"
-source "${APP_DIR}/scripts/airflow/manage.sh"
-source "${APP_DIR}/scripts/kafka/manage.sh"
-source "${APP_DIR}/scripts/postgres/manage.sh"
-source "${APP_DIR}/scripts/mongodb/manage.sh"
-source "${APP_DIR}/scripts/redis/manage.sh"
-source "${APP_DIR}/scripts/pgadmin/manage.sh"
-source "${APP_DIR}/scripts/spark/manage.sh"
+source "${APP_DIR}/tech/common.sh"
+source "${APP_DIR}/tech/logs/manage.sh"
+source "${APP_DIR}/tech/hadoop/manage.sh"
+source "${APP_DIR}/tech/hive/manage.sh"
+source "${APP_DIR}/tech/airflow/manage.sh"
+source "${APP_DIR}/tech/kafka/manage.sh"
+source "${APP_DIR}/tech/kafka_connect/manage.sh"
+source "${APP_DIR}/tech/postgres/manage.sh"
+source "${APP_DIR}/tech/schema_registry/manage.sh"
+source "${APP_DIR}/tech/mongodb/manage.sh"
+source "${APP_DIR}/tech/redis/manage.sh"
+source "${APP_DIR}/tech/dbui/manage.sh"
+source "${APP_DIR}/tech/pgadmin/manage.sh"
+source "${APP_DIR}/tech/great_expectations/manage.sh"
+source "${APP_DIR}/tech/jupyter/manage.sh"
+source "${APP_DIR}/tech/lineage/manage.sh"
+source "${APP_DIR}/tech/monitoring/manage.sh"
+source "${APP_DIR}/tech/spark/manage.sh"
+source "${APP_DIR}/tech/minio/manage.sh"
+source "${APP_DIR}/tech/trino/manage.sh"
+source "${APP_DIR}/tech/superset/manage.sh"
+source "${APP_DIR}/tech/service_groups.sh"
+source "${APP_DIR}/tech/cli_flags.sh"
+source "${APP_DIR}/tech/ui_selection.sh"
+
+show_ui_services() {
+  if [[ -n "${DATALAB_SELECTED_UI_SERVICES:-}" ]]; then
+    ui::show_selected_links
+  fi
+}
 
 restart_component() {
   local stop_fn=$1
@@ -29,124 +48,369 @@ restart_component() {
   "${start_fn}"
 }
 
+restart_etl_stack() {
+  ui::select_etl_stack
+  groups::restart_etl
+}
+
+restart_database_stack() {
+  ui::select_database_stack
+  groups::restart_databases
+}
+
+restart_lakehouse_stack() {
+  ui::select_lakehouse_stack
+  groups::restart_lakehouse
+}
+
+restart_quality_stack() {
+  ui::select_quality_stack
+  groups::restart_quality
+}
+
+restart_observability_stack() {
+  ui::select_observability_stack
+  groups::restart_observability
+}
+
+restart_full_platform_stack() {
+  ui::select_full_platform
+  groups::restart_full_platform
+}
+
+restart_spark_only() {
+  ui::set_selected_services spark
+  restart_component spark::stop spark::start
+}
+
+restart_hadoop_only() {
+  ui::set_selected_services hadoop
+  restart_component hadoop::stop hadoop::start
+}
+
+restart_hive_only() {
+  ui::set_selected_services hive
+  hive::stop || true
+  hive::prepare_cli
+}
+
+restart_kafka_only() {
+  ui::set_selected_services kafka
+  restart_component kafka::stop kafka::start
+}
+
+restart_schema_registry_only() {
+  ui::set_selected_services schema-registry
+  restart_component schema_registry::stop schema_registry::start
+}
+
+restart_kafka_connect_only() {
+  ui::set_selected_services kafka-connect
+  restart_component kafka_connect::stop kafka_connect::start
+}
+
+restart_airflow_only() {
+  ui::set_selected_services airflow
+  restart_component airflow::stop airflow::start
+}
+
+restart_postgres_only() {
+  ui::set_selected_services postgres
+  restart_component postgres::stop postgres::start
+}
+
+restart_mongodb_only() {
+  ui::set_selected_services mongodb
+  dbui::stop_mongo_express || true
+  restart_component mongodb::stop mongodb::start
+  dbui::start_mongo_express
+}
+
+restart_redis_only() {
+  ui::set_selected_services redis
+  dbui::stop_redis_commander || true
+  restart_component redis::stop redis::start
+  dbui::start_redis_commander
+}
+
+restart_db_uis_only() {
+  ui::select_database_stack
+  dbui::stop || true
+  dbui::start
+  restart_component pgadmin::stop pgadmin::start
+}
+
+restart_pgadmin_only() {
+  ui::set_selected_services postgres
+  restart_component pgadmin::stop pgadmin::start
+}
+
+restart_minio_only() {
+  ui::set_selected_services minio
+  restart_component minio::stop minio::start
+}
+
+restart_trino_only() {
+  ui::set_selected_services trino
+  hadoop::ensure_running
+  hive::start_metastore
+  restart_component trino::stop trino::start
+}
+
+restart_superset_only() {
+  ui::set_selected_services superset
+  restart_component superset::stop superset::start
+}
+
+restart_jupyter_only() {
+  ui::set_selected_services jupyter
+  restart_component jupyter::stop jupyter::start
+}
+
+restart_gx_only() {
+  ui::set_selected_services great-expectations
+  restart_component gx::stop gx::start
+}
+
+restart_lineage_only() {
+  ui::set_selected_services lineage
+  restart_component lineage::stop lineage::start
+}
+
+restart_prometheus_only() {
+  ui::set_selected_services prometheus
+  restart_component monitoring::stop_prometheus monitoring::start_prometheus
+}
+
+restart_grafana_only() {
+  ui::set_selected_services grafana
+  restart_component monitoring::stop_grafana monitoring::start_grafana
+}
+
+restart_core_services() {
+  ui::set_selected_services spark hadoop hive kafka schema-registry kafka-connect
+  groups::restart_etl
+}
+
 handle_cli_flag() {
   case "$1" in
     --prune-logs) logs::prune_if_needed; exit 0 ;;
-    --restart-spark) restart_component spark::stop spark::start; exit 0 ;;
-    --restart-hadoop) restart_component hadoop::stop hadoop::start; exit 0 ;;
+    --restart-etl-stack)
+      restart_etl_stack
+      echo "[+] ETL stack restarted."
+      show_ui_services
+      exit 0
+      ;;
+    --restart-database-stack|--restart-databases)
+      restart_database_stack
+      echo "[+] Database stack restarted (PostgreSQL/MongoDB/Redis + Mongo Express/Redis Commander/pgAdmin)."
+      show_ui_services
+      exit 0
+      ;;
+    --restart-lakehouse-stack|--restart-lakehouse)
+      restart_lakehouse_stack
+      echo "[+] Lakehouse services restarted."
+      show_ui_services
+      exit 0
+      ;;
+    --restart-quality-stack)
+      restart_quality_stack
+      echo "[+] Quality & dev services restarted."
+      show_ui_services
+      exit 0
+      ;;
+    --restart-observability-stack)
+      restart_observability_stack
+      echo "[+] Observability services restarted."
+      show_ui_services
+      exit 0
+      ;;
+    --restart-full-platform)
+      restart_full_platform_stack
+      echo "[+] Full platform restarted."
+      show_ui_services
+      exit 0
+      ;;
+    --restart-spark) restart_spark_only; show_ui_services; exit 0 ;;
+    --restart-hadoop) restart_hadoop_only; show_ui_services; exit 0 ;;
     --restart-hive)
-      hive::stop || true
-      hive::prepare_cli
+      restart_hive_only
+      show_ui_services
       exit 0
       ;;
-    --restart-kafka) restart_component kafka::stop kafka::start; exit 0 ;;
-    --restart-airflow) restart_component airflow::stop airflow::start; exit 0 ;;
-    --restart-postgres) restart_component postgres::stop postgres::start; exit 0 ;;
-    --restart-mongodb) restart_component mongodb::stop mongodb::start; exit 0 ;;
-    --restart-redis) restart_component redis::stop redis::start; exit 0 ;;
-    --restart-pgadmin) restart_component pgadmin::stop pgadmin::start; exit 0 ;;
-    --restart-databases)
-      restart_component postgres::stop postgres::start
-      restart_component mongodb::stop mongodb::start
-      restart_component redis::stop redis::start
-      echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
+    --restart-kafka) restart_kafka_only; show_ui_services; exit 0 ;;
+    --restart-schema-registry) restart_schema_registry_only; show_ui_services; exit 0 ;;
+    --restart-kafka-connect) restart_kafka_connect_only; show_ui_services; exit 0 ;;
+    --restart-airflow) restart_airflow_only; show_ui_services; exit 0 ;;
+    --restart-postgres) restart_postgres_only; show_ui_services; exit 0 ;;
+    --restart-mongodb) restart_mongodb_only; show_ui_services; exit 0 ;;
+    --restart-redis) restart_redis_only; show_ui_services; exit 0 ;;
+    --restart-jupyter) restart_jupyter_only; show_ui_services; exit 0 ;;
+    --restart-great-expectations) restart_gx_only; show_ui_services; exit 0 ;;
+    --restart-lineage) restart_lineage_only; show_ui_services; exit 0 ;;
+    --restart-prometheus) restart_prometheus_only; show_ui_services; exit 0 ;;
+    --restart-grafana) restart_grafana_only; show_ui_services; exit 0 ;;
+    --restart-mongo-express) ui::set_selected_services mongodb; restart_component dbui::stop_mongo_express dbui::start_mongo_express; show_ui_services; exit 0 ;;
+    --restart-redis-commander) ui::set_selected_services redis; restart_component dbui::stop_redis_commander dbui::start_redis_commander; show_ui_services; exit 0 ;;
+    --restart-db-uis)
+      restart_db_uis_only
+      show_ui_services
       exit 0
       ;;
+    --restart-pgadmin) restart_pgadmin_only; show_ui_services; exit 0 ;;
+    --restart-minio) restart_minio_only; show_ui_services; exit 0 ;;
+    --restart-trino)
+      restart_trino_only
+      show_ui_services
+      exit 0
+      ;;
+    --restart-superset) restart_superset_only; show_ui_services; exit 0 ;;
     --restart-core)
-      kafka::stop || true
-      hive::stop || true
-      hadoop::stop || true
-      spark::stop || true
-      hadoop::ensure_running
-      spark::start
-      hive::prepare_cli
-      kafka::start
-      echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+      restart_core_services
+      echo "[+] Spark/Hadoop/Hive/Kafka/Schema Registry/Kafka Connect services restarted."
+      show_ui_services
       exit 0
       ;;
   esac
 }
 
-if [[ "${1:-}" == "--prune-logs" ]]; then
-  handle_cli_flag "${1}"
+CLI_FLAG="$(cli::normalize_flag "${1:-}")"
+
+if [[ "${CLI_FLAG}" == "--prune-logs" ]]; then
+  handle_cli_flag "${CLI_FLAG}"
 fi
 
 logs::prune_if_needed
 
-handle_cli_flag "${1:-}" || true
+handle_cli_flag "${CLI_FLAG}" || true
 
 echo "=== Data Lab :: RESTART MENU ==="
 echo "1) Restart Spark services"
 echo "2) Restart Hadoop services"
 echo "3) Restart Hive services"
 echo "4) Restart Kafka services"
-echo "5) Restart Airflow webserver & scheduler"
-echo "6) Restart ALL core services (Spark/Hadoop/Hive/Kafka)"
-echo "7) Restart PostgreSQL service"
-echo "8) Restart MongoDB service"
-echo "9) Restart Redis service"
-echo "10) Restart all databases (PostgreSQL/MongoDB/Redis)"
-echo "11) Restart pgAdmin UI"
-echo "12) Restart Docker container only"
+echo "5) Restart Schema Registry"
+echo "6) Restart Kafka Connect"
+echo "7) Restart Airflow webserver & scheduler"
+echo "8) Restart ALL core services (Spark/Hadoop/Hive/Kafka/Schema Registry/Kafka Connect)"
+echo "9) Restart PostgreSQL service"
+echo "10) Restart MongoDB service"
+echo "11) Restart Redis service"
+echo "12) Restart all databases (PostgreSQL/MongoDB/Redis)"
+echo "13) Restart DB UIs (Mongo Express/Redis Commander/pgAdmin)"
+echo "14) Restart MinIO service"
+echo "15) Restart Trino service"
+echo "16) Restart Superset UI"
+echo "17) Restart lakehouse services (MinIO/Trino/Superset + Hive/Hadoop)"
+echo "18) Restart JupyterLab"
+echo "19) Restart Great Expectations Data Docs"
+echo "20) Restart Quality & Dev stack"
+echo "21) Restart Marquez"
+echo "22) Restart Prometheus"
+echo "23) Restart Grafana"
+echo "24) Restart Observability stack"
+echo "25) Restart Docker container only"
 echo "0) Exit"
 read -p "Select option: " opt
 
 case "$opt" in
   1)
-    restart_component spark::stop spark::start
+    restart_spark_only
     echo "[+] Spark services restarted."
     ;;
   2)
-    restart_component hadoop::stop hadoop::start
+    restart_hadoop_only
     echo "[+] Hadoop services restarted."
     ;;
   3)
-    hive::stop || true
-    hive::prepare_cli
+    restart_hive_only
     echo "[+] Hive services restarted."
     ;;
   4)
-    restart_component kafka::stop kafka::start
+    restart_kafka_only
     echo "[+] Kafka services restarted."
     ;;
   5)
-    restart_component airflow::stop airflow::start
-    echo "[+] Airflow services restarted."
+    restart_schema_registry_only
+    echo "[+] Schema Registry restarted."
     ;;
   6)
-    kafka::stop || true
-    hive::stop || true
-    hadoop::stop || true
-    spark::stop || true
-    hadoop::ensure_running
-    spark::start
-    hive::prepare_cli
-    kafka::start
-    echo "[+] Spark/Hadoop/Hive/Kafka services restarted."
+    restart_kafka_connect_only
+    echo "[+] Kafka Connect restarted."
     ;;
   7)
-    restart_component postgres::stop postgres::start
-    echo "[+] PostgreSQL service restarted."
+    restart_airflow_only
+    echo "[+] Airflow services restarted."
     ;;
   8)
-    restart_component mongodb::stop mongodb::start
-    echo "[+] MongoDB service restarted."
+    restart_core_services
+    echo "[+] Spark/Hadoop/Hive/Kafka/Schema Registry/Kafka Connect services restarted."
     ;;
   9)
-    restart_component redis::stop redis::start
-    echo "[+] Redis service restarted."
+    restart_postgres_only
+    echo "[+] PostgreSQL service restarted."
     ;;
   10)
-    restart_component postgres::stop postgres::start
-    restart_component mongodb::stop mongodb::start
-    restart_component redis::stop redis::start
-    echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
+    restart_mongodb_only
+    echo "[+] MongoDB service restarted."
     ;;
   11)
-    restart_component pgadmin::stop pgadmin::start
-    echo "[+] pgAdmin UI restarted."
+    restart_redis_only
+    echo "[+] Redis service restarted."
     ;;
   12)
+    restart_database_stack
+    echo "[+] PostgreSQL, MongoDB, and Redis services restarted."
+    ;;
+  13)
+    restart_db_uis_only
+    echo "[+] Database UIs restarted."
+    ;;
+  14)
+    restart_minio_only
+    echo "[+] MinIO service restarted."
+    ;;
+  15)
+    restart_trino_only
+    echo "[+] Trino service restarted."
+    ;;
+  16)
+    restart_superset_only
+    echo "[+] Superset UI restarted."
+    ;;
+  17)
+    restart_lakehouse_stack
+    echo "[+] Lakehouse services restarted."
+    ;;
+  18)
+    restart_jupyter_only
+    echo "[+] JupyterLab restarted."
+    ;;
+  19)
+    restart_gx_only
+    echo "[+] Great Expectations Data Docs restarted."
+    ;;
+  20)
+    restart_quality_stack
+    echo "[+] Quality & dev services restarted."
+    ;;
+  21)
+    restart_lineage_only
+    echo "[+] Marquez services restarted."
+    ;;
+  22)
+    restart_prometheus_only
+    echo "[+] Prometheus restarted."
+    ;;
+  23)
+    restart_grafana_only
+    echo "[+] Grafana restarted."
+    ;;
+  24)
+    restart_observability_stack
+    echo "[+] Observability services restarted."
+    ;;
+  25)
     (
       cd "${APP_REPO_ROOT}"
       docker compose restart "${SERVICE_NAME}"
@@ -160,3 +424,5 @@ case "$opt" in
     exit 1
     ;;
 esac
+
+show_ui_services

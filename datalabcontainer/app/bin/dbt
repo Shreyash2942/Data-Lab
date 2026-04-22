@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../tech/common.sh"
+
+PATH_WITHOUT_SCRIPT_DIR=""
+IFS=':' read -r -a PATH_PARTS <<< "${PATH}"
+for path_part in "${PATH_PARTS[@]}"; do
+  [[ "${path_part}" == "${SCRIPT_DIR}" ]] && continue
+  if [[ -n "${PATH_WITHOUT_SCRIPT_DIR}" ]]; then
+    PATH_WITHOUT_SCRIPT_DIR="${PATH_WITHOUT_SCRIPT_DIR}:"
+  fi
+  PATH_WITHOUT_SCRIPT_DIR="${PATH_WITHOUT_SCRIPT_DIR}${path_part}"
+done
+
+DBT_BIN="$(PATH="${PATH_WITHOUT_SCRIPT_DIR}" command -v dbt 2>/dev/null || true)"
+if [[ -z "${DBT_BIN}" ]]; then
+  DBT_BIN="/usr/local/bin/dbt"
+fi
+
+if [[ ! -x "${DBT_BIN}" ]]; then
+  echo "[!] Could not find the underlying dbt binary." >&2
+  exit 1
+fi
+
+exec "${DBT_BIN}" "$@"

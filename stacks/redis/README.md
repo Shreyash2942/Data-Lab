@@ -11,7 +11,7 @@ bash ~/redis/scripts/db_access_guide.sh
 ```
 
 This prompts for username/password and prints:
-- Browser UI URLs (host-side)
+- Optional pgAdmin URL (PostgreSQL)
 - PostgreSQL, MongoDB, Redis connection values for IDEs
 - Ready-to-use MongoDB/Redis URI examples
 
@@ -31,8 +31,12 @@ This prompts for username/password and prints:
    ```
 4. In that output, find:
    - `Redis (DB): redis://localhost:<port>`
-   - `Redis Commander UI: http://localhost:<port>/`
-5. Open `Redis Commander UI` in browser.
+5. Use that endpoint in Redis Insight / VS Code / redis-cli.
+
+## Important behavior
+
+- Redis is NoSQL key/value, so there is no SQL-style `schema.table` creation flow.
+- Manage data as keys/values (`SET`, `GET`, hashes, lists, etc.) instead of SQL DDL.
 
 ## VS Code (dynamic port)
 
@@ -55,7 +59,7 @@ PyCharm Database tool does not provide first-class Redis browsing like SQL data 
 
 Recommended options:
 
-1. Use `Redis Commander UI` URL from `ui-services.ps1`.
+1. Use Redis Insight with the mapped host port.
 2. Use Redis CLI:
    ```bash
    redis-cli -h localhost -p <mapped_redis_port>
