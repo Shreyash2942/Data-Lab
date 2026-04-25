@@ -76,6 +76,11 @@ function Get-FreeHostPort {
   throw "Could not find a free host port for preferred base $PreferredPort."
 }
 
+$existingNames = @(docker container ls -a --format "{{.Names}}" 2>$null)
+if ($existingNames -contains $Name) {
+  docker rm -f $Name 2>$null | Out-Null
+}
+
 $defaultPortMappings = @(
   "8080:8080", "4040:4040", "9090:9090", "18080:18080",
   "9092:9092", "9870:9870", "8088:8088", "9083:9083", "10000:10000",
@@ -120,11 +125,6 @@ foreach ($mapping in $resolvedDefaultPorts) {
   $hostPortMapEntries += "$containerPort=$hostPort"
 }
 $hostPortMap = $hostPortMapEntries -join ","
-
-$existingNames = @(docker container ls -a --format "{{.Names}}" 2>$null)
-if ($existingNames -contains $Name) {
-  docker rm -f $Name 2>$null | Out-Null
-}
 
 $portArgs = @()
 foreach ($mapping in $resolvedDefaultPorts) { $portArgs += @("-p", $mapping) }
