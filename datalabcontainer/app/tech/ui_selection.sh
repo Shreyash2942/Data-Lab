@@ -105,6 +105,30 @@ ui::print_row() {
   printf '%-20s %s\n' "${name}:" "${value}"
 }
 
+ui::default_airflow_user() {
+  printf '%s' "${AIRFLOW_DEFAULT_USER:-${CONTAINER_NAME:-datalab}}"
+}
+
+ui::default_airflow_password() {
+  printf '%s' "${AIRFLOW_DEFAULT_PASS:-admin}"
+}
+
+ui::default_pgadmin_login() {
+  printf '%s / %s' "${PGADMIN_EMAIL:-admin@admin.com}" "${PGADMIN_PASSWORD:-admin}"
+}
+
+ui::default_superset_login() {
+  printf '%s / %s' "${SUPERSET_ADMIN_USERNAME:-admin}" "${SUPERSET_ADMIN_PASSWORD:-admin}"
+}
+
+ui::default_minio_login() {
+  printf '%s / %s' "${MINIO_ROOT_USER:-username-minio}" "${MINIO_ROOT_PASSWORD:-admin}"
+}
+
+ui::default_grafana_login() {
+  printf '%s / %s' "${GRAFANA_ADMIN_USER:-admin}" "${GRAFANA_ADMIN_PASSWORD:-admin}"
+}
+
 ui::endpoint() {
   local scheme="$1"
   local port="$2"
@@ -123,6 +147,7 @@ ui::show_selected_links() {
     case "${service}" in
       airflow)
         ui::print_row "Airflow" "$(common::ui_url "${AIRFLOW_WEB_PORT:-8080}" "/")"
+        ui::print_row "Airflow Login" "$(ui::default_airflow_user) / $(ui::default_airflow_password)"
         ;;
       spark)
         ui::print_row "Spark RPC" "$(ui::endpoint "spark" 7077)"
@@ -151,6 +176,7 @@ ui::show_selected_links() {
         ;;
       postgres)
         ui::print_row "pgAdmin UI" "$(common::ui_url "${PGADMIN_PORT:-8181}" "/")"
+        ui::print_row "pgAdmin Login" "$(ui::default_pgadmin_login)"
         ;;
       mongodb)
         ui::print_row "Mongo Express" "$(common::ui_url "${MONGO_EXPRESS_PORT:-8083}" "/")"
@@ -161,15 +187,18 @@ ui::show_selected_links() {
       minio)
         ui::print_row "MinIO API" "$(common::ui_url "${MINIO_API_PORT:-9004}" "/")"
         ui::print_row "MinIO Console" "$(common::ui_url "${MINIO_CONSOLE_PORT:-9005}" "/")"
+        ui::print_row "MinIO Login" "$(ui::default_minio_login)"
         ;;
       trino)
         ui::print_row "Trino HTTP" "$(common::ui_url "${TRINO_PORT:-8091}" "/")"
         ;;
       superset)
         ui::print_row "Superset UI" "$(common::ui_url "${SUPERSET_PORT:-8090}" "/")"
+        ui::print_row "Superset Login" "$(ui::default_superset_login)"
         ;;
       jupyter)
         ui::print_row "JupyterLab" "$(common::ui_url "${JUPYTER_PORT:-8888}" "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+        ui::print_row "Jupyter Token" "${JUPYTER_TOKEN:-datalab}"
         ;;
       great-expectations)
         ui::print_row "GX Data Docs" "$(common::ui_url "${GX_DOCS_PORT:-8891}" "/")"
@@ -183,6 +212,7 @@ ui::show_selected_links() {
         ;;
       grafana)
         ui::print_row "Grafana UI" "$(common::ui_url "${GRAFANA_PORT:-3001}" "/")"
+        ui::print_row "Grafana Login" "$(ui::default_grafana_login)"
         ;;
     esac
   done

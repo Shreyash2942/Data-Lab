@@ -296,6 +296,22 @@ default_postgres_user() {
   printf '%s' "${POSTGRES_USER:-admin}"
 }
 
+default_airflow_user() {
+  printf '%s' "${AIRFLOW_DEFAULT_USER:-${CONTAINER_NAME:-datalab}}"
+}
+
+default_airflow_password() {
+  printf '%s' "${AIRFLOW_DEFAULT_PASS:-admin}"
+}
+
+default_pgadmin_email() {
+  printf '%s' "${PGADMIN_EMAIL:-admin@admin.com}"
+}
+
+default_pgadmin_password() {
+  printf '%s' "${PGADMIN_PASSWORD:-admin}"
+}
+
 default_mongo_db() {
   printf '%s' "${MONGO_DB:-datalab}"
 }
@@ -306,6 +322,30 @@ default_mongo_user() {
 
 default_redis_user() {
   printf '%s' "default"
+}
+
+default_superset_user() {
+  printf '%s' "${SUPERSET_ADMIN_USERNAME:-admin}"
+}
+
+default_superset_password() {
+  printf '%s' "${SUPERSET_ADMIN_PASSWORD:-admin}"
+}
+
+default_minio_user() {
+  printf '%s' "${MINIO_ROOT_USER:-username-minio}"
+}
+
+default_minio_password() {
+  printf '%s' "${MINIO_ROOT_PASSWORD:-admin}"
+}
+
+default_grafana_user() {
+  printf '%s' "${GRAFANA_ADMIN_USER:-admin}"
+}
+
+default_grafana_password() {
+  printf '%s' "${GRAFANA_ADMIN_PASSWORD:-admin}"
 }
 
 read_hive_warehouse_dir() {
@@ -472,7 +512,7 @@ show_grafana_connect_info() {
   print_section "Grafana Info"
   print_kv "UI (inside container)" "${inside_url}"
   print_kv "UI (outside host)" "${outside_url}"
-  print_kv "Login" "${GRAFANA_ADMIN_USER:-admin} / ${GRAFANA_ADMIN_PASSWORD:-admin}"
+  print_kv "Login" "$(default_grafana_user) / $(default_grafana_password)"
   print_kv "Provisioned dashboard" "Data Lab Overview"
 }
 
@@ -483,7 +523,32 @@ show_airflow_connect_info() {
   print_section "Airflow Connection Info"
   print_kv "Web UI (inside container)" "${airflow_inside}"
   print_kv "Web UI (outside host)" "${airflow_outside}"
-  print_kv "Default login" "username=${CONTAINER_NAME:-datalab} password=admin"
+  print_kv "Default login" "username=$(default_airflow_user) password=$(default_airflow_password)"
+}
+
+show_minio_connect_info() {
+  local api_inside api_outside console_inside console_outside
+  api_inside="http://localhost:${MINIO_API_PORT}/"
+  api_outside="$(container_effective_url "${MINIO_API_PORT}" "/")"
+  console_inside="http://localhost:${MINIO_CONSOLE_PORT}/"
+  console_outside="$(container_effective_url "${MINIO_CONSOLE_PORT}" "/")"
+  print_section "MinIO Info"
+  print_kv "API (inside container)" "${api_inside}"
+  print_kv "API (outside host)" "${api_outside}"
+  print_kv "Console (inside container)" "${console_inside}"
+  print_kv "Console (outside host)" "${console_outside}"
+  print_kv "Login" "username=$(default_minio_user) password=$(default_minio_password)"
+}
+
+show_superset_connect_info() {
+  local inside_url outside_url
+  inside_url="http://localhost:${SUPERSET_PORT}/"
+  outside_url="$(container_effective_url "${SUPERSET_PORT}" "/")"
+  print_section "Superset Info"
+  print_kv "UI (inside container)" "${inside_url}"
+  print_kv "UI (outside host)" "${outside_url}"
+  print_kv "Login" "username=$(default_superset_user) password=$(default_superset_password)"
+  print_kv "Database" "${SUPERSET_TRINO_DB_NAME:-Trino Lakehouse}"
 }
 
 show_postgres_connect_info() {
@@ -674,7 +739,6 @@ port_listening_local() {
 ui_login_helper() {
   local selection service_name container_port start_flag service_url service_is_endpoint endpoint_scheme start_now
   local endpoint_path inside_endpoint_url
-  local airflow_user="${CONTAINER_NAME:-datalab}"
 
   while true; do
     echo
@@ -696,9 +760,10 @@ ui_login_helper() {
     echo "15) Marquez (UI + API)"
     echo "16) Prometheus"
     echo "17) Grafana"
+    echo "18) MinIO (API + Console + Login)"
     echo "0) Exit"
     selection=""
-    if ! read -r -p "Select option [0-17]: " selection; then
+    if ! read -r -p "Select option [0-18]: " selection; then
       echo
       echo "Bye."
       return 0
@@ -796,6 +861,14 @@ ui_login_helper() {
         endpoint_path="/"
         inside_endpoint_url="http://localhost:3001/"
         ;;
+      18)
+        service_name="MinIO Console"
+        container_port="${MINIO_CONSOLE_PORT}"
+        start_flag="--start-minio"
+        service_is_endpoint=1
+        endpoint_path="/"
+        inside_endpoint_url="http://localhost:${MINIO_CONSOLE_PORT}/"
+        ;;
       0) echo "Bye."; return 0 ;;
       *) echo "Invalid selection."; echo; return 1 ;;
     esac
@@ -832,7 +905,6 @@ ui_login_helper() {
     fi
     case "${selection}" in
       1)
-        echo "Login: username=${airflow_user} password=admin"
         show_airflow_connect_info
         ;;
       2)
@@ -864,8 +936,8 @@ ui_login_helper() {
         pg_server_name="${CONTAINER_NAME:-datalab}"
 
         print_section "pgAdmin Login"
-        print_kv "Email" "${PGADMIN_EMAIL:-admin@admin.com}"
-        print_kv "Password" "${PGADMIN_PASSWORD:-admin}"
+        print_kv "Email" "$(default_pgadmin_email)"
+        print_kv "Password" "$(default_pgadmin_password)"
         print_section "pgAdmin Preconfigured Server"
         print_kv "Server name" "${pg_server_name}"
         print_kv "Host name/address" "${pg_host}"
@@ -895,9 +967,8 @@ ui_login_helper() {
         print_kv "Trino JDBC" "jdbc:trino://$(effective_host_port 8091)/${TRINO_DEFAULT_CATALOG}/${TRINO_DEFAULT_SCHEMA}?user=${TRINO_USER}"
         ;;
       10)
-        echo "Superset login: username=admin password=admin"
-        print_kv "Superset URL" "${service_url}"
-        echo "Superset database to use: Trino Lakehouse"
+        show_superset_connect_info
+        echo "Superset database to use: ${SUPERSET_TRINO_DB_NAME:-Trino Lakehouse}"
         echo "Use 2-part names (schema.table) in SQL Lab:"
         echo "  - demo_iceberg.iceberg_table"
         echo "  - demo_delta.table_delta"
@@ -923,6 +994,9 @@ ui_login_helper() {
         ;;
       17)
         show_grafana_connect_info
+        ;;
+      18)
+        show_minio_connect_info
         ;;
       *)
         echo "Login: no credentials required for this UI."
@@ -1092,8 +1166,10 @@ print_lakehouse_rows() {
   print_row "Trino Catalog/Schema" "${TRINO_DEFAULT_CATALOG}.${TRINO_DEFAULT_SCHEMA}"
   print_row "Trino JDBC" "${trino_jdbc}"
   print_row "Superset UI" "${superset_ui}"
+  print_row "Superset Login" "$(default_superset_user) / $(default_superset_password)"
   print_row "MinIO API" "${minio_api}"
   print_row "MinIO Console" "${minio_console}"
+  print_row "MinIO Login" "$(default_minio_user) / $(default_minio_password)"
   print_row "Hive Metastore Ext" "${hive_metastore}"
 }
 
@@ -1128,6 +1204,7 @@ print_ui_block_host() {
   print_row "Hive Config Path" "$(read_hive_site_path)"
   print_row "Hive Warehouse Dir" "$(read_hive_warehouse_dir)"
   print_row "Airflow" "$(mapped_url "${container}" 8080 "/")"
+  print_row "Airflow Login" "$(default_airflow_user) / $(default_airflow_password)"
   print_row "Spark Master" "$(mapped_url "${container}" 9090 "/")"
   print_row "Spark History" "$(mapped_url "${container}" 18080 "/")"
   print_row "Spark App UI" "$(mapped_url "${container}" 4040 "/")"
@@ -1137,14 +1214,17 @@ print_ui_block_host() {
   print_row "Schema Registry API" "$(mapped_url "${container}" 8085 "/apis/registry/v3")"
   print_row "Kafka Connect API" "$(mapped_url "${container}" 8086 "/connectors")"
   print_row "JupyterLab" "$(mapped_url "${container}" 8888 "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+  print_row "Jupyter Token" "${JUPYTER_TOKEN:-datalab}"
   print_row "GX Data Docs" "$(mapped_url "${container}" 8891 "/")"
   print_row "Marquez API" "$(mapped_url "${container}" 5000 "/api/v1/namespaces")"
   print_row "Marquez UI" "$(mapped_url "${container}" 3000 "/")"
   print_row "Prometheus UI" "$(mapped_url "${container}" 9095 "/")"
   print_row "Grafana UI" "$(mapped_url "${container}" 3001 "/")"
+  print_row "Grafana Login" "$(default_grafana_user) / $(default_grafana_password)"
   print_row "Mongo Express UI" "$(mapped_url "${container}" 8083 "/")"
   print_row "Redis Commander UI" "$(mapped_url "${container}" 8084 "/")"
   print_row "pgAdmin UI" "$(mapped_url "${container}" 8181 "/")"
+  print_row "pgAdmin Login" "$(default_pgadmin_email) / $(default_pgadmin_password)"
   print_db_rows "${container}" "${UI_HOST}" "${pg_port}" "${pg_db}" "${pg_user}" "${UI_HOST}" "${mongo_port}" "${mongo_db}" "${mongo_user}" "${UI_HOST}" "${redis_port}" "${redis_user}"
   print_row "PostgreSQL (DB)" "$(mapped_endpoint "${container}" 5432 "postgresql")"
   print_row "MongoDB (DB)" "$(mapped_endpoint "${container}" 27017 "mongodb")"
@@ -1195,6 +1275,7 @@ print_ui_block_container() {
   print_row "Hive Config Path" "$(read_hive_site_path)"
   print_row "Hive Warehouse Dir" "$(read_hive_warehouse_dir)"
   print_row "Airflow" "$(container_effective_url 8080 "/")"
+  print_row "Airflow Login" "$(default_airflow_user) / $(default_airflow_password)"
   print_row "Spark Master" "$(container_effective_url 9090 "/")"
   print_row "Spark History" "$(container_effective_url 18080 "/")"
   print_row "Spark App UI" "$(container_effective_url 4040 "/")"
@@ -1204,14 +1285,17 @@ print_ui_block_container() {
   print_row "Schema Registry API" "$(container_effective_url 8085 "/apis/registry/v3")"
   print_row "Kafka Connect API" "$(container_effective_url 8086 "/connectors")"
   print_row "JupyterLab" "$(container_effective_url 8888 "/lab?token=${JUPYTER_TOKEN:-datalab}")"
+  print_row "Jupyter Token" "${JUPYTER_TOKEN:-datalab}"
   print_row "GX Data Docs" "$(container_effective_url 8891 "/")"
   print_row "Marquez API" "$(container_effective_url 5000 "/api/v1/namespaces")"
   print_row "Marquez UI" "$(container_effective_url 3000 "/")"
   print_row "Prometheus UI" "$(container_effective_url 9095 "/")"
   print_row "Grafana UI" "$(container_effective_url 3001 "/")"
+  print_row "Grafana Login" "$(default_grafana_user) / $(default_grafana_password)"
   print_row "Mongo Express UI" "$(container_effective_url 8083 "/")"
   print_row "Redis Commander UI" "$(container_effective_url 8084 "/")"
   print_row "pgAdmin UI" "$(container_effective_url 8181 "/")"
+  print_row "pgAdmin Login" "$(default_pgadmin_email) / $(default_pgadmin_password)"
   print_db_rows "${target_name}" "${pg_host}" "${pg_port}" "${pg_db}" "${pg_user}" "${mongo_host}" "${mongo_port}" "${mongo_db}" "${mongo_user}" "${redis_host}" "${redis_port}" "${redis_user}"
   print_row "PostgreSQL (DB)" "$(container_effective_endpoint 5432 "postgresql")"
   print_row "MongoDB (DB)" "$(container_effective_endpoint 27017 "mongodb")"
