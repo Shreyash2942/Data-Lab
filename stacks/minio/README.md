@@ -41,7 +41,7 @@ datalab_app --start-minio
 Default credentials:
 
 ```text
-minioadmin / minioadmin
+username-minio / admin
 ```
 
 Use `ui_services` for the correct API and console URLs when host ports are remapped.
