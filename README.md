@@ -1,39 +1,35 @@
-# Data Lab - All-in-One Data Engineering Sandbox
+# Data Lab
 
-Data Lab is a single-container data engineering environment for Spark, Hadoop, Hive, Kafka, Airflow, dbt, Great Expectations, JupyterLab, PostgreSQL, MongoDB, Redis, and lakehouse formats (Hudi/Iceberg/Delta).
+Data Lab is a portfolio-ready, single-container data engineering platform that brings together batch processing, streaming, lakehouse analytics, data quality, notebooks, and observability in one reproducible local environment.
 
 ![Data Lab Cover](docs/images/coverimage.png)
 
-## Repository Layout
-- `datalabcontainer/`: container build/runtime assets
-- `datalabconfig/`: runtime tuning and configuration command layer
-- `stacks/`: stack examples and stack-level READMEs
-- `helper/scripts/`: host-side helper scripts for build/run/copy/access
-- `docs/`: architecture and detailed documentation
+## Why This Project Stands Out
 
-## Current Stack Versions
-- Spark `3.5.1`
-- Hadoop `3.3.6`
-- Hive `2.3.9` (compatible with Spark 3.5)
-- Kafka `3.7.1`
-- Kafka Connect `3.7.1` (bundled with Kafka)
-- Debezium PostgreSQL Connector `3.4.0.Final`
-- Apicurio Registry `3.2.0`
-- OpenLineage Spark integration `1.38.0`
-- Marquez `0.50.0`
-- Prometheus `3.2.1`
-- Grafana `11.5.2`
-- Great Expectations `1.15.0`
-- JupyterLab `4.2.7`
-- Airflow `2.9.3`
-- Hudi `0.15.0`
-- Iceberg `1.6.1`
-- Delta Lake `3.2.0`
-- Trino `435` (embedded)
-- Superset `4.1.2` (embedded)
-- MinIO (embedded)
+- One runtime, many workflows: Spark, Hadoop, Hive, Kafka, Airflow, dbt, Great Expectations, JupyterLab, Trino, Superset, MinIO, PostgreSQL, MongoDB, Redis, and observability tooling run as one coordinated platform.
+- Built for real demos: the repo includes ready-to-run workflows for CDC, lakehouse querying, quality checks, and lineage exploration.
+- Operationally thoughtful: service modules follow a consistent pattern, runtime state is isolated per service, and host-side URLs remain usable even when ports are remapped.
 
-## Quick Start (Compose)
+## Platform Highlights
+
+- Batch and SQL: Spark, Hive, Trino, Superset
+- Storage and lakehouse: HDFS, MinIO, Hudi, Iceberg, Delta Lake
+- Streaming and CDC: Kafka, Kafka Connect, Debezium, Apicurio Registry
+- Orchestration and development: Airflow, dbt, JupyterLab
+- Quality and observability: Great Expectations, OpenLineage, Marquez, Prometheus, Grafana
+- Supporting data services: PostgreSQL, MongoDB, Redis
+
+## Architecture Snapshot
+
+- Runtime model: a single container remains the default deployment shape.
+- Service model: each capability lives under `datalabcontainer/app/tech/*` as a modular service script.
+- State model: mutable runtime data lives under `datalabcontainer/runtime/*`.
+- Access model: services keep stable internal ports while host ports can be remapped safely through `ui_services` and `datalab_app`.
+
+## Quick Start
+
+### Docker Compose
+
 ```bash
 cp datalabcontainer/.env.example datalabcontainer/.env
 cd datalabcontainer
@@ -43,7 +39,8 @@ docker compose exec data-lab bash
 su - datalab
 ```
 
-Service control:
+### First Commands To Try
+
 ```bash
 datalab_app
 datalab_config show
@@ -52,224 +49,78 @@ datalab_config recommend
 datalab_config apply balanced
 datalab_app --start-core
 datalab_app --status-health
-datalab_app --health-check-fast
 ```
 
-CDC demo:
+### Featured Demo Workflows
+
+CDC:
+
 ```bash
 datalab_app --setup-postgres-cdc
 datalab_app --verify-postgres-cdc
-
-CDC_SOURCE_MODE=registry datalab_app --setup-postgres-cdc
-CDC_SOURCE_MODE=registry datalab_app --verify-postgres-cdc
 ```
 
-Quality and dev tools:
+Lakehouse analytics:
+
+```bash
+datalab_app --start-minio
+datalab_app --start-trino
+datalab_app --start-superset
+```
+
+Quality and notebooks:
+
 ```bash
 datalab_app --start-quality-stack
 datalab_app --run-great-expectations-demo
-datalab_app --start-jupyter
-datalab_app --start-great-expectations
 ```
 
-Observability and lineage:
+Lineage and monitoring:
+
 ```bash
 datalab_app --start-observability-stack
 datalab_app --run-lineage-demo
-datalab_app --start-lineage
-datalab_app --start-prometheus
-datalab_app --start-grafana
 ```
 
-## System Requirements
+For standalone runs, system requirements, runtime paths, and reset notes, see [Getting Started](docs/GETTING-STARTED.md).
 
-Minimum (container runs, core workflows possible):
+## What Makes It Portfolio-Ready
 
-1. CPU: 4 vCPU
-2. RAM: 12 GB
-3. Disk: 50 GB free SSD
-4. Docker: Docker Desktop or Docker Engine with Compose support
+- Full-platform thinking: the project connects infrastructure, orchestration, analytics, quality, and observability rather than focusing on one isolated tool.
+- Reproducible local environment: a reviewer can run a substantial data platform without provisioning a cloud environment first.
+- Clear operational structure: helper scripts, runtime folders, UI discovery, and documentation make the repo easier to navigate and demo.
 
-Recommended (full platform smoother: Airflow + Spark + Hive + Trino + Superset + DB UIs + JupyterLab):
+## Repository Layout
 
-1. CPU: 8 vCPU
-2. RAM: 24 GB
-3. Disk: 100 GB free SSD
-4. Docker Desktop resource limits (if used): at least 8 CPU and 20+ GB memory
+- `datalabcontainer/` - container build files, runtime scripts, and service modules
+- `datalabconfig/` - runtime tuning and configuration commands
+- `stacks/` - stack-specific notes and service-level READMEs
+- `helper/scripts/` - build, run, copy, and cleanup helpers
+- `docs/` - setup guides, architecture notes, and reference documentation
 
-Future-oriented target (for later data engineering expansion on the same single-container topology):
+## Documentation Map
 
-1. CPU: 12 vCPU
-2. RAM: 32 GB
-3. Disk: 150 GB free SSD
-4. Notes: suitable for adding schema registry, Kafka Connect/CDC, data quality, lineage, notebook, and monitoring services without changing the current monolithic module pattern
+- [Getting Started](docs/GETTING-STARTED.md)
+- [Access Reference](docs/ACCESS-REFERENCE.md)
+- [Stack Reference](docs/STACK-REFERENCE.md)
+- [Data Lab CLI Guide](docs/DATALAB-APP-CLI.md)
+- [Container Topology Guide](docs/CONTAINER-TOPOLOGY-GUIDE.md)
+- [Trino Lakehouse Registration Guide](docs/TRINO-LAKEHOUSE-REGISTRATION.md)
+- [Hudi Registration Guide](docs/HUDI-REGISTRATION.md)
+- [Iceberg Registration Guide](docs/ICEBERG-REGISTRATION.md)
+- [Delta Registration Guide](docs/DELTA-REGISTRATION.md)
+- [Docker Hub Push/Pull Guide](docs/DOCKERHUB-README.md)
+- [Data Engineering Expansion Roadmap](docs/DATA-ENGINEERING-EXPANSION-ROADMAP.md)
+- [ML/AI Future Roadmap](docs/ML-AI-FUTURE-ROADMAP.md)
 
-Future-oriented target (for later ML/AI profile work on the same topology):
+## Current Focus
 
-1. CPU: 12+ vCPU
-2. RAM: 32 to 64 GB
-3. Disk: 200 GB free SSD
-4. Optional GPU: NVIDIA GPU with 12+ GB VRAM (only for local LLM serving/inference)
-5. Notes: AI/ML services should remain optional modules layered on top of the existing data engineering stack
+Data Lab is positioned as a practical local sandbox for demonstrating data engineering platform design:
 
-## Topology and Dynamic Port Rules
+- service orchestration
+- CDC and streaming integration
+- lakehouse table access and BI querying
+- data quality validation
+- lineage and monitoring workflows
 
-The current required topology is preserved for future work:
-
-1. Single container remains the default runtime model
-2. New capabilities should be added as modular tech services under `datalabcontainer/app/tech/*`
-3. Runtime state should stay under `datalabcontainer/runtime/<service>`
-4. Future services must support dynamic host port mapping
-
-Dynamic port support means:
-
-1. Each service keeps a stable internal container port
-2. Host ports may change when a copied container is created
-3. Host-side URLs must be resolved through `DATALAB_HOST_PORT_MAP`
-4. `ui_services` and `datalab_app` remain the source of truth for outside-host endpoints
-5. Future docs and helper scripts should print both inside-container and outside-host endpoints when applicable
-
-## Quick Start (Standalone)
-Linux/macOS:
-```bash
-NAME=datalab IMAGE=data-lab:latest ./helper/scripts/run-standalone.sh
-```
-
-Windows PowerShell:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\helper\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest
-```
-
-## Service Endpoints
-- Airflow: `http://localhost:8080/`
-- Spark Master UI: `http://localhost:9090/`
-- Spark History: `http://localhost:18080/`
-- Spark App UI: `http://localhost:4040/`
-- HDFS NameNode: `http://localhost:9870/`
-- YARN ResourceManager: `http://localhost:8088/`
-- HiveServer2 Thrift: `thrift://localhost:10000`
-- Kafka UI: `http://localhost:9002/`
-- Schema Registry API: `http://localhost:8085/apis/registry/v3`
-- Kafka Connect API: `http://localhost:8086/connectors`
-- JupyterLab: `http://localhost:8888/lab?token=datalab`
-- Great Expectations Data Docs: `http://localhost:8891/`
-- Marquez UI: `http://localhost:3000/`
-- Marquez API: `http://localhost:5000/api/v1/namespaces`
-- Prometheus: `http://localhost:9095/`
-- Grafana: `http://localhost:3001/`
-- pgAdmin: `http://localhost:8181/`
-- Trino: `http://localhost:8091/`
-- Superset: `http://localhost:8090/`
-- MinIO API: `http://localhost:9004/`
-- MinIO Console: `http://localhost:9005/`
-
-Connection endpoints:
-- Spark RPC: `spark://localhost:7077`
-- Hive Metastore: `thrift://localhost:9083`
-- HiveServer2 Thrift: `thrift://localhost:10000`
-- Schema Registry API: `http://localhost:8085/apis/registry/v3`
-- Kafka Connect API: `http://localhost:8086/connectors`
-- PostgreSQL: `postgresql://localhost:5432`
-- MongoDB: `mongodb://localhost:27017`
-- Redis: `redis://localhost:6379`
-
-Built-in CDC demo names:
-- JSON mode: connector `datalab-postgres-cdc`, topic `datalab_cdc.public.customer_events`
-- Registry mode: connector `datalab-postgres-cdc-registry`, topic `datalab_cdc-registry.public.customer_events`
-
-Built-in Phase 3 quality/dev defaults:
-- Jupyter token: `datalab`
-- Jupyter starter notebook: `/home/datalab/runtime/jupyter/notebooks/DataLab_Phase3_Quickstart.ipynb`
-- Great Expectations result file: `/home/datalab/runtime/great_expectations/last_validation.json`
-- Great Expectations demo dataset: `/home/datalab/runtime/great_expectations/demo_data/customer_events_quality.csv`
-- OpenLineage namespace: `datalab` by default (or `CONTAINER_NAME` when set)
-- Marquez lineage demo paths:
-  - `/home/datalab/runtime/lineage/demo/bronze`
-  - `/home/datalab/runtime/lineage/demo/silver`
-- Grafana default login: `admin / admin`
-
-## Runtime Data
-All mutable service state is under:
-- Host: `datalabcontainer/runtime/`
-- Container: `/home/datalab/runtime/`
-
-You can reset a stack by removing only its runtime subfolder (for example `datalabcontainer/runtime/airflow`).
-
-## Docker Optimization Notes
-- `.dockerignore` excludes runtime state, helpers, docs, and local caches from build context.
-- Base Dockerfile enables:
-  - `PIP_NO_CACHE_DIR=1`
-  - `PIP_DISABLE_PIP_VERSION_CHECK=1`
-  - npm update-notifier/fund disabled
-  - npm cache cleanup after global installs
-- Python package installation is consolidated to reduce image layers.
-- Service scripts are normalized for CRLF in entrypoint to avoid `bash\r` failures on Windows-mounted files.
-
-## Recommended Build/Push Optimization
-- Use `docker buildx` with registry cache in GitHub Actions.
-- Build only on `main` (or release tags) for Docker Hub pushes.
-- Use branch CI on `dev` for tests/lint only.
-- Keep image tags:
-  - immutable (`:sha-<commit>`)
-  - rolling (`:latest`)
-
-## Single Runtime Image Note
-
-`data-lab:latest` is the only runtime image you need to run the platform.
-
-The extra images you may see locally such as:
-
-- `prom/prometheus`
-- `grafana/grafana`
-- `marquezproject/marquez`
-- `marquezproject/marquez-web`
-- `apicurio/apicurio-registry`
-- `quay.io/debezium/connect`
-
-are build-source images used by the multi-stage Dockerfile. They are not separate runtime containers for Data Lab.
-
-After `data-lab:latest` is built, those build-source images can be removed safely if no other container is using them.
-
-Safe cleanup helpers:
-
-Windows PowerShell:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\helper\scripts\cleanup-build-source-images.ps1
-```
-
-Dry run:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\helper\scripts\cleanup-build-source-images.ps1 -DryRun
-```
-
-Linux/macOS:
-```bash
-bash ./helper/scripts/cleanup-build-source-images.sh
-```
-
-Dry run:
-```bash
-bash ./helper/scripts/cleanup-build-source-images.sh --dry-run
-```
-
-## References
-- Data Lab CLI guide: `docs/DATALAB-APP-CLI.md`
-- Trino lakehouse registration guide: `docs/TRINO-LAKEHOUSE-REGISTRATION.md`
-- Hudi registration guide: `docs/HUDI-REGISTRATION.md`
-- Iceberg registration guide: `docs/ICEBERG-REGISTRATION.md`
-- Delta registration guide: `docs/DELTA-REGISTRATION.md`
-- Future data engineering expansion roadmap: `docs/DATA-ENGINEERING-EXPANSION-ROADMAP.md`
-- Future ML/AI roadmap: `docs/ML-AI-FUTURE-ROADMAP.md`
-- Container topology guide (single vs multi-container): `docs/CONTAINER-TOPOLOGY-GUIDE.md`
-- Spark: https://spark.apache.org/docs/latest/
-- Hadoop: https://hadoop.apache.org/docs/stable/
-- Hive: https://cwiki.apache.org/confluence/display/Hive/Home
-- Kafka: https://kafka.apache.org/documentation/
-- Airflow: https://airflow.apache.org/docs/
-- dbt: https://docs.getdbt.com/
-- PostgreSQL: https://www.postgresql.org/docs/
-- MongoDB: https://www.mongodb.com/docs/
-- Redis: https://redis.io/docs/
-- Hudi: https://hudi.apache.org/docs/
-- Iceberg: https://iceberg.apache.org/docs/latest/
-- Delta Lake: https://docs.delta.io/latest/
+That makes it a strong repo for showcasing platform engineering, analytics engineering, and end-to-end data tooling in one place.
