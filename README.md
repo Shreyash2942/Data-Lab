@@ -101,6 +101,7 @@ For standalone runs, system requirements, runtime paths, and reset notes, see [G
 ## Documentation Map
 
 - [Getting Started](docs/GETTING-STARTED.md)
+- [Standalone Run Guide](docs/STANDALONE-RUN.md)
 - [Access Reference](docs/ACCESS-REFERENCE.md)
 - [Stack Reference](docs/STACK-REFERENCE.md)
 - [Data Lab CLI Guide](docs/DATALAB-APP-CLI.md)
@@ -112,6 +113,7 @@ For standalone runs, system requirements, runtime paths, and reset notes, see [G
 - [Docker Hub Push/Pull Guide](docs/DOCKERHUB-README.md)
 - [Data Engineering Expansion Roadmap](docs/DATA-ENGINEERING-EXPANSION-ROADMAP.md)
 - [ML/AI Future Roadmap](docs/ML-AI-FUTURE-ROADMAP.md)
+- [Standalone Mode Entry Page](README-non-stackable.md)
 
 ## Current Focus
 
