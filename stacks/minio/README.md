@@ -41,10 +41,25 @@ datalab_app --start-minio
 Default credentials:
 
 ```text
-username-minio / admin
+minio_admin / minioadmin
 ```
 
 Use `ui_services` for the correct API and console URLs when host ports are remapped.
+
+For prompted host-side connection details, you can also use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\helper\scripts\db-access-guide.ps1 -Name datalab -UiHost localhost
+```
+
+That guide now prints:
+
+- MinIO S3 endpoint
+- MinIO console URL
+- access key and secret key
+- region
+- bucket URI example
+- AWS CLI / SDK environment values
 
 ## Notes
 

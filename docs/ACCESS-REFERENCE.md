@@ -41,7 +41,7 @@ This page collects the URLs, endpoints, and built-in defaults that are useful on
 - Superset login: `admin / admin`
 - pgAdmin login: `admin@admin.com / admin`
 - Grafana login: `admin / admin`
-- MinIO login: `username-minio / admin`
+- MinIO login: `minio_admin / minioadmin`
 - Trino default user: `trino`
 - Trino default catalog and schema: `hive.default`
 - Great Expectations result file: `/home/datalab/runtime/great_expectations/last_validation.json`
