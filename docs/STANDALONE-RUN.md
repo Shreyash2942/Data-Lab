@@ -148,7 +148,7 @@ powershell -ExecutionPolicy Bypass -File .\helper\scripts\start-pgadmin.ps1 -Tar
 Current browser defaults:
 
 - pgAdmin: `admin@admin.com / admin`
-- MinIO: `username-minio / admin`
+- MinIO: `minio_admin / minioadmin`
 - Grafana: `admin / admin`
 - Jupyter token: `datalab`
 
@@ -174,9 +174,13 @@ docker run -d --name datalab \
   -p 9092:9092 \
   -p 9870:9870 \
   -p 8088:8088 \
+  -p 8090:8090 \
+  -p 8091:8091 \
   -p 10000:10000 \
   -p 10001:10001 \
   -p 9002:9002 \
+  -p 9004:9004 \
+  -p 9005:9005 \
   -p 8083:8083 \
   -p 8084:8084 \
   -p 8181:8181 \
@@ -203,9 +207,13 @@ docker run -d --name datalab `
   -p 9092:9092 `
   -p 9870:9870 `
   -p 8088:8088 `
+  -p 8090:8090 `
+  -p 8091:8091 `
   -p 10000:10000 `
   -p 10001:10001 `
   -p 9002:9002 `
+  -p 9004:9004 `
+  -p 9005:9005 `
   -p 8083:8083 `
   -p 8084:8084 `
   -p 8181:8181 `
