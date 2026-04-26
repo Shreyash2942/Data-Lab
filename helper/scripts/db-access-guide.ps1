@@ -62,6 +62,8 @@ $container = Resolve-RunningContainer -Primary $Name -Secondary $FallbackName
 $pgPort = Get-MappedPort -Container $container -ContainerPort 5432
 $mongoPort = Get-MappedPort -Container $container -ContainerPort 27017
 $redisPort = Get-MappedPort -Container $container -ContainerPort 6379
+$minioApiPort = Get-MappedPort -Container $container -ContainerPort 9004
+$minioConsolePort = Get-MappedPort -Container $container -ContainerPort 9005
 $mongoExpressPort = Get-MappedPort -Container $container -ContainerPort 8083
 $redisCommanderPort = Get-MappedPort -Container $container -ContainerPort 8084
 $pgAdminInContainerPort = Get-MappedPort -Container $container -ContainerPort 8181
@@ -72,7 +74,7 @@ if (-not $pgAdminPort -and $pgAdminContainer) {
   $pgAdminPort = Get-MappedPort -Container $pgAdminContainer -ContainerPort 80
 }
 
-Write-Output "=== Data Lab DB Access Guide ==="
+Write-Output "=== Data Lab Access Guide ==="
 Write-Output "Container: $container"
 Write-Output ""
 Write-Output "Enter credentials you want to use in tools:"
@@ -81,14 +83,19 @@ $pgPassword = Prompt-WithDefault -Label "PostgreSQL password" -DefaultValue "adm
 $mongoUser = Prompt-WithDefault -Label "MongoDB username" -DefaultValue "admin"
 $mongoPassword = Prompt-WithDefault -Label "MongoDB password" -DefaultValue "admin"
 $redisPassword = Prompt-WithDefault -Label "Redis password" -DefaultValue "admin"
+$minioAccessKey = Prompt-WithDefault -Label "MinIO access key" -DefaultValue "minio_admin"
+$minioSecretKey = Prompt-WithDefault -Label "MinIO secret key" -DefaultValue "minioadmin"
+$minioRegion = Prompt-WithDefault -Label "MinIO region" -DefaultValue "us-east-1"
+$minioBucket = Prompt-WithDefault -Label "MinIO bucket example" -DefaultValue "datalab"
 Write-Output ""
 
 Write-Output "=== Browser UIs ==="
 if ($pgAdminPort) { Write-Output ("pgAdmin:                http://{0}:{1}/" -f $UiHost, $pgAdminPort) }
 if ($mongoExpressPort) { Write-Output ("Mongo Express:          http://{0}:{1}/" -f $UiHost, $mongoExpressPort) }
 if ($redisCommanderPort) { Write-Output ("Redis Commander:        http://{0}:{1}/" -f $UiHost, $redisCommanderPort) }
-if (-not $pgAdminPort -and -not $mongoExpressPort -and -not $redisCommanderPort) {
-  Write-Output "No DB UI ports are currently published."
+if ($minioConsolePort) { Write-Output ("MinIO Console:          http://{0}:{1}/" -f $UiHost, $minioConsolePort) }
+if (-not $pgAdminPort -and -not $mongoExpressPort -and -not $redisCommanderPort -and -not $minioConsolePort) {
+  Write-Output "No DB or object-storage UI ports are currently published."
 }
 
 Write-Output ""
@@ -131,6 +138,29 @@ if ($redisPort) {
   }
 } else {
   Write-Output "Redis port is not published."
+}
+
+Write-Output ""
+Write-Output "=== MinIO (S3 API / SDKs / CLI) ==="
+if ($minioApiPort) {
+  $minioEndpoint = "http://{0}:{1}" -f $UiHost, $minioApiPort
+  Write-Output ("Endpoint:   {0}" -f $minioEndpoint)
+  if ($minioConsolePort) {
+    Write-Output ("Console:    http://{0}:{1}/" -f $UiHost, $minioConsolePort)
+  }
+  Write-Output ("Access Key: {0}" -f $minioAccessKey)
+  Write-Output ("Secret Key: {0}" -f $minioSecretKey)
+  Write-Output ("Region:     {0}" -f $minioRegion)
+  Write-Output ("Bucket URI: s3://{0}/" -f $minioBucket)
+  Write-Output ("Path Style: true")
+  Write-Output ("AWS env:    AWS_ACCESS_KEY_ID={0}" -f $minioAccessKey)
+  Write-Output ("            AWS_SECRET_ACCESS_KEY={0}" -f $minioSecretKey)
+  Write-Output ("            AWS_DEFAULT_REGION={0}" -f $minioRegion)
+  Write-Output ("            AWS_ENDPOINT_URL={0}" -f $minioEndpoint)
+  Write-Output ("AWS CLI:    aws --endpoint-url {0} s3 ls" -f $minioEndpoint)
+  Write-Output ("Bucket cmd: aws --endpoint-url {0} s3 mb s3://{1}" -f $minioEndpoint, $minioBucket)
+} else {
+  Write-Output "MinIO API port is not published."
 }
 
 Write-Output ""
