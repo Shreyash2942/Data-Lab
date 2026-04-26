@@ -69,6 +69,8 @@ Windows PowerShell:
 powershell -ExecutionPolicy Bypass -File .\helper\scripts\run-standalone.ps1 -Name datalab -Image data-lab:latest
 ```
 
+These standalone helper commands now publish the default core ports plus the lakehouse/UI ports for Superset (`8090`), Trino (`8091`), MinIO API (`9004`), and MinIO Console (`9005`).
+
 ## Runtime Model
 
 - Single container is the default runtime model.

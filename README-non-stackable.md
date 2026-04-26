@@ -4,6 +4,8 @@ This guide is the entry point for running Data Lab without Docker Compose stack 
 
 In standalone mode, you run one container directly with `docker run` or the helper scripts under `helper/scripts/`. This is useful when you want a simpler local launch flow, direct control over container names, or cloned containers with remapped host ports.
 
+The current standalone helper defaults publish both the core platform ports and the lakehouse/UI ports, including Superset (`8090`), Trino (`8091`), MinIO API (`9004`), and MinIO Console (`9005`).
+
 ## Start Here
 
 - [Main README](README.md)
