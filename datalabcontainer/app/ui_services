@@ -333,11 +333,11 @@ default_superset_password() {
 }
 
 default_minio_user() {
-  printf '%s' "${MINIO_ROOT_USER:-username-minio}"
+  printf '%s' "${MINIO_ROOT_USER:-minio_admin}"
 }
 
 default_minio_password() {
-  printf '%s' "${MINIO_ROOT_PASSWORD:-admin}"
+  printf '%s' "${MINIO_ROOT_PASSWORD:-minioadmin}"
 }
 
 default_grafana_user() {
@@ -528,16 +528,37 @@ show_airflow_connect_info() {
 
 show_minio_connect_info() {
   local api_inside api_outside console_inside console_outside
+  local minio_user minio_pass minio_region minio_bucket
   api_inside="http://localhost:${MINIO_API_PORT}/"
   api_outside="$(container_effective_url "${MINIO_API_PORT}" "/")"
   console_inside="http://localhost:${MINIO_CONSOLE_PORT}/"
   console_outside="$(container_effective_url "${MINIO_CONSOLE_PORT}" "/")"
+  print_section "MinIO Connect"
+  echo "Press Enter to keep defaults."
+  minio_user="$(prompt_default "MinIO access key" "$(default_minio_user)")"
+  minio_pass="$(prompt_default "MinIO secret key" "$(default_minio_password)")"
+  minio_region="$(prompt_default "MinIO region" "${AWS_DEFAULT_REGION:-us-east-1}")"
+  minio_bucket="$(prompt_default "Bucket name example" "datalab")"
   print_section "MinIO Info"
   print_kv "API (inside container)" "${api_inside}"
   print_kv "API (outside host)" "${api_outside}"
   print_kv "Console (inside container)" "${console_inside}"
   print_kv "Console (outside host)" "${console_outside}"
+  print_kv "S3 endpoint (inside container)" "${api_inside}"
+  print_kv "S3 endpoint (outside host)" "${api_outside}"
+  print_kv "Access key" "${minio_user}"
+  print_kv "Secret key" "${minio_pass}"
+  print_kv "Region" "${minio_region}"
+  print_kv "Bucket example" "s3://${minio_bucket}/"
   print_kv "Login" "username=$(default_minio_user) password=$(default_minio_password)"
+  print_kv "Path style" "true"
+  print_section "Examples"
+  echo "  AWS_ACCESS_KEY_ID=${minio_user}"
+  echo "  AWS_SECRET_ACCESS_KEY=${minio_pass}"
+  echo "  AWS_DEFAULT_REGION=${minio_region}"
+  echo "  AWS_ENDPOINT_URL=${api_outside}"
+  echo "  aws --endpoint-url ${api_outside} s3 ls"
+  echo "  aws --endpoint-url ${api_outside} s3 mb s3://${minio_bucket}"
 }
 
 show_superset_connect_info() {
