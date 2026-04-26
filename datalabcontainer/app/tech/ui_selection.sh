@@ -122,7 +122,7 @@ ui::default_superset_login() {
 }
 
 ui::default_minio_login() {
-  printf '%s / %s' "${MINIO_ROOT_USER:-username-minio}" "${MINIO_ROOT_PASSWORD:-admin}"
+  printf '%s / %s' "${MINIO_ROOT_USER:-minio_admin}" "${MINIO_ROOT_PASSWORD:-minioadmin}"
 }
 
 ui::default_grafana_login() {
