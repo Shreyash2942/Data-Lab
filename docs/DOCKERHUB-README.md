@@ -93,7 +93,43 @@ docker images
 ## 8) Run container from pulled image
 
 ```powershell
-docker run -d --name datalab -p 8080:8080 <dockerhub-username>/data-lab:latest sleep infinity
+docker run -d --name datalab `
+  --user root `
+  --workdir / `
+  --label com.docker.compose.project= `
+  --label com.docker.compose.service= `
+  --label com.docker.compose.oneoff= `
+  -p 8080:8080 `
+  -p 4040:4040 `
+  -p 9090:9090 `
+  -p 18080:18080 `
+  -p 9092:9092 `
+  -p 9870:9870 `
+  -p 8088:8088 `
+  -p 8090:8090 `
+  -p 8091:8091 `
+  -p 9083:9083 `
+  -p 10000:10000 `
+  -p 10001:10001 `
+  -p 9002:9002 `
+  -p 9004:9004 `
+  -p 9005:9005 `
+  -p 8083:8083 `
+  -p 8084:8084 `
+  -p 8085:8085 `
+  -p 8086:8086 `
+  -p 8181:8181 `
+  -p 8888:8888 `
+  -p 8891:8891 `
+  -p 5000:5000 `
+  -p 3000:3000 `
+  -p 9095:9095 `
+  -p 3001:3001 `
+  -p 5432:5432 `
+  -p 27017:27017 `
+  -p 6379:6379 `
+  <dockerhub-username>/data-lab:latest `
+  sleep infinity
 ```
 
 ## Common mistake (important)
@@ -107,6 +143,8 @@ Run container directly from Docker Hub image:
 ```powershell
 powershell -File .\helper\scripts\run-standalone.ps1 -Name datalab -Image <dockerhub-username>/data-lab:latest
 ```
+
+That helper now includes the default lakehouse/UI ports automatically, so Superset, Trino, and MinIO are reachable without adding extra port flags.
 
 Copy container from Docker Hub image:
 
