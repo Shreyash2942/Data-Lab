@@ -2,16 +2,24 @@
 set -euo pipefail
 
 # Create a non-stackable container with ports and host mounts for the workspace.
-# Usage: NAME=datalab IMAGE=data-lab:latest EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/mnt" ./run-standalone.sh
+# Usage: NAME=datalab IMAGE=shreyash42/data-lab:latest EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/mnt" ./run-standalone.sh
 
 NAME="${NAME:-datalab}"
-IMAGE="${IMAGE:-data-lab:latest}"
+IMAGE="${IMAGE:-shreyash42/data-lab:latest}"
 EXTRA_PORTS="${EXTRA_PORTS:-}"
 EXTRA_VOLUMES="${EXTRA_VOLUMES:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DATALAB_DIR="${REPO_ROOT}/datalabcontainer"
 STACKS_DIR="${REPO_ROOT}/stacks"
+
+readonly FIXED_IMAGE="shreyash42/data-lab:latest"
+if [[ "${IMAGE}" != "${FIXED_IMAGE}" ]]; then
+  echo "This script is locked to image '${FIXED_IMAGE}'. Remove custom image/tag overrides." >&2
+  exit 1
+fi
+echo "Pulling latest image: ${FIXED_IMAGE}"
+docker pull "${FIXED_IMAGE}"
 
 docker stop "${NAME}" >/dev/null 2>&1 || true
 docker rm "${NAME}" >/dev/null 2>&1 || true
