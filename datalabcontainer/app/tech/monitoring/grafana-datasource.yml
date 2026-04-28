@@ -2,8 +2,9 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: __PROM_DS_UID__
     type: prometheus
     access: proxy
-    url: http://127.0.0.1:9095
+    url: http://127.0.0.1:__PROMETHEUS_PORT__
     isDefault: true
     editable: false

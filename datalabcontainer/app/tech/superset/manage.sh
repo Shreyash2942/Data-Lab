@@ -24,6 +24,7 @@ SUPERSET_BIN="${SUPERSET_VENV}/bin/superset"
 : "${SUPERSET_ADMIN_EMAIL:=admin@local}"
 : "${SUPERSET_SECRET_KEY:=datalab-local-superset-secret-key-change-me}"
 : "${SUPERSET_SQLLAB_BACKEND_PERSISTENCE:=True}"
+: "${SUPERSET_CONTENT_SECURITY_POLICY_WARNING:=False}"
 : "${SUPERSET_TRINO_DB_NAME:=Trino Lakehouse}"
 : "${TRINO_HOST:=localhost}"
 : "${TRINO_PORT:=8091}"
@@ -93,6 +94,12 @@ SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY", "${SUPERSET_SECRET_KEY}")
 SQLALCHEMY_DATABASE_URI = "sqlite:///${db_path}"
 WTF_CSRF_ENABLED = True
 TALISMAN_ENABLED = False
+CONTENT_SECURITY_POLICY_WARNING = str(
+    os.environ.get(
+        "SUPERSET_CONTENT_SECURITY_POLICY_WARNING",
+        "${SUPERSET_CONTENT_SECURITY_POLICY_WARNING}",
+    )
+).lower() in ("1", "true", "yes", "on")
 FEATURE_FLAGS = {
     "SQLLAB_BACKEND_PERSISTENCE": ${SUPERSET_SQLLAB_BACKEND_PERSISTENCE},
 }
@@ -276,7 +283,7 @@ skipped = []
 for schema, table_name in targets:
     table = Table(table_name, schema, catalog)
     try:
-        database.get_table(table)
+        database.get_columns(table)
     except Exception:
         skipped.append(f"{schema}.{table_name}")
         continue

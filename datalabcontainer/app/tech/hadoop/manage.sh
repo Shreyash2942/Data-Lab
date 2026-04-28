@@ -4,8 +4,32 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../common.sh"
 
+HADOOP_NAMENODE_PATTERN='org\.apache\.hadoop\.hdfs\.server\.namenode\.NameNode'
+HADOOP_DATANODE_PATTERN='org\.apache\.hadoop\.hdfs\.server\.datanode\.DataNode'
+HADOOP_RESOURCEMANAGER_PATTERN='org\.apache\.hadoop\.yarn\.server\.resourcemanager\.ResourceManager'
+HADOOP_NODEMANAGER_PATTERN='org\.apache\.hadoop\.yarn\.server\.nodemanager\.NodeManager'
+HADOOP_HISTORYSERVER_PATTERN='org\.apache\.hadoop\.mapreduce\.v2\.hs\.JobHistoryServer'
+
+hadoop::daemon_running() {
+  pgrep -f "$1" >/dev/null 2>&1
+}
+
+hadoop::all_daemons_running() {
+  local pattern
+  for pattern in "$@"; do
+    if ! hadoop::daemon_running "${pattern}"; then
+      return 1
+    fi
+  done
+  return 0
+}
+
 hadoop::is_running() {
-  pgrep -f NameNode >/dev/null 2>&1 && pgrep -f ResourceManager >/dev/null 2>&1
+  hadoop::all_daemons_running \
+    "${HADOOP_NAMENODE_PATTERN}" \
+    "${HADOOP_DATANODE_PATTERN}" \
+    "${HADOOP_RESOURCEMANAGER_PATTERN}" \
+    "${HADOOP_NODEMANAGER_PATTERN}"
 }
 
 hadoop::ensure_dirs() {
@@ -123,17 +147,70 @@ hadoop::format_namenode_if_needed() {
   fi
 }
 
+hadoop::pid_file_for_daemon() {
+  local daemon="$1"
+  local pid_dir="${HADOOP_PID_DIR:-/tmp}"
+  printf '%s/hadoop-%s-%s.pid' "${pid_dir}" "$(id -un)" "${daemon}"
+}
+
+hadoop::cleanup_stale_daemon_pid() {
+  local daemon="$1"
+  local pid_file pid
+  pid_file="$(hadoop::pid_file_for_daemon "${daemon}")"
+  [[ -f "${pid_file}" ]] || return 0
+  pid="$(cat "${pid_file}" 2>/dev/null || true)"
+  if [[ ! "${pid}" =~ ^[0-9]+$ ]] || ! kill -0 "${pid}" 2>/dev/null; then
+    rm -f "${pid_file}"
+  fi
+}
+
+hadoop::start_hdfs_daemon() {
+  local label="$1"
+  local pattern="$2"
+  local daemon="$3"
+  if hadoop::daemon_running "${pattern}"; then
+    echo "[*] Hadoop ${label} already running."
+    return 0
+  fi
+  hadoop::cleanup_stale_daemon_pid "${daemon}"
+  "${HDFS_BIN}" --daemon start "${daemon}"
+}
+
+hadoop::start_yarn_daemon() {
+  local label="$1"
+  local pattern="$2"
+  local daemon="$3"
+  if hadoop::daemon_running "${pattern}"; then
+    echo "[*] Hadoop ${label} already running."
+    return 0
+  fi
+  hadoop::cleanup_stale_daemon_pid "${daemon}"
+  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon start "${daemon}"
+}
+
+hadoop::start_mapred_daemon() {
+  local label="$1"
+  local pattern="$2"
+  local daemon="$3"
+  if hadoop::daemon_running "${pattern}"; then
+    echo "[*] Hadoop ${label} already running."
+    return 0
+  fi
+  hadoop::cleanup_stale_daemon_pid "${daemon}"
+  env -u YARN_LOG_DIR "${MAPRED_BIN}" --daemon start "${daemon}" || true
+}
+
 hadoop::start() {
   hadoop::ensure_dirs
   hadoop::ensure_mapreduce_config
   hadoop::ensure_yarn_config
   hadoop::format_namenode_if_needed
   echo "[*] Starting Hadoop daemons..."
-  "${HDFS_BIN}" --daemon start namenode
-  "${HDFS_BIN}" --daemon start datanode
-  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon start resourcemanager
-  env -u YARN_LOG_DIR "${YARN_BIN}" --daemon start nodemanager
-  env -u YARN_LOG_DIR "${MAPRED_BIN}" --daemon start historyserver || true
+  hadoop::start_hdfs_daemon "NameNode" "${HADOOP_NAMENODE_PATTERN}" namenode
+  hadoop::start_hdfs_daemon "DataNode" "${HADOOP_DATANODE_PATTERN}" datanode
+  hadoop::start_yarn_daemon "ResourceManager" "${HADOOP_RESOURCEMANAGER_PATTERN}" resourcemanager
+  hadoop::start_yarn_daemon "NodeManager" "${HADOOP_NODEMANAGER_PATTERN}" nodemanager
+  hadoop::start_mapred_daemon "JobHistoryServer" "${HADOOP_HISTORYSERVER_PATTERN}" historyserver
   jps
   echo "HDFS UI: $(common::ui_url 9870 "/")  |  YARN UI: $(common::ui_url 8088 "/")"
 }
@@ -175,11 +252,11 @@ hadoop::wait_patterns_exit() {
 
 hadoop::stop() {
   local -a daemon_patterns=(
-    'org\.apache\.hadoop\.mapreduce\.v2\.hs\.JobHistoryServer'
-    'org\.apache\.hadoop\.yarn\.server\.nodemanager\.NodeManager'
-    'org\.apache\.hadoop\.yarn\.server\.resourcemanager\.ResourceManager'
-    'org\.apache\.hadoop\.hdfs\.server\.datanode\.DataNode'
-    'org\.apache\.hadoop\.hdfs\.server\.namenode\.NameNode'
+    "${HADOOP_HISTORYSERVER_PATTERN}"
+    "${HADOOP_NODEMANAGER_PATTERN}"
+    "${HADOOP_RESOURCEMANAGER_PATTERN}"
+    "${HADOOP_DATANODE_PATTERN}"
+    "${HADOOP_NAMENODE_PATTERN}"
   )
 
   echo "[*] Stopping Hadoop daemons..."

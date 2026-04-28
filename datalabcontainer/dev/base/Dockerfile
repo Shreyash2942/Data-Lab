@@ -264,7 +264,7 @@ RUN python3 -m venv /opt/pgadmin4-venv \
 RUN python3 -m venv /opt/superset-venv \
     && /opt/superset-venv/bin/pip install --upgrade pip wheel \
     && /opt/superset-venv/bin/pip install "setuptools<81" \
-    && /opt/superset-venv/bin/pip install "apache-superset==4.1.2" "trino" "sqlalchemy-trino" \
+    && /opt/superset-venv/bin/pip install "apache-superset==4.1.2" "trino" "sqlalchemy-trino" "pillow" \
     && /opt/superset-venv/bin/pip install "marshmallow==3.21.3" "marshmallow-sqlalchemy==0.28.2"
 
 # JupyterLab in an isolated venv with system packages enabled so notebooks can

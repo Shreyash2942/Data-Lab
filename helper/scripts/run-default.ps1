@@ -21,7 +21,11 @@ $ports = @(
   "8080:8080",   # Airflow UI
   "8088:8088",   # YARN RM
   "8181:8181",   # pgAdmin UI
+  "8090:8090",   # Superset UI
+  "8091:8091",   # Trino HTTP
   "9002:9002",   # Kafka UI (Kafdrop)
+  "9004:9004",   # MinIO API
+  "9005:9005",   # MinIO Console
   "8083:8083",   # Mongo Express UI
   "8084:8084",   # Redis Commander UI
   "9090:9090",   # Spark master UI
