@@ -36,15 +36,22 @@ done
 HIVE_EXEC_PARALLEL="$(strip_cr "${HIVE_EXEC_PARALLEL}")"
 HIVE_EXEC_PARALLEL_THREAD_NUMBER="$(strip_cr "${HIVE_EXEC_PARALLEL_THREAD_NUMBER}")"
 
+hive::runtime_user() {
+  printf '%s' "${USER:-$(id -un)}"
+}
+
 hive::ensure_dirs() {
-  local metastore_parent
+  local metastore_parent hive_user
   metastore_parent="$(dirname "${HIVE_METASTORE_DB}")"
+  hive_user="$(hive::runtime_user)"
   mkdir -p \
     "${HIVE_LOG_DIR}" \
     "${HIVE_PID_DIR}" \
     "${metastore_parent}" \
     "${HIVE_WAREHOUSE}" \
-    "${RUNTIME_ROOT}/hive/tmp"
+    "${RUNTIME_ROOT}/hive/tmp" \
+    "/tmp/${hive_user}"
+  chmod 700 "/tmp/${hive_user}" 2>/dev/null || true
 }
 
 hive::aux_jars_args() {
@@ -180,6 +187,7 @@ hive::start_metastore() {
   HIVE_AUX_JARS_PATH="${HIVE_AUX_JARS_PATH}" \
   HIVE_LOG_DIR="${HIVE_LOG_DIR}" \
   METASTORE_PID_DIR="${HIVE_PID_DIR}" \
+  USER="$(hive::runtime_user)" \
   JAVA_HOME="${JAVA_HOME}" \
     nohup "${HIVE_HOME}/bin/hive" --service metastore -p "${HIVE_METASTORE_PORT}" \
       > "${HIVE_METASTORE_LOG_FILE}" 2>&1 &
@@ -229,6 +237,7 @@ hive::start_hs2() {
   HIVE_EXEC_PARALLEL_THREAD_NUMBER="${HIVE_EXEC_PARALLEL_THREAD_NUMBER}" \
   HIVE_LOG_DIR="${HIVE_LOG_DIR}" \
   HIVESERVER2_PID_DIR="${HIVE_PID_DIR}" \
+  USER="$(hive::runtime_user)" \
   JAVA_HOME=${JAVA_HOME} \
     nohup "${HIVE_HOME}/bin/hiveserver2" \
       --hiveconf hive.server2.authentication=NONE \
