@@ -18,9 +18,17 @@ $DefaultImage = "shreyash42/data-lab:latest"
 $Name = if ($Name) { $Name } else { Read-Host "Container name [datalab]" }
 if (-not $Name) { $Name = "datalab" }
 
-# Image (no prompt; override via -Image)
+# Image (locked to published latest)
 if (-not $Image) { $Image = $DefaultImage }
-Write-Host "Using image: $Image (override with -Image if needed)"
+if ($Image -ne $DefaultImage) {
+  throw "This script is locked to image '$DefaultImage'. Remove custom image/tag overrides."
+}
+Write-Host "Using image: $DefaultImage"
+Write-Host "Pulling latest image: $DefaultImage"
+docker pull $DefaultImage
+if ($LASTEXITCODE -ne 0) {
+  throw "docker pull failed for '$DefaultImage'."
+}
 
 # Extra ports (optional via parameter only; defaults are always applied)
 $collectedPorts = @()
