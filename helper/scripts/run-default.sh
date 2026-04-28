@@ -13,6 +13,15 @@ if [[ $# -gt 0 ]]; then
   shift
 fi
 
+IMAGE="${IMAGE:-shreyash42/data-lab:latest}"
+readonly FIXED_IMAGE="shreyash42/data-lab:latest"
+if [[ "${IMAGE}" != "${FIXED_IMAGE}" ]]; then
+  echo "This script is locked to image '${FIXED_IMAGE}'. Remove custom image/tag overrides." >&2
+  exit 1
+fi
+echo "Pulling latest image: ${FIXED_IMAGE}"
+docker pull "${FIXED_IMAGE}"
+
 docker run -d --name "${name}" \
   --user root \
   --workdir / \
@@ -40,4 +49,4 @@ docker run -d --name "${name}" \
   -p 27017:27017 \
   -p 6379:6379 \
   -p 18080:18080 \
-  data-lab:latest "$@"
+  "${IMAGE}" "$@"
