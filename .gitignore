@@ -5,6 +5,7 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/
+.codex/
 .ipynb_checkpoints/
 
 # Environment overrides
