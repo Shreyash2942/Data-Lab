@@ -23,6 +23,8 @@ HIVE_METASTORE_EXTERNAL_PORT="${HIVE_METASTORE_EXTERNAL_PORT:-9083}"
 : "${DATALAB_UI_HOST:=}"
 : "${DATALAB_HOST_PORT_MAP:=}"
 UI_MAP_FILE="${UI_MAP_FILE:-/home/datalab/runtime/ui-port-map.env}"
+: "${DATALAB_RUNTIME_CONFIG_DIR:=/home/datalab/runtime/config}"
+: "${DATALAB_RUNTIME_OVERRIDE_FILE:=${DATALAB_RUNTIME_CONFIG_DIR}/datalab-overrides.env}"
 
 if [[ -f "${UI_MAP_FILE}" ]]; then
   # Read persisted mapping for copied containers so values survive `su - datalab`.
@@ -56,6 +58,18 @@ fi
 if [[ -z "${MINIO_HOST:-}" || "${MINIO_HOST}" == "localhost" ]]; then
   MINIO_HOST="${UI_HOST}"
 fi
+
+load_runtime_overrides() {
+  if [[ ! -f "${DATALAB_RUNTIME_OVERRIDE_FILE}" ]]; then
+    return 0
+  fi
+  set -a
+  # shellcheck source=/dev/null
+  source "${DATALAB_RUNTIME_OVERRIDE_FILE}"
+  set +a
+}
+
+load_runtime_overrides
 
 print_header() {
   echo "=== Data Lab UI Services ==="
@@ -348,6 +362,85 @@ default_grafana_password() {
   printf '%s' "${GRAFANA_ADMIN_PASSWORD:-admin}"
 }
 
+read_provisioned_grafana_dashboard_field() {
+  local field="$1"
+  local dashboard_json="/home/datalab/runtime/monitoring/grafana/dashboards/data-lab-overview.json"
+  [[ -f "${dashboard_json}" ]] || return 1
+  python3 - "${dashboard_json}" "${field}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+field = sys.argv[2]
+
+try:
+    with open(path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+except Exception:
+    sys.exit(1)
+
+value = payload.get(field, "")
+if isinstance(value, str) and value.strip():
+    print(value.strip())
+    sys.exit(0)
+sys.exit(1)
+PY
+}
+
+default_dashboard_container_name() {
+  local container_name="${CONTAINER_NAME:-}"
+  local dashboard_title=""
+
+  dashboard_title="$(read_provisioned_grafana_dashboard_field "title" 2>/dev/null || true)"
+  if [[ "${dashboard_title}" == *" - Data Lab Overview" ]]; then
+    printf '%s' "${dashboard_title% - Data Lab Overview}"
+    return 0
+  fi
+
+  if [[ -z "${container_name}" ]]; then
+    container_name="$(hostname 2>/dev/null || true)"
+  fi
+  if [[ -z "${container_name}" ]]; then
+    container_name="datalab"
+  fi
+  printf '%s' "${container_name}"
+}
+
+grafana_dashboard_name_for_container() {
+  local container_name="${1:-}"
+  local dashboard_title=""
+  if [[ -z "${container_name}" ]]; then
+    dashboard_title="$(read_provisioned_grafana_dashboard_field "title" 2>/dev/null || true)"
+    if [[ -n "${dashboard_title}" ]]; then
+      printf '%s' "${dashboard_title}"
+      return 0
+    fi
+    container_name="$(default_dashboard_container_name)"
+  fi
+  printf '%s - Data Lab Overview' "${container_name}"
+}
+
+grafana_dashboard_uid_for_container() {
+  local container_name="${1:-}"
+  local dashboard_uid=""
+  if [[ -z "${container_name}" ]]; then
+    dashboard_uid="$(read_provisioned_grafana_dashboard_field "uid" 2>/dev/null || true)"
+    if [[ -n "${dashboard_uid}" ]]; then
+      printf '%s' "${dashboard_uid}"
+      return 0
+    fi
+    container_name="$(default_dashboard_container_name)"
+  fi
+  if [[ "${container_name,,}" == "datalab" ]]; then
+    container_name="data-lab"
+  fi
+  container_name="$(printf '%s' "${container_name}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+//; s/-+$//')"
+  if [[ -z "${container_name}" ]]; then
+    container_name="datalab"
+  fi
+  printf '%s-overview' "${container_name}"
+}
+
 read_hive_warehouse_dir() {
   local warehouse
   warehouse="$(read_hive_site_property "hive.metastore.warehouse.dir" || true)"
@@ -513,7 +606,8 @@ show_grafana_connect_info() {
   print_kv "UI (inside container)" "${inside_url}"
   print_kv "UI (outside host)" "${outside_url}"
   print_kv "Login" "$(default_grafana_user) / $(default_grafana_password)"
-  print_kv "Provisioned dashboard" "Data Lab Overview"
+  print_kv "Provisioned dashboard" "$(grafana_dashboard_name_for_container)"
+  print_kv "Dashboard UID" "$(grafana_dashboard_uid_for_container)"
 }
 
 show_airflow_connect_info() {
@@ -528,17 +622,18 @@ show_airflow_connect_info() {
 
 show_minio_connect_info() {
   local api_inside api_outside console_inside console_outside
+  local api_inside_no_slash api_outside_no_slash
   local minio_user minio_pass minio_region minio_bucket
   api_inside="http://localhost:${MINIO_API_PORT}/"
   api_outside="$(container_effective_url "${MINIO_API_PORT}" "/")"
   console_inside="http://localhost:${MINIO_CONSOLE_PORT}/"
   console_outside="$(container_effective_url "${MINIO_CONSOLE_PORT}" "/")"
-  print_section "MinIO Connect"
-  echo "Press Enter to keep defaults."
-  minio_user="$(prompt_default "MinIO access key" "$(default_minio_user)")"
-  minio_pass="$(prompt_default "MinIO secret key" "$(default_minio_password)")"
-  minio_region="$(prompt_default "MinIO region" "${AWS_DEFAULT_REGION:-us-east-1}")"
-  minio_bucket="$(prompt_default "Bucket name example" "datalab")"
+  api_inside_no_slash="${api_inside%/}"
+  api_outside_no_slash="${api_outside%/}"
+  minio_user="$(default_minio_user)"
+  minio_pass="$(default_minio_password)"
+  minio_region="${DATALAB_MINIO_REGION:-${MINIO_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}}"
+  minio_bucket="${DATALAB_MINIO_BUCKET:-${MINIO_BUCKET:-datalab}}"
   print_section "MinIO Info"
   print_kv "API (inside container)" "${api_inside}"
   print_kv "API (outside host)" "${api_outside}"
@@ -550,15 +645,27 @@ show_minio_connect_info() {
   print_kv "Secret key" "${minio_pass}"
   print_kv "Region" "${minio_region}"
   print_kv "Bucket example" "s3://${minio_bucket}/"
-  print_kv "Login" "username=$(default_minio_user) password=$(default_minio_password)"
+  print_kv "Login" "username=${minio_user} password=${minio_pass}"
   print_kv "Path style" "true"
+  print_kv "Saved config file" "${DATALAB_RUNTIME_OVERRIDE_FILE}"
+  print_kv "Saved endpoint (inside)" "${api_inside_no_slash}"
+  print_kv "Saved endpoint (outside)" "${api_outside_no_slash}"
+  print_kv "Note" "Credentials are read-only in ui_services (no prompts)"
   print_section "Examples"
-  echo "  AWS_ACCESS_KEY_ID=${minio_user}"
-  echo "  AWS_SECRET_ACCESS_KEY=${minio_pass}"
-  echo "  AWS_DEFAULT_REGION=${minio_region}"
-  echo "  AWS_ENDPOINT_URL=${api_outside}"
-  echo "  aws --endpoint-url ${api_outside} s3 ls"
-  echo "  aws --endpoint-url ${api_outside} s3 mb s3://${minio_bucket}"
+  echo "  1) For scripts running inside the Data Lab container:"
+  echo "     DATALAB_MINIO_ACCESS_KEY=${minio_user}"
+  echo "     DATALAB_MINIO_SECRET_KEY=${minio_pass}"
+  echo "     DATALAB_MINIO_REGION=${minio_region}"
+  echo "     DATALAB_MINIO_ENDPOINT=${api_inside_no_slash}"
+  echo "     DATALAB_MINIO_BUCKET=${minio_bucket}"
+  echo
+  echo "  2) For scripts running on your host machine:"
+  echo "     DATALAB_MINIO_ENDPOINT=${api_outside_no_slash}"
+  echo "     DATALAB_MINIO_ENDPOINT_OUTSIDE=${api_outside_no_slash}"
+  echo
+  echo "  3) Quick CLI checks:"
+  echo "     aws --endpoint-url ${api_outside_no_slash} s3 ls"
+  echo "     aws --endpoint-url ${api_outside_no_slash} s3 mb s3://${minio_bucket}"
 }
 
 show_superset_connect_info() {
@@ -1242,6 +1349,8 @@ print_ui_block_host() {
   print_row "Prometheus UI" "$(mapped_url "${container}" 9095 "/")"
   print_row "Grafana UI" "$(mapped_url "${container}" 3001 "/")"
   print_row "Grafana Login" "$(default_grafana_user) / $(default_grafana_password)"
+  print_row "Grafana Dashboard" "$(grafana_dashboard_name_for_container "${container}")"
+  print_row "Grafana Dashboard UID" "$(grafana_dashboard_uid_for_container "${container}")"
   print_row "Mongo Express UI" "$(mapped_url "${container}" 8083 "/")"
   print_row "Redis Commander UI" "$(mapped_url "${container}" 8084 "/")"
   print_row "pgAdmin UI" "$(mapped_url "${container}" 8181 "/")"
@@ -1313,6 +1422,8 @@ print_ui_block_container() {
   print_row "Prometheus UI" "$(container_effective_url 9095 "/")"
   print_row "Grafana UI" "$(container_effective_url 3001 "/")"
   print_row "Grafana Login" "$(default_grafana_user) / $(default_grafana_password)"
+  print_row "Grafana Dashboard" "$(grafana_dashboard_name_for_container "${target_name}")"
+  print_row "Grafana Dashboard UID" "$(grafana_dashboard_uid_for_container "${target_name}")"
   print_row "Mongo Express UI" "$(container_effective_url 8083 "/")"
   print_row "Redis Commander UI" "$(container_effective_url 8084 "/")"
   print_row "pgAdmin UI" "$(container_effective_url 8181 "/")"
@@ -1364,7 +1475,9 @@ print_ui_json_host() {
     "url": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 9095)/"
   },
   "grafana": {
-    "url": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 3001)/"
+    "url": "http://$(json_escape "${UI_HOST}"):$(mapped_host_port "${container}" 3001)/",
+    "dashboard": "$(json_escape "$(grafana_dashboard_name_for_container "${container}")")",
+    "dashboard_uid": "$(json_escape "$(grafana_dashboard_uid_for_container "${container}")")"
   },
   "postgresql": {
     "server_name": "$(json_escape "${container}")",
@@ -1447,7 +1560,9 @@ print_ui_json_container() {
     "url": "$(json_escape "$(container_effective_url 9095 "/")")"
   },
   "grafana": {
-    "url": "$(json_escape "$(container_effective_url 3001 "/")")"
+    "url": "$(json_escape "$(container_effective_url 3001 "/")")",
+    "dashboard": "$(json_escape "$(grafana_dashboard_name_for_container "${target_name}")")",
+    "dashboard_uid": "$(json_escape "$(grafana_dashboard_uid_for_container "${target_name}")")"
   },
   "postgresql": {
     "server_name": "$(json_escape "${target_name}")",
