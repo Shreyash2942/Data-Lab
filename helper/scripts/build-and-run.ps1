@@ -23,6 +23,12 @@ if ($Dockerfile -eq "datalabcontainer/dev/base/Dockerfile") {
   $Dockerfile = (Join-Path $repoRoot "datalabcontainer/dev/base/Dockerfile")
 }
 
+$localImage = "data-lab:latest"
+$publishedImage = "shreyash42/data-lab:latest"
+if (@($localImage, $publishedImage) -notcontains $Image) {
+  throw "Use only '$localImage' or '$publishedImage'. Image IDs, digests, and other tags are blocked."
+}
+
 function Get-HostPortFromMapping {
   Param([string]$Mapping)
   if ($Mapping -notmatch "^\d+:\d+$") {

@@ -1,6 +1,6 @@
 Param(
   [string]$Name = "datalab",
-  [string]$Image = "data-lab:latest",
+  [string]$Image = "shreyash42/data-lab:latest",
   [string]$ExtraPorts = "",
   [string]$ExtraVolumes = "",
   [switch]$IncludeLakehousePorts
@@ -13,6 +13,27 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $datalabDir = Join-Path $repoRoot "datalabcontainer"
 $stacksDir = Join-Path $repoRoot "stacks"
+
+$localImage = "data-lab:latest"
+$publishedImage = "shreyash42/data-lab:latest"
+$allowedImages = @($localImage, $publishedImage)
+if ($allowedImages -notcontains $Image) {
+  throw "Use only '$localImage' or '$publishedImage'. Image IDs, digests, and other tags are blocked."
+}
+
+if ($Image -eq $publishedImage) {
+  Write-Host "Pulling latest image: $publishedImage"
+  docker pull $publishedImage
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker pull failed for '$publishedImage'."
+  }
+} else {
+  docker image inspect $localImage 1>$null 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Local image '$localImage' is missing. Build it first or use '$publishedImage'."
+  }
+  Write-Host "Using local named image: $localImage"
+}
 
 function Get-HostPortFromMapping {
   Param([string]$Mapping)

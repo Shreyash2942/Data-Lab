@@ -13,14 +13,31 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
 
 Write-Host "Standalone container setup (press Enter to accept defaults)."
 $DefaultImage = "shreyash42/data-lab:latest"
+$LocalImage = "data-lab:latest"
 
 # Container name
 $Name = if ($Name) { $Name } else { Read-Host "Container name [datalab]" }
 if (-not $Name) { $Name = "datalab" }
 
-# Image (no prompt; override via -Image)
+# Image (restricted to named Data Lab tags)
 if (-not $Image) { $Image = $DefaultImage }
-Write-Host "Using image: $Image (override with -Image if needed)"
+if (@($LocalImage, $DefaultImage) -notcontains $Image) {
+  throw "Use only '$LocalImage' or '$DefaultImage'. Image IDs, digests, and other tags are blocked."
+}
+if ($Image -eq $DefaultImage) {
+  Write-Host "Using image: $DefaultImage"
+  Write-Host "Pulling latest image: $DefaultImage"
+  docker pull $DefaultImage
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker pull failed for '$DefaultImage'."
+  }
+} else {
+  docker image inspect $LocalImage 1>$null 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Local image '$LocalImage' is missing. Build it first or use '$DefaultImage'."
+  }
+  Write-Host "Using local named image: $LocalImage"
+}
 
 # Extra ports (optional via parameter only; defaults are always applied)
 $collectedPorts = @()

@@ -2,16 +2,33 @@
 set -euo pipefail
 
 # Create a non-stackable container with ports and host mounts for the workspace.
-# Usage: NAME=datalab IMAGE=data-lab:latest EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/mnt" ./run-standalone.sh
+# Usage: NAME=datalab IMAGE=shreyash42/data-lab:latest EXTRA_PORTS="-p 8081:8081" EXTRA_VOLUMES="-v /host/path:/mnt" ./run-standalone.sh
 
 NAME="${NAME:-datalab}"
-IMAGE="${IMAGE:-data-lab:latest}"
+IMAGE="${IMAGE:-shreyash42/data-lab:latest}"
 EXTRA_PORTS="${EXTRA_PORTS:-}"
 EXTRA_VOLUMES="${EXTRA_VOLUMES:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DATALAB_DIR="${REPO_ROOT}/datalabcontainer"
 STACKS_DIR="${REPO_ROOT}/stacks"
+
+readonly LOCAL_IMAGE="data-lab:latest"
+readonly PUBLISHED_IMAGE="shreyash42/data-lab:latest"
+if [[ "${IMAGE}" != "${LOCAL_IMAGE}" && "${IMAGE}" != "${PUBLISHED_IMAGE}" ]]; then
+  echo "Use only '${LOCAL_IMAGE}' or '${PUBLISHED_IMAGE}'. Image IDs, digests, and other tags are blocked." >&2
+  exit 1
+fi
+if [[ "${IMAGE}" == "${PUBLISHED_IMAGE}" ]]; then
+  echo "Pulling latest image: ${PUBLISHED_IMAGE}"
+  docker pull "${PUBLISHED_IMAGE}"
+else
+  docker image inspect "${LOCAL_IMAGE}" >/dev/null 2>&1 || {
+    echo "Local image '${LOCAL_IMAGE}' is missing. Build it first or use '${PUBLISHED_IMAGE}'." >&2
+    exit 1
+  }
+  echo "Using local named image: ${LOCAL_IMAGE}"
+fi
 
 docker stop "${NAME}" >/dev/null 2>&1 || true
 docker rm "${NAME}" >/dev/null 2>&1 || true

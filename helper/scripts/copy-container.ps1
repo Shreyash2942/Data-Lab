@@ -4,6 +4,7 @@ Param(
   [string]$Image = "",
   [switch]$UseSourceImage,
   [switch]$ForcePull,
+  [switch]$SkipPull,
   [string[]]$ExtraPorts = @(),
   [string]$UiHost = "localhost",
   [switch]$BindProjectFiles,
@@ -166,9 +167,13 @@ if (-not $NewName) {
   throw "Container name is required."
 }
 
-$preferredLocalImage = "data-lab:latest"
-$publishedFallbackImage = "shreyash42/data-lab:latest"
+$localDefaultImage = "data-lab:latest"
+$publishedDefaultImage = "shreyash42/data-lab:latest"
+$allowedImages = @($localDefaultImage, $publishedDefaultImage)
 $resolvedImage = $Image
+if ($ForcePull -and $SkipPull) {
+  throw "Use either -ForcePull or -SkipPull, not both."
+}
 if ($UseSourceImage) {
   $exists = docker container inspect $SourceName 2>$null
   if ($LASTEXITCODE -ne 0) {
@@ -179,31 +184,42 @@ if ($UseSourceImage) {
   if (-not $resolvedImage) {
     throw "Could not detect image from source container '$SourceName'."
   }
+  if ($allowedImages -notcontains $resolvedImage) {
+    throw "Source container '$SourceName' is using '$resolvedImage'. Use only '$localDefaultImage' or '$publishedDefaultImage'."
+  }
+  $sourceImageId = (docker inspect -f "{{.Image}}" $SourceName).Trim()
+  $namedImageId = (docker image inspect $resolvedImage --format "{{.Id}}" 2>$null).Trim()
+  if (-not $namedImageId -or $sourceImageId -ne $namedImageId) {
+    throw "Source container '$SourceName' is not using the current '$resolvedImage' tag. Recreate it from a named image first."
+  }
   Write-Host "Source container: $SourceName"
   Write-Host "Using source image: $resolvedImage"
 } else {
   if (-not $resolvedImage) {
-    if (Test-ImageExists -ImageRef $preferredLocalImage) {
-      $resolvedImage = $preferredLocalImage
-      Write-Host "Using local rebuilt image by default: $resolvedImage"
-    } else {
-      $resolvedImage = $publishedFallbackImage
-      Write-Host "Local '$preferredLocalImage' not found. Falling back to published image: $resolvedImage"
-    }
+    $resolvedImage = $publishedDefaultImage
+    Write-Host "Using published image by default: $resolvedImage"
   }
+  if ($allowedImages -notcontains $resolvedImage) {
+    throw "Use only '$localDefaultImage' or '$publishedDefaultImage'. Image IDs, digests, and other tags are blocked."
+  }
+}
 
-  $imageExistsLocally = Test-ImageExists -ImageRef $resolvedImage
-  if ($ForcePull -or -not $imageExistsLocally) {
-    Write-Host "Pulling image: $resolvedImage"
-    docker pull $resolvedImage
-    if ($LASTEXITCODE -ne 0) {
-      throw "docker pull failed for image '$resolvedImage'."
-    }
-    Write-Host "Using pulled image: $resolvedImage"
-  } else {
-    Write-Host "Using local image (skip pull): $resolvedImage"
-    Write-Host "Tip: pass -ForcePull to refresh from Docker Hub."
+if ($SkipPull) {
+  if (-not (Test-ImageExists -ImageRef $resolvedImage)) {
+    throw "Image '$resolvedImage' is not available locally. Build it first or remove -SkipPull."
   }
+  Write-Host "Using local image without pull: $resolvedImage"
+} elseif ($resolvedImage -eq $publishedDefaultImage) {
+  Write-Host "Pulling image: $resolvedImage"
+  docker pull $resolvedImage
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker pull failed for image '$resolvedImage'."
+  }
+  Write-Host "Using pulled image: $resolvedImage"
+} elseif (-not (Test-ImageExists -ImageRef $resolvedImage)) {
+  throw "Image '$resolvedImage' is not available locally. Build it first or use '$publishedDefaultImage'."
+} else {
+  Write-Host "Using local named image: $resolvedImage"
 }
 
 $defaultPorts = @(

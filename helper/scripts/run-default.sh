@@ -13,6 +13,24 @@ if [[ $# -gt 0 ]]; then
   shift
 fi
 
+IMAGE="${IMAGE:-shreyash42/data-lab:latest}"
+readonly LOCAL_IMAGE="data-lab:latest"
+readonly PUBLISHED_IMAGE="shreyash42/data-lab:latest"
+if [[ "${IMAGE}" != "${LOCAL_IMAGE}" && "${IMAGE}" != "${PUBLISHED_IMAGE}" ]]; then
+  echo "Use only '${LOCAL_IMAGE}' or '${PUBLISHED_IMAGE}'. Image IDs, digests, and other tags are blocked." >&2
+  exit 1
+fi
+if [[ "${IMAGE}" == "${PUBLISHED_IMAGE}" ]]; then
+  echo "Pulling latest image: ${PUBLISHED_IMAGE}"
+  docker pull "${PUBLISHED_IMAGE}"
+else
+  docker image inspect "${LOCAL_IMAGE}" >/dev/null 2>&1 || {
+    echo "Local image '${LOCAL_IMAGE}' is missing. Build it first or use '${PUBLISHED_IMAGE}'." >&2
+    exit 1
+  }
+  echo "Using local named image: ${LOCAL_IMAGE}"
+fi
+
 docker run -d --name "${name}" \
   --user root \
   --workdir / \
@@ -40,4 +58,4 @@ docker run -d --name "${name}" \
   -p 27017:27017 \
   -p 6379:6379 \
   -p 18080:18080 \
-  data-lab:latest "$@"
+  "${IMAGE}" "$@"
