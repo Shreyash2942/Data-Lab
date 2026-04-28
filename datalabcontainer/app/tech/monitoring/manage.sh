@@ -32,6 +32,7 @@ PROMETHEUS_TEMPLATE="${MONITORING_SCRIPT_DIR}/prometheus.yml"
 GRAFANA_DATASOURCE_TEMPLATE="${MONITORING_SCRIPT_DIR}/grafana-datasource.yml"
 GRAFANA_DASHBOARDS_TEMPLATE="${MONITORING_SCRIPT_DIR}/grafana-dashboards.yml"
 GRAFANA_OVERVIEW_TEMPLATE="${MONITORING_SCRIPT_DIR}/data-lab-overview.json"
+GRAFANA_ALERT_RULES_TEMPLATE="${MONITORING_SCRIPT_DIR}/grafana-alert-rules.yml"
 
 : "${PROMETHEUS_PORT:=9095}"
 : "${GRAFANA_PORT:=3001}"
@@ -40,6 +41,7 @@ GRAFANA_OVERVIEW_TEMPLATE="${MONITORING_SCRIPT_DIR}/data-lab-overview.json"
 : "${PROMETHEUS_HOME:=/opt/prometheus}"
 : "${GRAFANA_HOME:=/opt/grafana}"
 : "${HEALTH_EXPORTER_PORT:=9105}"
+: "${GRAFANA_PROMETHEUS_DS_UID:=datalab-prometheus}"
 
 PROMETHEUS_PORT="$(strip_cr "${PROMETHEUS_PORT}")"
 GRAFANA_PORT="$(strip_cr "${GRAFANA_PORT}")"
@@ -48,12 +50,14 @@ GRAFANA_ADMIN_PASSWORD="$(strip_cr "${GRAFANA_ADMIN_PASSWORD}")"
 PROMETHEUS_HOME="$(strip_cr "${PROMETHEUS_HOME}")"
 GRAFANA_HOME="$(strip_cr "${GRAFANA_HOME}")"
 HEALTH_EXPORTER_PORT="$(strip_cr "${HEALTH_EXPORTER_PORT}")"
+GRAFANA_PROMETHEUS_DS_UID="$(strip_cr "${GRAFANA_PROMETHEUS_DS_UID}")"
 
 monitoring::ensure_dirs() {
   mkdir -p \
     "${PROMETHEUS_LOG_DIR}" "${PROMETHEUS_PID_DIR}" "${PROMETHEUS_DATA_DIR}" \
     "${GRAFANA_LOG_DIR}" "${GRAFANA_PID_DIR}" "${GRAFANA_DATA_DIR}" \
     "${GRAFANA_PROVISIONING_DIR}/datasources" "${GRAFANA_PROVISIONING_DIR}/dashboards" \
+    "${GRAFANA_PROVISIONING_DIR}/alerting" "${GRAFANA_PROVISIONING_DIR}/plugins" \
     "${GRAFANA_DASHBOARD_DIR}" "${GRAFANA_PLUGIN_DIR}" \
     "${HEALTH_EXPORTER_LOG_DIR}" "${HEALTH_EXPORTER_PID_DIR}"
 }
@@ -107,9 +111,60 @@ monitoring::kill_pid_on_port() {
 monitoring::sync_assets() {
   monitoring::ensure_dirs
   cp "${PROMETHEUS_TEMPLATE}" "${PROMETHEUS_CONFIG_FILE}"
-  cp "${GRAFANA_DATASOURCE_TEMPLATE}" "${GRAFANA_PROVISIONING_DIR}/datasources/prometheus.yml"
   cp "${GRAFANA_DASHBOARDS_TEMPLATE}" "${GRAFANA_PROVISIONING_DIR}/dashboards/dashboards.yml"
-  cp "${GRAFANA_OVERVIEW_TEMPLATE}" "${GRAFANA_DASHBOARD_DIR}/data-lab-overview.json"
+  MONITORING_DATASOURCE_TEMPLATE="${GRAFANA_DATASOURCE_TEMPLATE}" \
+  MONITORING_DATASOURCE_OUTPUT="${GRAFANA_PROVISIONING_DIR}/datasources/prometheus.yml" \
+  MONITORING_PROMETHEUS_PORT="${PROMETHEUS_PORT}" \
+  MONITORING_PROM_DS_UID="${GRAFANA_PROMETHEUS_DS_UID}" \
+  python3 - <<'PY'
+import os
+from pathlib import Path
+
+template_path = Path(os.environ["MONITORING_DATASOURCE_TEMPLATE"])
+output_path = Path(os.environ["MONITORING_DATASOURCE_OUTPUT"])
+content = template_path.read_text(encoding="utf-8")
+content = content.replace("__PROMETHEUS_PORT__", os.environ["MONITORING_PROMETHEUS_PORT"])
+content = content.replace("__PROM_DS_UID__", os.environ["MONITORING_PROM_DS_UID"])
+output_path.write_text(content, encoding="utf-8")
+PY
+  MONITORING_ALERT_TEMPLATE="${GRAFANA_ALERT_RULES_TEMPLATE}" \
+  MONITORING_ALERT_OUTPUT="${GRAFANA_PROVISIONING_DIR}/alerting/data-lab-alert-rules.yml" \
+  MONITORING_PROM_DS_UID="${GRAFANA_PROMETHEUS_DS_UID}" \
+  python3 - <<'PY'
+import os
+from pathlib import Path
+
+template_path = Path(os.environ["MONITORING_ALERT_TEMPLATE"])
+output_path = Path(os.environ["MONITORING_ALERT_OUTPUT"])
+content = template_path.read_text(encoding="utf-8")
+content = content.replace("__PROM_DS_UID__", os.environ["MONITORING_PROM_DS_UID"])
+output_path.write_text(content, encoding="utf-8")
+PY
+  MONITORING_DASHBOARD_TEMPLATE="${GRAFANA_OVERVIEW_TEMPLATE}" \
+  MONITORING_DASHBOARD_OUTPUT="${GRAFANA_DASHBOARD_DIR}/data-lab-overview.json" \
+  MONITORING_CONTAINER_NAME="${CONTAINER_NAME:-datalab}" \
+  python3 - <<'PY'
+import json
+import os
+import re
+from pathlib import Path
+
+template_path = Path(os.environ["MONITORING_DASHBOARD_TEMPLATE"])
+output_path = Path(os.environ["MONITORING_DASHBOARD_OUTPUT"])
+container_name = os.environ.get("MONITORING_CONTAINER_NAME", "").strip() or "datalab"
+uid_source = "data-lab" if container_name.lower() == "datalab" else container_name
+safe_uid = re.sub(r"[^a-zA-Z0-9_-]+", "-", uid_source).strip("-").lower() or "datalab"
+
+dashboard = json.loads(template_path.read_text(encoding="utf-8"))
+dashboard["title"] = f"{container_name} - Data Lab Overview"
+dashboard["uid"] = f"{safe_uid}-overview"
+dashboard["description"] = (
+    f"Auto-provisioned Data Lab observability dashboard for container '{container_name}'."
+)
+dashboard["tags"] = sorted(set(dashboard.get("tags", []) + ["datalab", container_name]))
+
+output_path.write_text(json.dumps(dashboard, indent=2) + "\n", encoding="utf-8")
+PY
 }
 
 monitoring::health_exporter_ready() {
