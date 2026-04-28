@@ -13,7 +13,14 @@ read -r -p "Container name [datalab]: " NAME
 NAME=${NAME:-datalab}
 
 IMAGE="${IMAGE:-${DEFAULT_IMAGE}}"
-echo "Using image: ${IMAGE} (override by setting IMAGE=...)"
+readonly FIXED_IMAGE="shreyash42/data-lab:latest"
+if [[ "${IMAGE}" != "${FIXED_IMAGE}" ]]; then
+  echo "This script is locked to image '${FIXED_IMAGE}'. Remove custom image/tag overrides." >&2
+  exit 1
+fi
+echo "Using image: ${FIXED_IMAGE}"
+echo "Pulling latest image: ${FIXED_IMAGE}"
+docker pull "${FIXED_IMAGE}"
 
 # Collect optional extra port mappings
 extra_ports=()
