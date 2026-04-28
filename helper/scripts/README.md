@@ -58,14 +58,14 @@ Launch the Data Lab container without Docker Compose. Run from the repo root; de
 
 ## Script details
 
-- `run-standalone.sh` (bash): Stops/removes any existing container with the same name, then starts the Data Lab image detached with standard port bindings and workspace mounts. Locked to `shreyash42/data-lab:latest` and pulls before run. Env overrides: `NAME`, `EXTRA_PORTS`, `EXTRA_VOLUMES`.
-- `run-standalone.ps1` (PowerShell): Same behavior/flags as the bash version (`-Name`, `-ExtraPorts`, `-ExtraVolumes`). Locked to `shreyash42/data-lab:latest` and pulls before run. Lakehouse/UI ports are included by default; `-IncludeLakehousePorts` is retained only for backward compatibility.
-- `run-standalone-interactive.sh` (bash): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Locked to `shreyash42/data-lab:latest` and pulls before run. Pass `EXTRA_PORTS` if you want additional ports.
-- `run-standalone-interactive.ps1` (PowerShell): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Locked to `shreyash42/data-lab:latest` and pulls before run. Pass `-ExtraPorts` if you want additional ports. Uses the repo root (two levels up from `helper/scripts/`) for default mounts.
+- `run-standalone.sh` (bash): Stops/removes any existing container with the same name, then starts the Data Lab image detached with standard port bindings and workspace mounts. Allows only `data-lab:latest` or `shreyash42/data-lab:latest`; the Docker Hub tag is pulled before run. Env overrides: `NAME`, `IMAGE`, `EXTRA_PORTS`, `EXTRA_VOLUMES`.
+- `run-standalone.ps1` (PowerShell): Same behavior/flags as the bash version (`-Name`, `-Image`, `-ExtraPorts`, `-ExtraVolumes`). Allows only `data-lab:latest` or `shreyash42/data-lab:latest`; the Docker Hub tag is pulled before run. Lakehouse/UI ports are included by default; `-IncludeLakehousePorts` is retained only for backward compatibility.
+- `run-standalone-interactive.sh` (bash): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Allows only `data-lab:latest` or `shreyash42/data-lab:latest`; the Docker Hub tag is pulled before run. Pass `EXTRA_PORTS` if you want additional ports.
+- `run-standalone-interactive.ps1` (PowerShell): Prompts for container name and any number of extra host-to-container bind mounts; default ports are always mapped. Allows only `data-lab:latest` or `shreyash42/data-lab:latest`; the Docker Hub tag is pulled before run. Pass `-ExtraPorts` if you want additional ports. Uses the repo root (two levels up from `helper/scripts/`) for default mounts.
 - `build-and-run.ps1` (PowerShell): Builds the image (unless `-SkipBuild`), then runs a non-stackable container with standard ports and default repo mounts. Supports `-ExtraPorts` and `-ExtraVolumes`, validates host port conflicts before run, and now includes the lakehouse/UI ports by default.
-- `copy-container.ps1` (PowerShell): Locked to `shreyash42/data-lab:latest` and always pulls before run. `-UseSourceImage` is allowed only when the source container already uses the same locked image. Asks for a new container name and bind mounts, then starts another non-stackable container. Full platform ports (core + lakehouse) auto-shift to the next free host port when needed to avoid conflicts.
-- `run-default.sh` (bash): Quick run with the standard port set, including Superset/Trino/MinIO host ports; locked to `shreyash42/data-lab:latest` and pulls before run.
-- `run-default.ps1` (PowerShell): Quick run equivalent for Windows with the same default port set; first arg is container name; locked to `shreyash42/data-lab:latest` and pulls before run.
+- `copy-container.ps1` (PowerShell): Allows only `data-lab:latest` or `shreyash42/data-lab:latest`, and blocks image IDs/digests so copied containers do not start from dangling images. The Docker Hub tag is pulled before run unless `-SkipPull` is used for local testing. Full platform ports (core + lakehouse) auto-shift to the next free host port when needed to avoid conflicts.
+- `run-default.sh` (bash): Quick run with the standard port set, including Superset/Trino/MinIO host ports; allows only `data-lab:latest` or `shreyash42/data-lab:latest`.
+- `run-default.ps1` (PowerShell): Quick run equivalent for Windows with the same default port set; first arg is container name; allows only `data-lab:latest` or `shreyash42/data-lab:latest`.
 - `db-access-guide.ps1` (PowerShell): Prompts for database and MinIO credentials, then prints exact browser + IDE/SDK connection values using real mapped host ports.
 - `start-pgadmin.ps1` (PowerShell): Starts an official `dpage/pgadmin4` container, preconfigures a server entry that points to the mapped PostgreSQL port of your target Data Lab container, and prints login details.
 
@@ -109,6 +109,11 @@ The script will prompt for:
   ```powershell
   powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -Image shreyash42/data-lab:latest -ForcePull
   ```
+- Use a locally rebuilt `shreyash42/data-lab:latest` without pulling Docker Hub:
+
+  ```powershell
+  powershell -File .\helper\scripts\copy-container.ps1 -NewName datalab-copy -SkipPull
+  ```
 - Reuse image from an existing local container:
 
   ```powershell
@@ -128,9 +133,10 @@ The script will prompt for:
 ### Parameters
 
 - `-NewName <string>`: New container name. If omitted, prompted interactively.
-- `-Image <repo/image:tag>`: Kept for backward compatibility but locked to `shreyash42/data-lab:latest`.
+- `-Image <repo/image:tag>`: Allowed values are `data-lab:latest` and `shreyash42/data-lab:latest`. Image IDs, digests, and other tags are blocked.
 - `-UseSourceImage`: Use the image from an existing container instead of pulling `-Image`.
 - `-ForcePull`: Force pull from Docker Hub before run (ignored when `-UseSourceImage` is set).
+- `-SkipPull`: Use the local `shreyash42/data-lab:latest` tag without pulling Docker Hub first. Use this after a local rebuild before you push the image.
 - `-SourceName <string>`: Source container name used with `-UseSourceImage`. Default: `datalab`.
 - `-ExtraPorts <host:container,...>`: Additional published ports in `host:container` format.
 - `-UiHost <string>`: Hostname used when printing UI URLs. Default: `localhost`.
@@ -148,7 +154,7 @@ The script will prompt for:
 
 ## Notes
 
-- Default image: `shreyash42/data-lab:latest`.
+- Default image: `shreyash42/data-lab:latest`. Local development can explicitly use `data-lab:latest`.
 - Default ports published (dynamic host mapping): 8080, 4040, 9090, 18080, 9092, 9870, 8088, 9083, 10000, 10001, 9002, 8181, 8083, 8084, 8085, 8086, 8888, 8891, 5000, 3000, 9095, 3001, 5432, 27017, 6379, 8090, 8091, 9004, 9005.
 - Default mounts map repo folders (`datalabcontainer/app`, `datalabconfig/`, `datalabcontainer/runtime`, and all `stacks/*`) into `/home/datalab/...`.
 - On macOS/Linux: run the `chmod +x` commands once to make the bash scripts executable.
