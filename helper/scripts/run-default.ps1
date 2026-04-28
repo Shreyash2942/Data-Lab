@@ -6,6 +6,7 @@
 
 param(
   [string]$Name = "datalab",
+  [string]$Image = "shreyash42/data-lab:latest",
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$ExtraArgs
 )
@@ -43,6 +44,16 @@ $ports = @(
 $portArgs = @()
 foreach ($p in $ports) { $portArgs += @("-p", $p) }
 
+$fixedImage = "shreyash42/data-lab:latest"
+if ($Image -ne $fixedImage) {
+  throw "This script is locked to image '$fixedImage'. Remove custom image/tag overrides."
+}
+Write-Host "Pulling latest image: $fixedImage"
+docker pull $fixedImage
+if ($LASTEXITCODE -ne 0) {
+  throw "docker pull failed for '$fixedImage'."
+}
+
 $cmdArgs = @(
   "run", "-d", "--name", $Name,
   "--user", "root",
@@ -50,7 +61,7 @@ $cmdArgs = @(
   "--label", "com.docker.compose.project=",
   "--label", "com.docker.compose.service=",
   "--label", "com.docker.compose.oneoff="
-) + $portArgs + @("data-lab:latest") + $ExtraArgs
+) + $portArgs + @($Image) + $ExtraArgs
 
 $existingNames = @(docker container ls -a --format "{{.Names}}" 2>$null)
 if ($existingNames -contains $Name) {
