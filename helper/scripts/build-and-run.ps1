@@ -1,6 +1,6 @@
 Param(
   [string]$Name = "datalab",
-  [string]$Image = "data-lab:latest",
+  [string]$Image = "shreyash42/data-lab:latest",
   [string]$Context = "..",
   [string]$Dockerfile = "datalabcontainer/dev/base/Dockerfile",
   [string[]]$ExtraPorts = @(),
@@ -21,6 +21,11 @@ if ($Context -eq "..") {
 }
 if ($Dockerfile -eq "datalabcontainer/dev/base/Dockerfile") {
   $Dockerfile = (Join-Path $repoRoot "datalabcontainer/dev/base/Dockerfile")
+}
+
+$fixedImage = "shreyash42/data-lab:latest"
+if ($Image -ne $fixedImage) {
+  throw "This script is locked to image '$fixedImage'. Remove custom image/tag overrides."
 }
 
 function Get-HostPortFromMapping {
