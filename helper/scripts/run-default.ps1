@@ -44,14 +44,24 @@ $ports = @(
 $portArgs = @()
 foreach ($p in $ports) { $portArgs += @("-p", $p) }
 
-$fixedImage = "shreyash42/data-lab:latest"
-if ($Image -ne $fixedImage) {
-  throw "This script is locked to image '$fixedImage'. Remove custom image/tag overrides."
+$localImage = "data-lab:latest"
+$publishedImage = "shreyash42/data-lab:latest"
+$allowedImages = @($localImage, $publishedImage)
+if ($allowedImages -notcontains $Image) {
+  throw "Use only '$localImage' or '$publishedImage'. Image IDs, digests, and other tags are blocked."
 }
-Write-Host "Pulling latest image: $fixedImage"
-docker pull $fixedImage
-if ($LASTEXITCODE -ne 0) {
-  throw "docker pull failed for '$fixedImage'."
+if ($Image -eq $publishedImage) {
+  Write-Host "Pulling latest image: $publishedImage"
+  docker pull $publishedImage
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker pull failed for '$publishedImage'."
+  }
+} else {
+  docker image inspect $localImage 1>$null 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Local image '$localImage' is missing. Build it first or use '$publishedImage'."
+  }
+  Write-Host "Using local named image: $localImage"
 }
 
 $cmdArgs = @(
