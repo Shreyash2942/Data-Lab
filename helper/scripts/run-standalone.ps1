@@ -1,6 +1,6 @@
 Param(
   [string]$Name = "datalab",
-  [string]$Image = "data-lab:latest",
+  [string]$Image = "shreyash42/data-lab:latest",
   [string]$ExtraPorts = "",
   [string]$ExtraVolumes = "",
   [switch]$IncludeLakehousePorts
@@ -13,6 +13,17 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $datalabDir = Join-Path $repoRoot "datalabcontainer"
 $stacksDir = Join-Path $repoRoot "stacks"
+
+$fixedImage = "shreyash42/data-lab:latest"
+if ($Image -ne $fixedImage) {
+  throw "This script is locked to image '$fixedImage'. Remove custom image/tag overrides."
+}
+
+Write-Host "Pulling latest image: $fixedImage"
+docker pull $fixedImage
+if ($LASTEXITCODE -ne 0) {
+  throw "docker pull failed for '$fixedImage'."
+}
 
 function Get-HostPortFromMapping {
   Param([string]$Mapping)
