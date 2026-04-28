@@ -13,14 +13,23 @@ read -r -p "Container name [datalab]: " NAME
 NAME=${NAME:-datalab}
 
 IMAGE="${IMAGE:-${DEFAULT_IMAGE}}"
-readonly FIXED_IMAGE="shreyash42/data-lab:latest"
-if [[ "${IMAGE}" != "${FIXED_IMAGE}" ]]; then
-  echo "This script is locked to image '${FIXED_IMAGE}'. Remove custom image/tag overrides." >&2
+readonly LOCAL_IMAGE="data-lab:latest"
+readonly PUBLISHED_IMAGE="shreyash42/data-lab:latest"
+if [[ "${IMAGE}" != "${LOCAL_IMAGE}" && "${IMAGE}" != "${PUBLISHED_IMAGE}" ]]; then
+  echo "Use only '${LOCAL_IMAGE}' or '${PUBLISHED_IMAGE}'. Image IDs, digests, and other tags are blocked." >&2
   exit 1
 fi
-echo "Using image: ${FIXED_IMAGE}"
-echo "Pulling latest image: ${FIXED_IMAGE}"
-docker pull "${FIXED_IMAGE}"
+if [[ "${IMAGE}" == "${PUBLISHED_IMAGE}" ]]; then
+  echo "Using image: ${PUBLISHED_IMAGE}"
+  echo "Pulling latest image: ${PUBLISHED_IMAGE}"
+  docker pull "${PUBLISHED_IMAGE}"
+else
+  docker image inspect "${LOCAL_IMAGE}" >/dev/null 2>&1 || {
+    echo "Local image '${LOCAL_IMAGE}' is missing. Build it first or use '${PUBLISHED_IMAGE}'." >&2
+    exit 1
+  }
+  echo "Using local named image: ${LOCAL_IMAGE}"
+fi
 
 # Collect optional extra port mappings
 extra_ports=()
