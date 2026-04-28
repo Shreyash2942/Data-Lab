@@ -166,8 +166,7 @@ if (-not $NewName) {
   throw "Container name is required."
 }
 
-$preferredLocalImage = "data-lab:latest"
-$publishedFallbackImage = "shreyash42/data-lab:latest"
+$publishedDefaultImage = "shreyash42/data-lab:latest"
 $resolvedImage = $Image
 if ($UseSourceImage) {
   $exists = docker container inspect $SourceName 2>$null
@@ -179,31 +178,28 @@ if ($UseSourceImage) {
   if (-not $resolvedImage) {
     throw "Could not detect image from source container '$SourceName'."
   }
+  if ($resolvedImage -ne $publishedDefaultImage) {
+    throw "Source container '$SourceName' is using '$resolvedImage'. This script is locked to '$publishedDefaultImage' only."
+  }
   Write-Host "Source container: $SourceName"
   Write-Host "Using source image: $resolvedImage"
 } else {
   if (-not $resolvedImage) {
-    if (Test-ImageExists -ImageRef $preferredLocalImage) {
-      $resolvedImage = $preferredLocalImage
-      Write-Host "Using local rebuilt image by default: $resolvedImage"
-    } else {
-      $resolvedImage = $publishedFallbackImage
-      Write-Host "Local '$preferredLocalImage' not found. Falling back to published image: $resolvedImage"
-    }
+    $resolvedImage = $publishedDefaultImage
+    Write-Host "Using published image by default: $resolvedImage"
   }
+  if ($resolvedImage -ne $publishedDefaultImage) {
+    throw "This script is locked to image '$publishedDefaultImage'. Remove custom image/tag overrides."
+  }
+}
 
-  $imageExistsLocally = Test-ImageExists -ImageRef $resolvedImage
-  if ($ForcePull -or -not $imageExistsLocally) {
-    Write-Host "Pulling image: $resolvedImage"
-    docker pull $resolvedImage
-    if ($LASTEXITCODE -ne 0) {
-      throw "docker pull failed for image '$resolvedImage'."
-    }
-    Write-Host "Using pulled image: $resolvedImage"
-  } else {
-    Write-Host "Using local image (skip pull): $resolvedImage"
-    Write-Host "Tip: pass -ForcePull to refresh from Docker Hub."
+if ($ForcePull -or $resolvedImage -eq $publishedDefaultImage) {
+  Write-Host "Pulling image: $resolvedImage"
+  docker pull $resolvedImage
+  if ($LASTEXITCODE -ne 0) {
+    throw "docker pull failed for image '$resolvedImage'."
   }
+  Write-Host "Using pulled image: $resolvedImage"
 }
 
 $defaultPorts = @(
